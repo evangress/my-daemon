@@ -1,0 +1,53 @@
+[project]
+name = "my-daemon"
+version = "0.1.0"
+description = "Personal knowledge and memory system over an Obsidian vault — vector seeds, graph expansion, LLM synthesis."
+authors = [{ name = "Evan Gress", email = "gress.evan@gmail.com" }]
+requires-python = ">=3.11,<3.15"
+readme = "README.md"
+license = { text = "MIT" }
+dependencies = [
+    "pydantic>=2.6",
+    "pydantic-settings>=2.2",
+    "typer>=0.12",
+    "rich>=13.7",
+    "pyyaml>=6.0",
+    "python-frontmatter>=1.1",
+    "langchain-text-splitters>=0.2",
+    "sentence-transformers>=2.7",
+    "qdrant-client>=1.9",
+    "networkx>=3.3",
+    "anthropic>=0.34",
+    "python-louvain>=0.16",
+    "python-dotenv>=1.0",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=8.0",
+    "pytest-asyncio>=0.23",
+    "ruff>=0.5",
+    "mypy>=1.10",
+]
+
+[project.scripts]
+daemon = "my_daemon.cli:app"
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/my_daemon"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py311"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "B", "UP", "SIM"]
+ignore = ["E501"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["src"]

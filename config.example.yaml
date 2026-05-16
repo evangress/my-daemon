@@ -1,0 +1,42 @@
+vault:
+  path: ~/Documents/Obsidian/MyVault
+  exclude_dirs: [".obsidian", ".trash", "templates"]
+
+chunking:
+  max_tokens: 512
+  overlap_tokens: 50
+  split_on_headers: ["#", "##", "###"]
+
+embeddings:
+  model: BAAI/bge-small-en-v1.5
+  batch_size: 32
+  device: auto  # auto | cpu | cuda | mps
+
+vector_store:
+  backend: qdrant
+  qdrant:
+    url: http://localhost:6333
+    collection: chunks
+
+graph:
+  path: ./data/graph.gpickle
+  manifest_path: ./data/manifest.json
+  expansion_depth: 2
+  distance_decay: 0.5
+
+retrieval:
+  seed_top_k: 8
+  context_token_budget: 6000
+  candidate_pool: 3   # always surface at least N candidates to the user
+
+llm:
+  provider: anthropic
+  model: claude-opus-4-7
+  max_tokens: 2048
+  temperature: 0.3
+
+feedback:
+  db_path: ./data/feedback.db
+
+logging:
+  level: INFO
