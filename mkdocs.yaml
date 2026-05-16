@@ -1,5 +1,7 @@
 site_name: My Daemon
 site_url: https://my-daemon.ai/
+site_dir: ./docs-site
+docs_dir: ./docs-source
 repo_url: https://github.com/evangress/my-daemon
 repo_name: my-daemon
 edit_uri: 'blob/main/docs/'
