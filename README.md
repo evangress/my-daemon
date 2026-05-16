@@ -21,27 +21,45 @@ src/my_daemon/
 
 ## Quickstart
 
-### 1. Install
+### Windows 11 (one-click)
+
+1. Install [Python 3.11+](https://www.python.org/downloads/) — tick **Add Python to PATH** during install.
+2. Install [Docker Desktop](https://www.docker.com/products/docker-desktop/) (for Qdrant).
+3. Double-click **`setup.bat`** at the project root. It creates `.venv`, installs all dependencies, and seeds `config.yaml` + `.env`.
+4. Open `.env` in Notepad and paste your `ANTHROPIC_API_KEY`. Open `config.yaml` and point `vault.path` at your Obsidian vault.
+5. From a terminal in the project folder:
+   ```cmd
+   docker compose up -d
+   .venv\Scripts\activate.bat
+   daemon ingest -v
+   daemon query "what was I thinking about last week"
+   ```
+
+### Linux / macOS
 
 ```bash
-uv sync                                  # or: pip install -e .[dev]
+python setup.py                         # creates .venv, installs deps, copies config templates
+# or, if you prefer step-by-step:
+uv sync                                 # or: pip install -e .[dev]
 ```
 
-### 2. Start Qdrant (one-shot)
+### Start Qdrant (one-shot, any OS)
 
 ```bash
 docker compose up -d
 ```
 
-### 3. Initialize config
+### Configure
+
+`setup.py` (and `setup.bat`) already copy `config.example.yaml` → `config.yaml` and `.env.example` → `.env`. If you skipped that step, run:
 
 ```bash
 daemon init --vault ~/Documents/Obsidian/MyVault
 ```
 
-This creates `config.yaml` and `.env`. Open `.env` and set your `ANTHROPIC_API_KEY`.
+Then open `.env` and set your `ANTHROPIC_API_KEY`.
 
-### 4. Ingest
+### Ingest your vault
 
 ```bash
 daemon ingest -v
@@ -49,7 +67,7 @@ daemon ingest -v
 
 Re-running is incremental — only modified notes get re-embedded.
 
-### 5. Ask your daemon
+### Ask your daemon
 
 ```bash
 daemon query "what was I working through about graph-augmented retrieval"
