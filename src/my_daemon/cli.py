@@ -13,7 +13,7 @@ from rich.table import Table
 
 from my_daemon import __version__
 from my_daemon.config import Settings, load_settings
-from my_daemon.embeddings import Embedder
+from my_daemon.embeddings import Embedder, SparseEmbedder
 from my_daemon.llm import LLMClient
 from my_daemon.pipeline import QueryEngine, ingest_vault
 from my_daemon.stores import FeedbackStore, GraphStore, VectorStore
@@ -49,8 +49,22 @@ def _build_embedder(s: Settings) -> Embedder:
     )
 
 
+def _build_sparse_embedder(s: Settings) -> SparseEmbedder | None:
+    if not s.embeddings.hybrid:
+        return None
+    return SparseEmbedder(
+        model_name=s.embeddings.sparse_model,
+        cache_folder=s.embeddings.cache_folder,
+    )
+
+
 def _build_vector_store(s: Settings, dim: int) -> VectorStore:
-    return VectorStore(url=s.vector_store.qdrant.url, collection=s.vector_store.qdrant.collection, dim=dim)
+    return VectorStore(
+        url=s.vector_store.qdrant.url,
+        collection=s.vector_store.qdrant.collection,
+        dim=dim,
+        hybrid=s.embeddings.hybrid,
+    )
 
 
 def _build_graph_store(s: Settings) -> GraphStore:
@@ -108,6 +122,7 @@ def ingest(
     """Ingest the vault into the vector store and the graph."""
     s = _load()
     embedder = _build_embedder(s)
+    sparse_embedder = _build_sparse_embedder(s)
     vector_store = _build_vector_store(s, dim=embedder.dimension)
     graph_store = _build_graph_store(s)
 
@@ -115,7 +130,10 @@ def ingest(
         if verbose:
             console.log(f"[{i + 1}/{total}] {rel_path}")
 
-    stats = ingest_vault(s, embedder, vector_store, graph_store, full_rebuild=full, progress=_progress)
+    stats = ingest_vault(
+        s, embedder, vector_store, graph_store,
+        sparse_embedder=sparse_embedder, full_rebuild=full, progress=_progress,
+    )
 
     table = Table(title="Ingest summary")
     table.add_column("metric")
@@ -139,13 +157,17 @@ def query(
     """Ask the daemon a question."""
     s = _load()
     embedder = _build_embedder(s)
+    sparse_embedder = _build_sparse_embedder(s)
     vector_store = _build_vector_store(s, dim=embedder.dimension)
     graph_store = _build_graph_store(s)
     graph_store.load()
     feedback_store = _build_feedback_store(s)
     llm = LLMClient(s.llm, api_key=s.anthropic_api_key)
 
-    engine = QueryEngine(s, embedder, vector_store, graph_store, feedback_store, llm)
+    engine = QueryEngine(
+        s, embedder, vector_store, graph_store, feedback_store, llm,
+        sparse_embedder=sparse_embedder,
+    )
     response = engine.ask(text, synthesize=not no_synthesize)
 
     if response.answer:
@@ -183,10 +205,15 @@ def search(
     """Debug: vector search without graph expansion or LLM."""
     s = _load()
     embedder = _build_embedder(s)
+    sparse_embedder = _build_sparse_embedder(s)
     vector_store = _build_vector_store(s, dim=embedder.dimension)
 
     vec = embedder.encode_one(text)
-    hits = vector_store.search(vec, top_k=top_k)
+    if sparse_embedder is not None:
+        sparse_vec = sparse_embedder.encode_one(text)
+        hits = vector_store.hybrid_search(vec, sparse_vec, top_k=top_k)
+    else:
+        hits = vector_store.search(vec, top_k=top_k)
 
     table = Table(title="Vector hits")
     table.add_column("#", justify="right")
@@ -271,14 +298,21 @@ def setup() -> None:
 
 @models_app.command("download")
 def models_download() -> None:
-    """Pre-download the embedding model into the local cache folder.
+    """Pre-download the embedding model(s) into the local cache folder.
 
     After this, queries and ingest run fully offline (no HF Hub calls).
+    Pulls the dense model always; pulls the sparse model too when hybrid is on.
     """
     s = _load()
     embedder = _build_embedder(s)
     cache = embedder.download()
-    console.print(f"[green]Model '{s.embeddings.model}' ready in {cache} (dim={embedder.dimension})[/green]")
+    console.print(f"[green]Dense model '{s.embeddings.model}' ready in {cache} (dim={embedder.dimension})[/green]")
+
+    if s.embeddings.hybrid:
+        sparse = _build_sparse_embedder(s)
+        assert sparse is not None  # hybrid=True guarantees a builder result
+        sparse_cache = sparse.download()
+        console.print(f"[green]Sparse model '{s.embeddings.sparse_model}' ready in {sparse_cache}[/green]")
 
 
 @app.command()

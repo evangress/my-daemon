@@ -7,7 +7,7 @@ from dataclasses import dataclass
 from datetime import UTC, datetime
 
 from my_daemon.config import Settings
-from my_daemon.embeddings import Embedder
+from my_daemon.embeddings import Embedder, SparseEmbedder
 from my_daemon.llm import LLMClient
 from my_daemon.models import FeedbackEvent, RetrievalResult
 from my_daemon.retrieval import RetrievalOrchestrator
@@ -31,9 +31,12 @@ class QueryEngine:
         graph_store: GraphStore,
         feedback_store: FeedbackStore,
         llm_client: LLMClient,
+        sparse_embedder: SparseEmbedder | None = None,
     ) -> None:
         self.s = settings
-        self.orchestrator = RetrievalOrchestrator(settings, embedder, vector_store, graph_store)
+        self.orchestrator = RetrievalOrchestrator(
+            settings, embedder, vector_store, graph_store, sparse_embedder=sparse_embedder,
+        )
         self.feedback = feedback_store
         self.llm = llm_client
 

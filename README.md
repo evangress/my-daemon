@@ -121,6 +121,12 @@ export MY_DAEMON_LLM__MODEL=claude-sonnet-4-6
 export MY_DAEMON_GRAPH__EXPANSION_DEPTH=3
 ```
 
+### Hybrid retrieval
+
+Retrieval is **hybrid by default**: a dense embedding (BGE small) and a BM25-style sparse signal (BM42 via `fastembed`) are fused server-side in Qdrant using Reciprocal Rank Fusion. The dense side handles paraphrased / conceptual queries; the sparse side handles proper nouns, project names, and other exact-token recall. Graph expansion runs on the fused seeds as usual.
+
+Flip to dense-only by setting `embeddings.hybrid: false` in `config.yaml` and re-running `daemon ingest --full` (the collection schema differs between modes).
+
 ## Development
 
 ```bash

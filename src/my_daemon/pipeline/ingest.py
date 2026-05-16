@@ -12,7 +12,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 
 from my_daemon.config import Settings
-from my_daemon.embeddings import Embedder
+from my_daemon.embeddings import Embedder, SparseEmbedder
 from my_daemon.models import Chunk, Note
 from my_daemon.stores import GraphStore, VectorStore
 from my_daemon.vault import VaultReader, chunk_note
@@ -46,6 +46,7 @@ def ingest_vault(
     embedder: Embedder,
     vector_store: VectorStore,
     graph_store: GraphStore,
+    sparse_embedder: SparseEmbedder | None = None,
     full_rebuild: bool = False,
     progress: callable | None = None,  # type: ignore[type-arg]
 ) -> IngestStats:
@@ -101,8 +102,10 @@ def ingest_vault(
                 graph_store.remove_note(note.relative_path)
 
             if chunks:
-                vectors = embedder.encode([c.text for c in chunks])
-                vector_store.upsert(chunks, vectors)
+                texts = [c.text for c in chunks]
+                vectors = embedder.encode(texts)
+                sparse = sparse_embedder.encode(texts) if sparse_embedder is not None else None
+                vector_store.upsert(chunks, vectors, sparse_vectors=sparse)
 
             graph_store.add_note(note, chunk_ids=[c.id for c in chunks])
 

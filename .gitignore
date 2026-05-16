@@ -188,3 +188,6 @@ config.yaml
 launch-gui.bat
 launch-setup.bat
 
+# uv writes this when invoked; project uses pyproject.toml as the source of truth.
+uv.lock
+

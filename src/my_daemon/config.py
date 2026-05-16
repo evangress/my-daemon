@@ -36,6 +36,10 @@ class EmbeddingsConfig(BaseModel):
     batch_size: int = 32
     device: Literal["auto", "cpu", "cuda", "mps"] = "auto"
     cache_folder: Path = Path("./data/models")
+    # Hybrid retrieval: a sparse BM25-style signal is fused with the dense one
+    # server-side via Qdrant RRF. Flip off to compare against dense-only.
+    hybrid: bool = True
+    sparse_model: str = "Qdrant/bm42-all-minilm-l6-v2-attentions"
 
 
 class QdrantConfig(BaseModel):

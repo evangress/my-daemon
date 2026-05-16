@@ -423,7 +423,7 @@ v0.1 is done when:
 3. [X] `daemon status` reports note count matching `find vault -name '*.md' | wc -l`.
 4. [X] `daemon query "..."` returns an answer with cited sources, in under 5 seconds for vaults under ~2k notes.
 5. [X] Re-running `daemon ingest` after editing 3 notes only re-embeds those 3 notes.
-6. `tests/test_e2e.py` ingests the fixture vault and asserts a query returns expected citations.
+6. [X] `tests/test_e2e.py` ingests the fixture vault and asserts a query returns expected citations.
 
 ---
 

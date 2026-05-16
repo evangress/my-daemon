@@ -12,6 +12,10 @@ embeddings:
   batch_size: 32
   device: auto  # auto | cpu | cuda | mps
   cache_folder: ./data/models   # model files live here; first run downloads, later runs are offline
+  # Hybrid retrieval: fuse a BM25-style sparse signal with the dense one server-side in Qdrant.
+  # Flip to false to A/B against dense-only. Switching modes requires `daemon ingest --full`.
+  hybrid: true
+  sparse_model: Qdrant/bm42-all-minilm-l6-v2-attentions
 
 vector_store:
   backend: qdrant

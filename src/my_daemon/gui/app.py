@@ -17,7 +17,7 @@ from datetime import UTC, datetime
 from nicegui import ui
 
 from my_daemon.config import Settings, load_settings
-from my_daemon.embeddings import Embedder
+from my_daemon.embeddings import Embedder, SparseEmbedder
 from my_daemon.llm import LLMClient
 from my_daemon.models import FeedbackEvent
 from my_daemon.retrieval import RetrievalOrchestrator
@@ -45,6 +45,7 @@ class _DaemonContext:
 
     settings: Settings
     embedder: Embedder
+    sparse_embedder: SparseEmbedder | None
     vector_store: VectorStore
     graph_store: GraphStore
     feedback_store: FeedbackStore
@@ -60,17 +61,28 @@ def _build_context() -> _DaemonContext:
         device=s.embeddings.device,
         cache_folder=s.embeddings.cache_folder,
     )
+    sparse_embedder: SparseEmbedder | None = None
+    if s.embeddings.hybrid:
+        sparse_embedder = SparseEmbedder(
+            model_name=s.embeddings.sparse_model,
+            cache_folder=s.embeddings.cache_folder,
+        )
     vector_store = VectorStore(
         url=s.vector_store.qdrant.url,
         collection=s.vector_store.qdrant.collection,
         dim=embedder.dimension,
+        hybrid=s.embeddings.hybrid,
     )
     graph_store = GraphStore(path=s.graph.path)
     graph_store.load()
     feedback_store = FeedbackStore(db_path=s.feedback.db_path)
     llm = LLMClient(s.llm, api_key=s.anthropic_api_key)
-    orchestrator = RetrievalOrchestrator(s, embedder, vector_store, graph_store)
-    return _DaemonContext(s, embedder, vector_store, graph_store, feedback_store, llm, orchestrator)
+    orchestrator = RetrievalOrchestrator(
+        s, embedder, vector_store, graph_store, sparse_embedder=sparse_embedder,
+    )
+    return _DaemonContext(
+        s, embedder, sparse_embedder, vector_store, graph_store, feedback_store, llm, orchestrator,
+    )
 
 
 async def _stream_into_label(label: ui.markdown, generator: Iterator[str], accumulator: list[str]) -> None:

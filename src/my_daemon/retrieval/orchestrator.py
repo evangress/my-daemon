@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from my_daemon.config import Settings
-from my_daemon.embeddings import Embedder
+from my_daemon.embeddings import Embedder, SparseEmbedder
 from my_daemon.models import RetrievalResult, RetrievedChunk
 from my_daemon.retrieval.expand import expand_from_seeds
 from my_daemon.retrieval.seed import seed_search
@@ -21,11 +21,13 @@ class RetrievalOrchestrator:
         embedder: Embedder,
         vector_store: VectorStore,
         graph_store: GraphStore,
+        sparse_embedder: SparseEmbedder | None = None,
     ) -> None:
         self.s = settings
         self.embedder = embedder
         self.vector_store = vector_store
         self.graph_store = graph_store
+        self.sparse_embedder = sparse_embedder
 
     def retrieve(self, query: str) -> RetrievalResult:
         seeds = seed_search(
@@ -33,6 +35,7 @@ class RetrievalOrchestrator:
             self.embedder,
             self.vector_store,
             top_k=self.s.retrieval.seed_top_k,
+            sparse_embedder=self.sparse_embedder,
         )
         expanded = expand_from_seeds(
             seeds,
