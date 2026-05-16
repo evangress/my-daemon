@@ -103,6 +103,10 @@ Stop the server with `Ctrl+C` in the terminal that launched it.
 | Command | What it does |
 |---|---|
 | `daemon chat` | Launch the warm-themed NiceGUI chat window (browser or `--native` desktop window) |
+| `daemon setup` | Tkinter window: pick the vault folder, paste the API key, opt into daily reflection |
+| `daemon extract` | Write an `## Agent Notes` section into recently-changed notes (background agent) |
+| `daemon link` | Auto-link / tag notes at strict thresholds; review lower-confidence in `Agent/link-suggestions-*.md` |
+| `daemon reflect` | Update themed memory files in `<vault>/Agent/` (the "digital embodiment") |
 | `daemon models download` | Pre-pull the embedding model into the local cache so queries stay offline afterward |
 | `daemon status` | Vault path, note count, vector chunk count, graph stats |
 | `daemon graph stats` | Top-PageRank notes and top tags |
@@ -120,6 +124,35 @@ Edit `config.yaml`. Any value can be overridden by an env var with the `MY_DAEMO
 export MY_DAEMON_LLM__MODEL=claude-sonnet-4-6
 export MY_DAEMON_GRAPH__EXPANSION_DEPTH=3
 ```
+
+### Background agent jobs
+
+Three writeback jobs help the daemon **shape** the vault, not just read from it. All are gated behind `agent.enabled: true` in `config.yaml`; until you flip that, every command refuses to write and asks you to `--dry-run` first.
+
+| Job | What it writes | Where |
+|---|---|---|
+| `daemon extract` | An `## Agent Notes` section per recently-changed note: summary, key points, themes, feelings, open questions | inside the note itself, between `<!-- daemon:start -->` / `<!-- daemon:end -->` sentinels (idempotent on re-runs) |
+| `daemon link` | Wikilinks at cosine ≥ 0.85 AND verbatim-title match; tags shared by ≥ 4 graph neighbors | inside the note; lower-confidence suggestions accumulate to `Agent/link-suggestions-YYYY-MM-DD.md` for review |
+| `daemon reflect` | Themed memory files distilling who you are (personality, projects, relationships, themes) plus a rolling daily journal | `<vault>/Agent/memory-*.md` |
+
+**Safety discipline (built once, applied everywhere):**
+
+- The daemon never touches files inside `<vault>/Agent/` (its own folder).
+- A frontmatter `daemon: ignore` on any note removes it from every job.
+- Files modified within the last 30 minutes are skipped (avoid colliding with a save in progress).
+- Every write is preceded by a snapshot to `<vault>/Agent/backups/<rel>.<unix_ts>.md` — add `Agent/backups/` to your vault's `.gitignore` if you keep the vault in git.
+- All three jobs default to `claude-haiku-4-5` via `llm.batch_model` — ~15× cheaper than Opus. Flip back to Sonnet if you want richer extractions.
+
+**Scheduling.** Run on demand or schedule:
+
+- **Windows:** the `daemon setup` window has a checkbox "Run `daemon reflect` daily at 03:00 (Windows Task Scheduler)" that registers/removes the task for you.
+- **macOS / Linux:** add `crontab -e` lines like:
+  ```cron
+  0 3 * * *  /path/to/my-daemon/.venv/bin/daemon reflect
+  15 3 * * * /path/to/my-daemon/.venv/bin/daemon extract
+  ```
+
+First-time recommendation: `daemon extract --dry-run` against your real vault, eyeball the candidate notes, then `daemon extract --note <one>` on a single note to see the section format. Flip `agent.enabled` after that.
 
 ### Hybrid retrieval
 

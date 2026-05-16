@@ -1,0 +1,16 @@
+site_name: My Daemon
+site_url: https://my-daemon.ai/
+repo_url: https://github.com/evangress/my-daemon
+repo_name: my-daemon
+edit_uri: 'blob/main/docs/'
+markdown_extensions:
+  - extra
+  - fenced_code
+  - footnotes
+  - md_in_html
+  - tables
+  - codehilite
+  - meta
+  - sane_lists
+  - toc
+  - wikilinks

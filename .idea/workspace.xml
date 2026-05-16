@@ -5,9 +5,15 @@
   </component>
   <component name="ChangeListManager">
     <list default="true" id="df100eb5-408b-4cff-9fc7-db33bfe773d5" name="Changes" comment="updated scaffold and dependancies">
+      <change afterPath="$PROJECT_DIR$/mkdocs.yaml" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/.idea/workspace.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/workspace.xml" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/MY-DAEMON-SCAFFOLD.md" beforeDir="false" afterPath="$PROJECT_DIR$/MY-DAEMON-SCAFFOLD.md" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/PROJECT_MANAGEMENT.md" beforeDir="false" afterPath="$PROJECT_DIR$/PROJECT_MANAGEMENT.md" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/README.md" beforeDir="false" afterPath="$PROJECT_DIR$/README.md" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/config.example.yaml" beforeDir="false" afterPath="$PROJECT_DIR$/config.example.yaml" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/pyproject.toml" beforeDir="false" afterPath="$PROJECT_DIR$/pyproject.toml" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/my_daemon/cli.py" beforeDir="false" afterPath="$PROJECT_DIR$/src/my_daemon/cli.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/my_daemon/config.py" beforeDir="false" afterPath="$PROJECT_DIR$/src/my_daemon/config.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/my_daemon/gui/setup.py" beforeDir="false" afterPath="$PROJECT_DIR$/src/my_daemon/gui/setup.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/my_daemon/stores/__init__.py" beforeDir="false" afterPath="$PROJECT_DIR$/src/my_daemon/stores/__init__.py" afterDir="false" />
     </list>
     <option name="SHOW_DIALOG" value="false" />
     <option name="HIGHLIGHT_CONFLICTS" value="true" />
@@ -70,7 +76,7 @@
       <option name="number" value="Default" />
       <option name="presentableId" value="Default" />
       <updated>1778937928112</updated>
-      <workItem from="1778937929112" duration="14654000" />
+      <workItem from="1778937929112" duration="16524000" />
     </task>
     <task id="LOCAL-00001" summary="workspace map">
       <option name="closed" value="true" />

@@ -74,6 +74,33 @@ class LLMConfig(BaseModel):
     max_tokens: int = 2048
     # Reasoning-capable models (e.g. Opus 4.7) reject `temperature`; leave unset for those.
     temperature: float | None = None
+    # Background-agent jobs (extract / link / reflect) use this cheaper model.
+    # Falls back to `model` when None.
+    batch_model: str | None = "claude-haiku-4-5"
+
+
+class AgentConfig(BaseModel):
+    """Background-agent (writeback) jobs: extract, link, reflect."""
+
+    # Master gate. Set true after confirming defaults with `daemon link --dry-run`.
+    enabled: bool = False
+    folder_name: str = "Agent"
+    # Linker thresholds. Strict by design.
+    link_apply_cosine: float = 0.85
+    link_apply_requires_title_substring: bool = True
+    link_suggest_cosine: float = 0.78
+    link_max_per_note: int = 5
+    tag_apply_min_neighbor_count: int = 4
+    # Extractor.
+    extract_min_word_count: int = 80
+    extract_skip_if_processed_within_hours: int = 18
+    # Reflection — themes and the per-run lookback window in days.
+    reflect_themes: list[str] = Field(
+        default_factory=lambda: ["personality", "projects", "relationships", "themes"]
+    )
+    reflect_lookback_days: int = 7
+    # Safety grace: don't touch a note saved within this many minutes.
+    write_grace_minutes: int = 30
 
 
 class FeedbackConfig(BaseModel):
@@ -102,6 +129,7 @@ class Settings(BaseSettings):
     llm: LLMConfig = Field(default_factory=LLMConfig)
     feedback: FeedbackConfig = Field(default_factory=FeedbackConfig)
     logging: LoggingConfig = Field(default_factory=LoggingConfig)
+    agent: AgentConfig = Field(default_factory=AgentConfig)
 
     anthropic_api_key: str | None = None
 

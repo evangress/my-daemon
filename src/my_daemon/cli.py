@@ -16,7 +16,10 @@ from my_daemon.config import Settings, load_settings
 from my_daemon.embeddings import Embedder, SparseEmbedder
 from my_daemon.llm import LLMClient
 from my_daemon.pipeline import QueryEngine, ingest_vault
-from my_daemon.stores import FeedbackStore, GraphStore, VectorStore
+from my_daemon.pipeline.agent_extract import run_extract
+from my_daemon.pipeline.agent_link import run_link
+from my_daemon.pipeline.agent_reflect import run_reflect
+from my_daemon.stores import AgentStateStore, FeedbackStore, GraphStore, VectorStore
 
 app = typer.Typer(
     name="daemon",
@@ -73,6 +76,11 @@ def _build_graph_store(s: Settings) -> GraphStore:
 
 def _build_feedback_store(s: Settings) -> FeedbackStore:
     return FeedbackStore(db_path=s.feedback.db_path)
+
+
+def _build_agent_state(s: Settings) -> AgentStateStore:
+    # Same SQLite file as feedback — one state file to back up / wipe.
+    return AgentStateStore(db_path=s.feedback.db_path)
 
 
 @app.command()
@@ -294,6 +302,126 @@ def setup() -> None:
     from my_daemon.gui import launch_setup
 
     launch_setup()
+
+
+@app.command()
+def extract(
+    all_: bool = typer.Option(False, "--all", help="Process every eligible note, not just changed ones."),
+    note: str | None = typer.Option(None, "--note", help="Vault-relative path; restrict to one note."),
+    dry_run: bool = typer.Option(False, "--dry-run", help="List what would be processed; touch nothing."),
+    verbose: bool = typer.Option(False, "-v", "--verbose"),
+) -> None:
+    """Write an `## Agent Notes` section into recently-changed notes (the daily extractor)."""
+    s = _load()
+    if not s.agent.enabled and not dry_run:
+        console.print(
+            "[yellow]agent.enabled is false in config.yaml — refusing to write. "
+            "Pass --dry-run to preview, or flip the flag once you're ready.[/yellow]"
+        )
+        raise typer.Exit(code=1)
+
+    state = _build_agent_state(s)
+    llm = LLMClient(s.llm, api_key=s.anthropic_api_key)
+
+    def _progress(i: int, total: int, rel_path: str) -> None:
+        if verbose:
+            console.log(f"[{i + 1}/{total}] {rel_path}")
+
+    stats = run_extract(s, state, llm, all_=all_, only_note=note, dry_run=dry_run, progress=_progress)
+
+    table = Table(title=f"daemon extract {'(dry-run)' if dry_run else ''}".strip())
+    table.add_column("metric")
+    table.add_column("value", justify="right")
+    table.add_row("Notes scanned", str(stats.notes_scanned))
+    table.add_row("Eligible", str(stats.notes_eligible))
+    table.add_row("Processed", str(stats.notes_processed))
+    table.add_row("Skipped", str(stats.notes_skipped))
+    console.print(table)
+    if stats.errors:
+        console.print(Panel("\n".join(stats.errors), title="Errors", border_style="red"))
+
+
+@app.command()
+def link(
+    note: str | None = typer.Option(None, "--note", help="Vault-relative path; restrict to one note."),
+    dry_run: bool = typer.Option(False, "--dry-run", help="Show what would change; touch nothing."),
+    no_llm: bool = typer.Option(False, "--no-llm", help="Skip the LLM second-opinion on suggestions."),
+    verbose: bool = typer.Option(False, "-v", "--verbose"),
+) -> None:
+    """Auto-link / tag notes; write lower-confidence suggestions to Agent/link-suggestions-*.md."""
+    s = _load()
+    if not s.agent.enabled and not dry_run:
+        console.print(
+            "[yellow]agent.enabled is false in config.yaml — refusing to write. "
+            "Pass --dry-run to preview, or flip the flag once you're ready.[/yellow]"
+        )
+        raise typer.Exit(code=1)
+
+    embedder = _build_embedder(s)
+    vector_store = _build_vector_store(s, dim=embedder.dimension)
+    graph_store = _build_graph_store(s)
+    graph_store.load()
+    state = _build_agent_state(s)
+    llm = None if no_llm else LLMClient(s.llm, api_key=s.anthropic_api_key)
+
+    def _progress(i: int, total: int, rel_path: str) -> None:
+        if verbose:
+            console.log(f"[{i + 1}/{total}] {rel_path}")
+
+    stats = run_link(
+        s, state, embedder, vector_store, graph_store, llm,
+        only_note=note, dry_run=dry_run, progress=_progress,
+    )
+
+    table = Table(title=f"daemon link {'(dry-run)' if dry_run else ''}".strip())
+    table.add_column("metric")
+    table.add_column("value", justify="right")
+    table.add_row("Notes scanned", str(stats.notes_scanned))
+    table.add_row("Auto-applied wikilinks", str(stats.auto_applied_links))
+    table.add_row("Auto-applied tags", str(stats.auto_applied_tags))
+    table.add_row("Suggestions written", str(stats.suggestions_written))
+    console.print(table)
+    if stats.suggestions_file:
+        console.print(f"[green]Review: {stats.suggestions_file}[/green]")
+    if stats.errors:
+        console.print(Panel("\n".join(stats.errors), title="Errors", border_style="red"))
+
+
+@app.command()
+def reflect(
+    theme: str | None = typer.Option(None, "--theme", help="Restrict to one theme; default is all configured."),
+    dry_run: bool = typer.Option(False, "--dry-run", help="Run the LLM but don't write any files."),
+    verbose: bool = typer.Option(False, "-v", "--verbose"),
+) -> None:
+    """Update themed memory files in <vault>/Agent/ (the 'digital embodiment')."""
+    s = _load()
+    if not s.agent.enabled and not dry_run:
+        console.print(
+            "[yellow]agent.enabled is false in config.yaml — refusing to write. "
+            "Pass --dry-run to preview, or flip the flag once you're ready.[/yellow]"
+        )
+        raise typer.Exit(code=1)
+
+    state = _build_agent_state(s)
+    feedback = _build_feedback_store(s)
+    llm = LLMClient(s.llm, api_key=s.anthropic_api_key)
+
+    def _progress(i: int, total: int, theme_name: str) -> None:
+        if verbose:
+            console.log(f"[{i + 1}/{total}] theme: {theme_name}")
+
+    stats = run_reflect(s, state, feedback, llm, only_theme=theme, dry_run=dry_run, progress=_progress)
+
+    table = Table(title=f"daemon reflect {'(dry-run)' if dry_run else ''}".strip())
+    table.add_column("metric")
+    table.add_column("value", justify="right")
+    table.add_row("Themes processed", str(stats.themes_processed))
+    table.add_row("Themes skipped (unchanged)", str(stats.themes_skipped))
+    console.print(table)
+    if stats.rolling_journal_path:
+        console.print(f"[green]Rolling journal: {stats.rolling_journal_path}[/green]")
+    if stats.errors:
+        console.print(Panel("\n".join(stats.errors), title="Errors", border_style="red"))
 
 
 @models_app.command("download")

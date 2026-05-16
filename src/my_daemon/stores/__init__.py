@@ -1,7 +1,8 @@
-"""Persistence layer: vector store (Qdrant), graph (NetworkX), feedback log (SQLite)."""
+"""Persistence layer: vector store (Qdrant), graph (NetworkX), feedback + agent-state (SQLite)."""
 
+from my_daemon.stores.agent_state import AgentStateStore
 from my_daemon.stores.feedback import FeedbackStore
 from my_daemon.stores.graph import GraphStore
 from my_daemon.stores.vector import VectorStore
 
-__all__ = ["VectorStore", "GraphStore", "FeedbackStore"]
+__all__ = ["VectorStore", "GraphStore", "FeedbackStore", "AgentStateStore"]

@@ -1,6 +1,8 @@
 vault:
   path: ~/Documents/Obsidian/MyVault
-  exclude_dirs: [".obsidian", ".trash", "templates"]
+  # `Agent` is the folder the writeback jobs own; exclude it from ingest so
+  # the daemon doesn't read its own memory files back in.
+  exclude_dirs: [".obsidian", ".trash", "templates", "Agent"]
 
 chunking:
   max_tokens: 512
@@ -43,6 +45,31 @@ llm:
   # Opus 4.7 and other reasoning-capable models reject `temperature`. Leave it
   # unset (null) for those; set a float (e.g. 0.3) for Sonnet/Haiku if desired.
   temperature: null
+  # Background-agent jobs (extract / link / reflect) use this cheaper model.
+  # Leave null to reuse `model` above; default Haiku 4.5 is ~15x cheaper than Opus.
+  batch_model: claude-haiku-4-5
+
+agent:
+  # Master switch. Start in dry-run mode (daemon link --dry-run, daemon extract --note <one>)
+  # to verify thresholds against your vault, then flip to true.
+  enabled: false
+  folder_name: Agent
+  # Linker thresholds. The auto-apply gate is intentionally strict: cosine >= 0.85
+  # AND the target's title must appear verbatim (case-insensitive) in the source body.
+  # Everything between suggest and apply thresholds lands in Agent/link-suggestions-*.md.
+  link_apply_cosine: 0.85
+  link_apply_requires_title_substring: true
+  link_suggest_cosine: 0.78
+  link_max_per_note: 5
+  tag_apply_min_neighbor_count: 4
+  # Extractor.
+  extract_min_word_count: 80
+  extract_skip_if_processed_within_hours: 18
+  # Reflection: which themes to maintain in Agent/memory-*.md.
+  reflect_themes: [personality, projects, relationships, themes]
+  reflect_lookback_days: 7
+  # Don't touch a note that was saved within this many minutes (avoid collisions).
+  write_grace_minutes: 30
 
 feedback:
   db_path: ./data/feedback.db

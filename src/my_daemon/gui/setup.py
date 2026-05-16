@@ -42,6 +42,10 @@ DOTENV_PATH = PROJECT_ROOT / ".env"
 
 ENV_KEY = "ANTHROPIC_API_KEY"
 
+# Windows Task Scheduler job name for the daily reflection run.
+REFLECT_TASK_NAME = "MyDaemonReflect"
+REFLECT_TASK_TIME = "03:00"
+
 
 def _load_yaml() -> dict:
     """Read config.yaml; fall back to config.example.yaml; finally an empty dict."""
@@ -92,6 +96,58 @@ def _persist_api_key(api_key: str) -> tuple[bool, str]:
         f"Saved to .env. To make {ENV_KEY} a permanent OS env var on this system, "
         f"add `export {ENV_KEY}=...` to ~/.profile or ~/.zshrc."
     )
+
+
+def _daemon_exe_path() -> Path:
+    """Resolve the bundled daemon entry point inside the project's venv."""
+    return PROJECT_ROOT / ".venv" / "Scripts" / "daemon.exe"
+
+
+def _reflect_task_exists() -> bool:
+    if sys.platform != "win32":
+        return False
+    res = subprocess.run(
+        ["schtasks", "/Query", "/TN", REFLECT_TASK_NAME],
+        capture_output=True, text=True, creationflags=0x08000000,
+    )
+    return res.returncode == 0
+
+
+def _schedule_reflect_task() -> tuple[bool, str]:
+    """Register / refresh the daily 03:00 reflect job in Windows Task Scheduler."""
+    if sys.platform != "win32":
+        return False, "Scheduling is Windows-only; use cron on Linux/macOS."
+    exe = _daemon_exe_path()
+    if not exe.is_file():
+        return False, f"{exe} not found — run setup.bat first."
+    try:
+        subprocess.run(
+            [
+                "schtasks", "/Create",
+                "/SC", "DAILY",
+                "/TN", REFLECT_TASK_NAME,
+                "/TR", f'"{exe}" reflect',
+                "/ST", REFLECT_TASK_TIME,
+                "/F",
+            ],
+            check=True, capture_output=True, text=True, creationflags=0x08000000,
+        )
+        return True, f"Scheduled `daemon reflect` daily at {REFLECT_TASK_TIME} (task: {REFLECT_TASK_NAME})."
+    except (subprocess.CalledProcessError, FileNotFoundError) as exc:
+        return False, f"schtasks /Create failed: {exc}"
+
+
+def _unschedule_reflect_task() -> tuple[bool, str]:
+    if sys.platform != "win32":
+        return False, "Scheduling is Windows-only."
+    try:
+        subprocess.run(
+            ["schtasks", "/Delete", "/TN", REFLECT_TASK_NAME, "/F"],
+            check=True, capture_output=True, text=True, creationflags=0x08000000,
+        )
+        return True, f"Removed scheduled task {REFLECT_TASK_NAME}."
+    except (subprocess.CalledProcessError, FileNotFoundError) as exc:
+        return False, f"schtasks /Delete failed: {exc}"
 
 
 def _style_widgets(root: tk.Tk) -> ttk.Style:
@@ -158,6 +214,8 @@ class SetupWindow:
         self.vault_var = tk.StringVar(value=str(Path(existing_vault).expanduser()) if existing_vault else "")
         self.key_var = tk.StringVar(value=existing_key)
         self.show_key_var = tk.BooleanVar(value=False)
+        # Scheduling — preselect if the task already exists so Save is non-destructive.
+        self.schedule_var = tk.BooleanVar(value=_reflect_task_exists())
         self.status_var = tk.StringVar(value="")
         self.status_style = tk.StringVar(value="Status.TLabel")
 
@@ -203,9 +261,18 @@ class SetupWindow:
             style="Status.TLabel",
         ).grid(row=6, column=0, columnspan=3, sticky="w", pady=(6, 0))
 
+        # Scheduling — Windows-only; hide the row entirely on other OSes.
+        if sys.platform == "win32":
+            ttk.Checkbutton(
+                container,
+                text=f"Run `daemon reflect` daily at {REFLECT_TASK_TIME} (Windows Task Scheduler)",
+                variable=self.schedule_var,
+                style="Link.TCheckbutton",
+            ).grid(row=7, column=0, columnspan=3, sticky="w", pady=(14, 0))
+
         # Footer — Save button right-aligned, status to its left.
         footer = ttk.Frame(container)
-        footer.grid(row=7, column=0, columnspan=3, sticky="ew", pady=(24, 0))
+        footer.grid(row=8, column=0, columnspan=3, sticky="ew", pady=(24, 0))
         footer.columnconfigure(0, weight=1)
 
         self.status_label = ttk.Label(footer, textvariable=self.status_var, style="Status.TLabel")
@@ -260,7 +327,22 @@ class SetupWindow:
             return
 
         ok, msg = _persist_api_key(key)
-        self._set_status(msg, "Success.TLabel" if ok else "Error.TLabel")
+
+        # Scheduling — only meaningful on Windows.
+        sched_msg = ""
+        if sys.platform == "win32":
+            want = bool(self.schedule_var.get())
+            have = _reflect_task_exists()
+            if want and not have:
+                s_ok, s_msg = _schedule_reflect_task()
+                sched_msg = " " + s_msg
+                ok = ok and s_ok
+            elif have and not want:
+                s_ok, s_msg = _unschedule_reflect_task()
+                sched_msg = " " + s_msg
+                ok = ok and s_ok
+
+        self._set_status(msg + sched_msg, "Success.TLabel" if ok else "Error.TLabel")
 
 
 def launch_setup() -> None:
