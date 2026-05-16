@@ -261,6 +261,14 @@ def chat(
     launch_chat(host=host, port=port, native=native)
 
 
+@app.command()
+def setup() -> None:
+    """Open the Tkinter setup window: pick a vault folder, set the API key."""
+    from my_daemon.gui import launch_setup
+
+    launch_setup()
+
+
 @models_app.command("download")
 def models_download() -> None:
     """Pre-download the embedding model into the local cache folder.

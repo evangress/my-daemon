@@ -2,6 +2,10 @@
 
 Env var overrides use the prefix ``MY_DAEMON_`` and double-underscore nesting,
 e.g. ``MY_DAEMON_LLM__MODEL=claude-sonnet-4-6``.
+
+The Anthropic API key is **never** read from config.yaml — it comes from the
+environment (or a project-local ``.env`` file, which is auto-loaded). This
+keeps the key out of any file the user might accidentally commit.
 """
 
 from __future__ import annotations
@@ -11,6 +15,7 @@ from pathlib import Path
 from typing import Literal
 
 import yaml
+from dotenv import load_dotenv
 from pydantic import BaseModel, Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
@@ -105,7 +110,17 @@ def _default_config_path() -> Path:
 
 
 def load_settings(config_path: Path | None = None) -> Settings:
-    """Load settings from yaml (if present) and merge env overrides on top."""
+    """Load settings from yaml (if present) and merge env overrides on top.
+
+    Loads a project-local ``.env`` file first so ``ANTHROPIC_API_KEY`` (and any
+    other env-driven overrides) are honored without requiring the user to
+    ``export`` them in every shell.
+    """
+
+    # `.env` lives next to the config (project root by default). `override=False`
+    # means a value already in the real environment wins, which is what we want
+    # when the OS env var was set persistently via `setx` or shell profile.
+    load_dotenv(dotenv_path=Path.cwd() / ".env", override=False)
 
     path = config_path or _default_config_path()
     data: dict = {}
@@ -116,8 +131,7 @@ def load_settings(config_path: Path | None = None) -> Settings:
     if "vault" in data and "path" in data["vault"]:
         data["vault"]["path"] = str(Path(data["vault"]["path"]).expanduser())
 
-    api_key = os.environ.get("ANTHROPIC_API_KEY")
-    if api_key:
-        data.setdefault("anthropic_api_key", api_key)
+    # API key is environment-only — never read from yaml, never written back.
+    data["anthropic_api_key"] = os.environ.get("ANTHROPIC_API_KEY")
 
     return Settings(**data)

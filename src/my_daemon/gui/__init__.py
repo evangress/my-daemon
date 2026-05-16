@@ -1,5 +1,6 @@
-"""NiceGUI front-end for My Daemon."""
+"""GUI surfaces for My Daemon: NiceGUI chat + Tkinter setup."""
 
 from my_daemon.gui.app import launch_chat
+from my_daemon.gui.setup import launch_setup
 
-__all__ = ["launch_chat"]
+__all__ = ["launch_chat", "launch_setup"]
