@@ -208,8 +208,15 @@ def launch_chat(host: str = "127.0.0.1", port: int = 8765, native: bool = False)
     extra). Otherwise the UI is reachable in a browser at ``http://<host>:<port>``.
     """
     ctx = _build_context()
-    _mount_ui(ctx)
+
+    # NiceGUI 3.x requires either a script-file entry point or a ``root=`` callable
+    # so it can rebuild the UI per client. We come in through the Typer CLI, not a
+    # script, so we hand it a closure that mounts our UI.
+    def root() -> None:
+        _mount_ui(ctx)
+
     ui.run(
+        root=root,
         title="My Daemon",
         host=host,
         port=port,
@@ -219,7 +226,3 @@ def launch_chat(host: str = "127.0.0.1", port: int = 8765, native: bool = False)
         show=not native,
         favicon="✦",
     )
-
-
-if __name__ in {"__main__", "__mp_main__"}:
-    launch_chat()
