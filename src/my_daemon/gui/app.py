@@ -68,7 +68,7 @@ def _build_context() -> _DaemonContext:
     return _DaemonContext(s, embedder, vector_store, graph_store, feedback_store, llm, orchestrator)
 
 
-async def _stream_into_label(label: ui.html, generator: Iterator[str], accumulator: list[str]) -> None:
+async def _stream_into_label(label: ui.markdown, generator: Iterator[str], accumulator: list[str]) -> None:
     """Drain a sync text generator into a NiceGUI label without blocking the event loop."""
     queue: asyncio.Queue[str | None] = asyncio.Queue()
     loop = asyncio.get_running_loop()
@@ -106,7 +106,16 @@ def _mount_ui(ctx: _DaemonContext) -> None:
             max-width: 70ch;
             line-height: 1.55;
             box-shadow: 0 1px 2px rgba(0,0,0,0.05);
-            white-space: pre-wrap;
+          }}
+          /* Tighten the auto-margins markdown gives <p>/<ul> inside our bubble. */
+          .daemon-bubble p:first-child {{ margin-top: 0; }}
+          .daemon-bubble p:last-child  {{ margin-bottom: 0; }}
+          .daemon-bubble ul, .daemon-bubble ol {{ margin: 0.4em 0; padding-left: 1.4em; }}
+          .daemon-bubble code {{
+            background-color: rgba(0,0,0,0.05);
+            border-radius: 4px;
+            padding: 1px 5px;
+            font-size: 0.92em;
           }}
           .user-bubble {{
             background-color: {USER_BUBBLE};
@@ -157,7 +166,7 @@ def _mount_ui(ctx: _DaemonContext) -> None:
             with ui.row().classes("w-full justify-end"):
                 ui.label(query).classes("user-bubble")
             with ui.row().classes("w-full justify-start"):
-                daemon_label = ui.html("…").classes("daemon-bubble")
+                daemon_label = ui.markdown("…").classes("daemon-bubble")
 
         t0 = datetime.now(UTC)
         try:
