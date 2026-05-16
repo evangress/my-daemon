@@ -1,6 +1,8 @@
 """NiceGUI chat window for the daemon.
 
-Warm parchment palette, streaming responses, lazy retrieval pipeline.
+Brand-aligned dark indigo palette per ../my-daemon-astro-website/BRAND.md:
+the trichromatic story (gold question → violet daemon → cyan reply) is the
+visual spine of the chat. Streaming responses, lazy retrieval pipeline.
 The CLI's ``daemon chat`` command launches this; ``launch_chat`` is the entry point.
 """
 
@@ -21,13 +23,16 @@ from my_daemon.models import FeedbackEvent
 from my_daemon.retrieval import RetrievalOrchestrator
 from my_daemon.stores import FeedbackStore, GraphStore, VectorStore
 
-# Warm parchment palette — easier on the eyes than terminal black, less clinical than chatbot white.
-BG_COLOR = "#F7EFE0"            # parchment cream
-PANEL_COLOR = "#FFF9EE"         # lighter card surface
-INK_COLOR = "#2E2A24"           # warm near-black for body text
-ACCENT_COLOR = "#A8642B"        # copper / amber for the daemon
-USER_BUBBLE = "#E9D8B7"         # soft tan for the human
-DAEMON_BUBBLE = "#FFF4DD"       # softer cream for the daemon
+# Brand palette (OKLCH). Source: my-daemon-astro-website/BRAND.md § 2.
+# A question (gold) calls a daemon (violet) which speaks back (cyan).
+VIOLET = "oklch(72% 0.20 305)"   # the daemon — wordmark dot, primary CTA
+CYAN = "oklch(78% 0.14 195)"     # synthesis / reply — daemon bubble accent
+GOLD = "oklch(82% 0.155 75)"     # the human spark — user bubble accent, italic emphasis
+# Surfaces — deep midnight indigo, slightly tinted as they rise.
+BG = "oklch(14% 0.025 282)"
+INK = "oklch(92% 0.018 90)"      # warm near-white body text
+INK_MUTE = "oklch(92% 0.018 90 / 0.70)"
+RULE = "oklch(60% 0.05 285 / 0.20)"  # hairline borders
 
 
 @dataclass
@@ -93,64 +98,204 @@ async def _stream_into_label(label: ui.markdown, generator: Iterator[str], accum
 
 
 def _mount_ui(ctx: _DaemonContext) -> None:
-    ui.colors(primary=ACCENT_COLOR)
+    # NiceGUI/Quasar primary maps to our violet — the daemon hue per brand § 2.
+    ui.colors(primary=VIOLET, secondary=CYAN, accent=GOLD)
     ui.add_head_html(
         f"""
+        <link rel="preconnect" href="https://fonts.googleapis.com">
+        <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+        <link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,wght@0,400;0,500;1,400;1,500&family=JetBrains+Mono:wght@400;500&family=Newsreader:ital,wght@0,400;0,500;1,400&display=swap" rel="stylesheet">
         <style>
-          body {{ background-color: {BG_COLOR}; }}
-          .daemon-bubble {{
-            background-color: {DAEMON_BUBBLE};
-            color: {INK_COLOR};
-            border-radius: 14px;
-            padding: 14px 18px;
+          :root {{
+            --bg: {BG};
+            --ink: {INK};
+            --ink-mute: {INK_MUTE};
+            --violet: {VIOLET};
+            --cyan: {CYAN};
+            --gold: {GOLD};
+            --rule: {RULE};
+            --font-body: 'Newsreader', Georgia, 'Cambria', serif;
+            --font-display: 'Fraunces', Georgia, 'Cambria', serif;
+            --font-mono: 'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, monospace;
+          }}
+          html, body {{
+            background: var(--bg);
+            color: var(--ink);
+            font-family: var(--font-body);
+            font-size: 16.5px;
+            line-height: 1.65;
+          }}
+          /* Three radial gradients anchored at the corners — paper-warmth in the dark, per brand. */
+          body::before {{
+            content: ""; position: fixed; inset: 0; pointer-events: none; z-index: 0;
+            background:
+              radial-gradient(60ch at 12% 8%, oklch(72% 0.20 305 / 0.10), transparent 60%),
+              radial-gradient(50ch at 92% 12%, oklch(78% 0.14 195 / 0.08), transparent 60%),
+              radial-gradient(70ch at 50% 110%, oklch(40% 0.10 290 / 0.18), transparent 60%);
+          }}
+          .nicegui-content > * {{ position: relative; z-index: 1; }}
+
+          /* Wordmark — violet dot + Fraunces small-caps, wide-tracked. Brand § 9. */
+          .wordmark {{
+            font-family: var(--font-display);
+            font-weight: 500;
+            font-variant-caps: all-small-caps;
+            letter-spacing: 0.28em;
+            color: var(--ink);
+            font-size: 1.4rem;
+            display: inline-flex; align-items: baseline; gap: 0.55em;
+          }}
+          .wordmark__dot {{
+            width: 0.42em; height: 0.42em;
+            border-radius: 50%;
+            background: var(--violet);
+            box-shadow: 0 0 12px oklch(72% 0.20 305 / 0.55);
+            transform: translateY(-0.12em);
+            display: inline-block;
+          }}
+          /* Tiny mono uppercase eyebrow — vault label, status chips. Brand § 3. */
+          .eyebrow {{
+            font-family: var(--font-mono);
+            text-transform: uppercase;
+            font-size: 0.68rem;
+            letter-spacing: 0.32em;
+            color: var(--ink-mute);
+          }}
+          /* Italic Fraunces whisper above the chat — the brand's default tone. */
+          .epigraph {{
+            font-family: var(--font-display);
+            font-style: italic;
+            font-size: 1.02rem;
+            color: var(--ink-mute);
+            opacity: 0.85;
+          }}
+          .epigraph .accent {{ color: var(--gold); }}
+
+          /* Bubbles — bordered surfaces with a 2px hue stripe on the speaker's side.
+             User on the right glows gold; daemon on the left glows cyan. */
+          .user-bubble {{
+            background: linear-gradient(135deg,
+              oklch(22% 0.04 80 / 0.55),
+              oklch(18% 0.03 282 / 0.35));
+            border: 1px solid oklch(82% 0.155 75 / 0.18);
+            border-right: 2px solid oklch(82% 0.155 75 / 0.55);
+            color: var(--ink);
+            font-family: var(--font-display);
+            font-style: italic;
+            font-size: 1.04rem;
+            border-radius: 8px;
+            padding: 12px 18px;
             max-width: 70ch;
             line-height: 1.55;
-            box-shadow: 0 1px 2px rgba(0,0,0,0.05);
+            box-shadow: 0 1px 3px rgba(0,0,0,0.30);
           }}
-          /* Tighten the auto-margins markdown gives <p>/<ul> inside our bubble. */
+          .daemon-bubble {{
+            background: linear-gradient(135deg,
+              oklch(22% 0.04 200 / 0.55),
+              oklch(18% 0.03 282 / 0.35));
+            border: 1px solid oklch(78% 0.14 195 / 0.18);
+            border-left: 2px solid oklch(78% 0.14 195 / 0.55);
+            color: var(--ink);
+            font-family: var(--font-body);
+            font-size: 1.02rem;
+            border-radius: 8px;
+            padding: 14px 20px;
+            max-width: 70ch;
+            line-height: 1.7;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.30);
+          }}
           .daemon-bubble p:first-child {{ margin-top: 0; }}
           .daemon-bubble p:last-child  {{ margin-bottom: 0; }}
           .daemon-bubble ul, .daemon-bubble ol {{ margin: 0.4em 0; padding-left: 1.4em; }}
+          .daemon-bubble em {{ color: var(--gold); font-style: italic; }}
+          .daemon-bubble strong {{ color: var(--ink); font-weight: 600; }}
+          .daemon-bubble h1, .daemon-bubble h2, .daemon-bubble h3 {{
+            font-family: var(--font-display);
+            font-weight: 500;
+            letter-spacing: -0.01em;
+            margin: 0.6em 0 0.3em;
+          }}
           .daemon-bubble code {{
-            background-color: rgba(0,0,0,0.05);
+            font-family: var(--font-mono);
+            background-color: oklch(60% 0.05 285 / 0.18);
             border-radius: 4px;
-            padding: 1px 5px;
-            font-size: 0.92em;
+            padding: 1px 6px;
+            font-size: 0.9em;
           }}
-          .user-bubble {{
-            background-color: {USER_BUBBLE};
-            color: {INK_COLOR};
-            border-radius: 14px;
-            padding: 12px 16px;
-            max-width: 70ch;
-            line-height: 1.5;
-            box-shadow: 0 1px 2px rgba(0,0,0,0.05);
+          .daemon-bubble a {{ color: var(--cyan); text-decoration: underline dotted; }}
+          .daemon-bubble blockquote {{
+            border-left: 2px solid oklch(82% 0.155 75 / 0.45);
+            padding-left: 0.9em;
+            color: var(--ink-mute);
+            font-style: italic;
+            margin: 0.5em 0;
           }}
-          .header-strip {{
-            color: {ACCENT_COLOR};
-            font-family: 'Georgia', 'Cambria', serif;
-            letter-spacing: 0.02em;
+
+          /* Underlined input, not boxed — brand § 9. Bottom hairline turns gold on focus. */
+          .input-rule {{
+            border-bottom: 1px solid var(--rule);
+            transition: border-color 220ms ease;
+            background: transparent;
+          }}
+          .input-rule:focus-within {{ border-bottom-color: var(--gold); }}
+          .input-rule .q-field__control,
+          .input-rule .q-field__control::before,
+          .input-rule .q-field__control::after {{
+            background: transparent !important;
+            border: 0 !important;
+          }}
+          .input-rule input, .input-rule textarea, .input-rule .q-field__native {{
+            color: var(--ink) !important;
+            font-family: var(--font-body);
+            font-size: 1.05rem;
+            caret-color: var(--gold);
+          }}
+          .input-rule .q-field__native::placeholder {{
+            color: oklch(92% 0.018 90 / 0.40);
+            font-style: italic;
+          }}
+
+          /* Primary CTA — pill, mono micro-caps. Brand § 9. */
+          .cta-pill {{
+            border-radius: 9999px !important;
+            padding: 0 1.4rem !important;
+            min-height: 2.4rem !important;
+          }}
+          .cta-pill .q-btn__content {{
+            font-family: var(--font-mono);
+            font-size: 0.7rem;
+            letter-spacing: 0.24em;
+            text-transform: uppercase;
+            font-weight: 500;
           }}
         </style>
         """
     )
 
-    with ui.column().classes("w-full max-w-3xl mx-auto p-6 gap-4"):
-        with ui.row().classes("items-baseline w-full justify-between header-strip"):
-            ui.label("✦ My Daemon").classes("text-3xl")
-            ui.label(f"vault: {ctx.settings.vault.path.name}").classes("text-sm opacity-70")
+    with ui.column().classes("w-full max-w-3xl mx-auto px-6 py-10 gap-5"):
+        # Header — wordmark on the left, mono eyebrow vault label on the right.
+        with ui.row().classes("items-baseline w-full justify-between"):
+            ui.html(
+                '<span class="wordmark"><span class="wordmark__dot"></span>My Daemon</span>'
+            )
+            ui.html(
+                f'<span class="eyebrow">vault · {ctx.settings.vault.path.name}</span>'
+            )
 
-        ui.label(
-            "Ask. I'll search your notes and respond in your own voice."
-        ).classes("text-sm").style(f"color: {INK_COLOR}; opacity: 0.65; font-style: italic")
+        # A whisper, not a shout. Italic Fraunces at low opacity is the brand's default tone.
+        ui.html(
+            'Ask, and I will walk the vault with you<span class="accent">.</span>'
+        ).classes("epigraph")
 
-        chat_column = ui.column().classes("w-full gap-3 pt-2")
+        chat_column = ui.column().classes("w-full gap-3 pt-4")
 
-        with ui.row().classes("w-full pt-4 gap-2 items-end"):
-            input_box = ui.input(placeholder="What would you like to remember?").props(
-                "outlined dense rounded autogrow"
-            ).classes("flex-grow").style(f"background-color: {PANEL_COLOR}")
-            send_btn = ui.button("Send").props("rounded color=primary")
+        with ui.row().classes("w-full pt-6 gap-3 items-end"):
+            input_box = (
+                ui.input(placeholder="What would you like to remember?")
+                .props("borderless dense autogrow")
+                .classes("flex-grow input-rule")
+            )
+            send_btn = ui.button("Send").props("unelevated color=primary").classes("cta-pill")
 
     busy = {"flag": False}
 
@@ -230,7 +375,7 @@ def launch_chat(host: str = "127.0.0.1", port: int = 8765, native: bool = False)
         host=host,
         port=port,
         native=native,
-        dark=False,
+        dark=True,
         reload=False,
         show=not native,
         favicon="✦",
