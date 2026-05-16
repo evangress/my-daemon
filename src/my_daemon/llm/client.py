@@ -30,13 +30,15 @@ class LLMClient:
 
     def synthesize(self, query: str, chunks: list[RetrievedChunk]) -> str:
         client = self._client_()
-        message = client.messages.create(
-            model=self.config.model,
-            max_tokens=self.config.max_tokens,
-            temperature=self.config.temperature,
-            system=SYSTEM_PROMPT,
-            messages=[{"role": "user", "content": build_user_message(query, chunks)}],
-        )
+        kwargs: dict = {
+            "model": self.config.model,
+            "max_tokens": self.config.max_tokens,
+            "system": SYSTEM_PROMPT,
+            "messages": [{"role": "user", "content": build_user_message(query, chunks)}],
+        }
+        if self.config.temperature is not None:
+            kwargs["temperature"] = self.config.temperature
+        message = client.messages.create(**kwargs)
         out: list[str] = []
         for block in message.content:
             if getattr(block, "type", None) == "text":

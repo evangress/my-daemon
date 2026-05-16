@@ -28,7 +28,10 @@ class VectorStore:
     def _client_(self) -> QdrantClient:
         if self._client is None:
             from qdrant_client import QdrantClient
-            self._client = QdrantClient(url=self.url)
+            # check_compatibility=False: the docker-compose pins qdrant server 1.11 but
+            # the pip client floats forward; the version-mismatch warning is noisy and
+            # the operations we use (query_points/upsert/delete) work across both.
+            self._client = QdrantClient(url=self.url, check_compatibility=False)
         return self._client
 
     def ensure_collection(self) -> None:

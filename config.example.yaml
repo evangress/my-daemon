@@ -34,7 +34,9 @@ llm:
   provider: anthropic
   model: claude-opus-4-7
   max_tokens: 2048
-  temperature: 0.3
+  # Opus 4.7 and other reasoning-capable models reject `temperature`. Leave it
+  # unset (null) for those; set a float (e.g. 0.3) for Sonnet/Haiku if desired.
+  temperature: null
 
 feedback:
   db_path: ./data/feedback.db

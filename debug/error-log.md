@@ -1,57 +1,77 @@
-## 2026-05-16 12:49 PM
-Warning: You are sending unauthenticated requests to the HF Hub. Please set a HF_TOKEN to enable higher rate limits and faster downloads.
-Loading weights: 100%|█████████████████████████████████████████████████████████████| 199/199 [00:00<00:00, 6595.81it/s]
-C:\Users\gress\AppData\Local\my-daemon\src\my_daemon\embeddings\embedder.py:28: FutureWarning: The `get_sentence_embedding_dimension` method has been renamed to `get_embedding_dimension`.
-  self._dim = int(self._model.get_sentence_embedding_dimension())
+## 2026-05-16 01:56: PM
+UserWarning: Qdrant client version 1.18.0 is incompatible with server version 1.11.0. Major versions should match and minor version difference must not exceed 1. Set check_compatibility=False to skip version check.
+  show_warning(
 ╭───────────────────────────────────────── Traceback (most recent call last) ──────────────────────────────────────────╮
-│ C:\Users\gress\AppData\Local\my-daemon\src\my_daemon\cli.py:142 in query                                             │
+│ C:\Users\gress\AppData\Local\my-daemon\src\my_daemon\cli.py:149 in query                                             │
 │                                                                                                                      │
-│   139 │   llm = LLMClient(s.llm, api_key=s.anthropic_api_key)                                                        │
-│   140 │                                                                                                              │
-│   141 │   engine = QueryEngine(s, embedder, vector_store, graph_store, feedback_store, llm)                          │
-│ ❱ 142 │   response = engine.ask(text, synthesize=not no_synthesize)                                                  │
-│   143 │                                                                                                              │
-│   144 │   if response.answer:                                                                                        │
-│   145 │   │   console.print(Panel(response.answer, title="Daemon", border_style="cyan"))                             │
+│   146 │   llm = LLMClient(s.llm, api_key=s.anthropic_api_key)                                                        │
+│   147 │                                                                                                              │
+│   148 │   engine = QueryEngine(s, embedder, vector_store, graph_store, feedback_store, llm)                          │
+│ ❱ 149 │   response = engine.ask(text, synthesize=not no_synthesize)                                                  │
+│   150 │                                                                                                              │
+│   151 │   if response.answer:                                                                                        │
+│   152 │   │   console.print(Panel(response.answer, title="Daemon", border_style="cyan"))                             │
 │                                                                                                                      │
-│ C:\Users\gress\AppData\Local\my-daemon\src\my_daemon\pipeline\query.py:42 in ask                                     │
+│ C:\Users\gress\AppData\Local\my-daemon\src\my_daemon\pipeline\query.py:43 in ask                                     │
 │                                                                                                                      │
-│   39 │                                                                                                               │
 │   40 │   def ask(self, query: str, synthesize: bool = True) -> QueryResponse:                                        │
 │   41 │   │   t0 = time.perf_counter()                                                                                │
-│ ❱ 42 │   │   result = self.orchestrator.retrieve(query)                                                              │
-│   43 │   │   answer = self.llm.synthesize(query, result.ranked) if synthesize else ""                                │
+│   42 │   │   result = self.orchestrator.retrieve(query)                                                              │
+│ ❱ 43 │   │   answer = self.llm.synthesize(query, result.ranked) if synthesize else ""                                │
 │   44 │   │   latency_ms = int((time.perf_counter() - t0) * 1000)                                                     │
-│   45                                                                                                                 │
+│   45 │   │                                                                                                           │
+│   46 │   │   summary = {                                                                                             │
 │                                                                                                                      │
-│ C:\Users\gress\AppData\Local\my-daemon\src\my_daemon\retrieval\orchestrator.py:31 in retrieve                        │
+│ C:\Users\gress\AppData\Local\my-daemon\src\my_daemon\llm\client.py:33 in synthesize                                  │
 │                                                                                                                      │
-│   28 │   │   self.graph_store = graph_store                                                                          │
-│   29 │                                                                                                               │
-│   30 │   def retrieve(self, query: str) -> RetrievalResult:                                                          │
-│ ❱ 31 │   │   seeds = seed_search(                                                                                    │
-│   32 │   │   │   query,                                                                                              │
-│   33 │   │   │   self.embedder,                                                                                      │
-│   34 │   │   │   self.vector_store,                                                                                  │
+│   30 │                                                                                                               │
+│   31 │   def synthesize(self, query: str, chunks: list[RetrievedChunk]) -> str:                                      │
+│   32 │   │   client = self._client_()                                                                                │
+│ ❱ 33 │   │   message = client.messages.create(                                                                       │
+│   34 │   │   │   model=self.config.model,                                                                            │
+│   35 │   │   │   max_tokens=self.config.max_tokens,                                                                  │
+│   36 │   │   │   temperature=self.config.temperature,                                                                │
 │                                                                                                                      │
-│ C:\Users\gress\AppData\Local\my-daemon\src\my_daemon\retrieval\seed.py:19 in seed_search                             │
+│ C:\Users\gress\AppData\Local\my-daemon\.venv\Lib\site-packages\anthropic\_utils\_utils.py:294 in wrapper             │
 │                                                                                                                      │
-│   16 │   """Embed the query and return the top-K Qdrant hits as RetrievedChunks."""                                  │
-│   17 │                                                                                                               │
-│   18 │   vec = embedder.encode_one(query)                                                                            │
-│ ❱ 19 │   hits = vector_store.search(vec, top_k=top_k)                                                                │
-│   20 │   seeds: list[RetrievedChunk] = []                                                                            │
-│   21 │   for h in hits:                                                                                              │
-│   22 │   │   chunk = Chunk(                                                                                          │
+│   291 │   │   │   │   │   else:                                                                                      │
+│   292 │   │   │   │   │   │   msg = f"Missing required argument: {quote(missing[0])}"                                │
+│   293 │   │   │   │   raise TypeError(msg)                                                                           │
+│ ❱ 294 │   │   │   return func(*args, **kwargs)                                                                       │
+│   295 │   │                                                                                                          │
+│   296 │   │   return wrapper  # type: ignore                                                                         │
+│   297                                                                                                                │
 │                                                                                                                      │
-│ C:\Users\gress\AppData\Local\my-daemon\src\my_daemon\stores\vector.py:67 in search                                   │
+│ C:\Users\gress\AppData\Local\my-daemon\.venv\Lib\site-packages\anthropic\resources\messages\messages.py:1003 in      │
+│ create                                                                                                               │
 │                                                                                                                      │
-│   64 │                                                                                                               │
-│   65 │   def search(self, vector: list[float], top_k: int = 8) -> list[dict]:                                        │
-│   66 │   │   client = self._client_()                                                                                │
-│ ❱ 67 │   │   hits = client.search(                                                                                   │
-│   68 │   │   │   collection_name=self.collection,                                                                    │
-│   69 │   │   │   query_vector=vector,                                                                                │
-│   70 │   │   │   limit=top_k,                                                                                        │
+│   1000 │   │   │   │   stacklevel=3,                                                                                 │
+│   1001 │   │   │   )                                                                                                 │
+│   1002 │   │                                                                                                         │
+│ ❱ 1003 │   │   return self._post(                                                                                    │
+│   1004 │   │   │   "/v1/messages",                                                                                   │
+│   1005 │   │   │   body=maybe_transform(                                                                             │
+│   1006 │   │   │   │   {                                                                                             │
+│                                                                                                                      │
+│ C:\Users\gress\AppData\Local\my-daemon\.venv\Lib\site-packages\anthropic\_base_client.py:1374 in post                │
+│                                                                                                                      │
+│   1371 │   │   opts = FinalRequestOptions.construct(                                                                 │
+│   1372 │   │   │   method="post", url=path, json_data=body, content=content, files=to_httpx_files(files), **options  │
+│   1373 │   │   )                                                                                                     │
+│ ❱ 1374 │   │   return cast(ResponseT, self.request(cast_to, opts, stream=stream, stream_cls=stream_cls))             │
+│   1375 │                                                                                                             │
+│   1376 │   def patch(                                                                                                │
+│   1377 │   │   self,                                                                                                 │
+│                                                                                                                      │
+│ C:\Users\gress\AppData\Local\my-daemon\.venv\Lib\site-packages\anthropic\_base_client.py:1147 in request             │
+│                                                                                                                      │
+│   1144 │   │   │   │   │   err.response.read()                                                                       │
+│   1145 │   │   │   │                                                                                                 │
+│   1146 │   │   │   │   log.debug("Re-raising status error")                                                          │
+│ ❱ 1147 │   │   │   │   raise self._make_status_error_from_response(err.response) from None                           │
+│   1148 │   │   │                                                                                                     │
+│   1149 │   │   │   break                                                                                             │
+│   1150                                                                                                               │
 ╰──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╯
-AttributeError: 'QdrantClient' object has no attribute 'search'
+BadRequestError: Error code: 400 - {'type': 'error', 'error': {'type': 'invalid_request_error', 'message':
+'`temperature` is deprecated for this model.'}, 'request_id': 'req_011Cb6gJosaPvUMNNTewVzDF'}

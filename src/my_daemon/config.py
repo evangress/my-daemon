@@ -60,7 +60,8 @@ class LLMConfig(BaseModel):
     provider: Literal["anthropic"] = "anthropic"
     model: str = "claude-opus-4-7"
     max_tokens: int = 2048
-    temperature: float = 0.3
+    # Reasoning-capable models (e.g. Opus 4.7) reject `temperature`; leave unset for those.
+    temperature: float | None = None
 
 
 class FeedbackConfig(BaseModel):
