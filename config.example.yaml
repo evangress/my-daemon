@@ -11,6 +11,7 @@ embeddings:
   model: BAAI/bge-small-en-v1.5
   batch_size: 32
   device: auto  # auto | cpu | cuda | mps
+  cache_folder: ./data/models   # model files live here; first run downloads, later runs are offline
 
 vector_store:
   backend: qdrant

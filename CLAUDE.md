@@ -13,8 +13,10 @@ Please read the [PROJECT_MANAGEMENT.md](PROJECT_MANAGEMENT.md) file to understan
 ### Things Always Do
 
 1. Always add any file with secrets to the .ignore file
-2. At the end of a coding session, 
-   3. Always lint the code with a local linter
-   4. Always perform a ```git add .``` to add your newly created files to the git repository
-   5. Create a commit summary and perform a commit to "master" (for now, we'll use dev branches in the future after a release)
-6. Add suggestions to an AI suggestions section in the project management file if you would like to store your thoughts on future tasks or improvements. 
+2. Always check the to-do section of the PROJECT_MANAGEMENT.md file to look for things that need changing or improvement
+3. Always resolve errors logged in the ./debug/error-log.md file
+4. At the end of a coding session, 
+   4. Always lint the code with a local linter
+   5. Always perform a ```git add .``` to add your newly created files to the git repository
+   6. Create a commit summary and perform a commit to "master" (for now, we'll use dev branches in the future after a release)
+7. Add suggestions to an AI suggestions section in the project management file if you would like to store your thoughts on future tasks or improvements.

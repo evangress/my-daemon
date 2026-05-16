@@ -30,6 +30,7 @@ class EmbeddingsConfig(BaseModel):
     model: str = "BAAI/bge-small-en-v1.5"
     batch_size: int = 32
     device: Literal["auto", "cpu", "cuda", "mps"] = "auto"
+    cache_folder: Path = Path("./data/models")
 
 
 class QdrantConfig(BaseModel):

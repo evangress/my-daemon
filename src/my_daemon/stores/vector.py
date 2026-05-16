@@ -64,13 +64,13 @@ class VectorStore:
 
     def search(self, vector: list[float], top_k: int = 8) -> list[dict]:
         client = self._client_()
-        hits = client.search(
+        response = client.query_points(
             collection_name=self.collection,
-            query_vector=vector,
+            query=vector,
             limit=top_k,
             with_payload=True,
         )
-        return [{"score": h.score, **(h.payload or {})} for h in hits]
+        return [{"score": p.score, **(p.payload or {})} for p in response.points]
 
     def delete_by_note(self, note_path: str) -> None:
         from qdrant_client.http.models import FieldCondition, Filter, MatchValue

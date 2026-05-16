@@ -26,6 +26,8 @@ app = typer.Typer(
 )
 graph_app = typer.Typer(name="graph", help="Graph inspection commands.")
 app.add_typer(graph_app)
+models_app = typer.Typer(name="models", help="Embedding model management.")
+app.add_typer(models_app)
 
 console = Console()
 
@@ -39,7 +41,12 @@ def _load() -> Settings:
 
 
 def _build_embedder(s: Settings) -> Embedder:
-    return Embedder(s.embeddings.model, batch_size=s.embeddings.batch_size, device=s.embeddings.device)
+    return Embedder(
+        s.embeddings.model,
+        batch_size=s.embeddings.batch_size,
+        device=s.embeddings.device,
+        cache_folder=s.embeddings.cache_folder,
+    )
 
 
 def _build_vector_store(s: Settings, dim: int) -> VectorStore:
@@ -240,6 +247,18 @@ def graph_stats() -> None:
     for tag, degree in stats.top_tags:
         tag_table.add_row(tag, str(degree))
     console.print(tag_table)
+
+
+@models_app.command("download")
+def models_download() -> None:
+    """Pre-download the embedding model into the local cache folder.
+
+    After this, queries and ingest run fully offline (no HF Hub calls).
+    """
+    s = _load()
+    embedder = _build_embedder(s)
+    cache = embedder.download()
+    console.print(f"[green]Model '{s.embeddings.model}' ready in {cache} (dim={embedder.dimension})[/green]")
 
 
 @app.command()
