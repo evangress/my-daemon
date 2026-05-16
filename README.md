@@ -16,6 +16,7 @@ src/my_daemon/
 ├── stores/              # Qdrant vectors, NetworkX graph, SQLite feedback
 ├── retrieval/           # seed → expand → orchestrate
 ├── llm/                 # Anthropic client + synthesis prompt
+├── gui/                 # NiceGUI chat window (`daemon chat`)
 └── pipeline/            # ingest_vault, QueryEngine
 ```
 
@@ -75,10 +76,34 @@ daemon query "what was I working through about graph-augmented retrieval"
 
 You'll see the synthesized answer plus at least three ranked candidate sources. Every query is logged to `data/feedback.db` so a later phase can learn from which one you picked.
 
+### Chat with your daemon (GUI)
+
+For a warmer, less-terminal experience, launch the NiceGUI chat window:
+
+```bash
+daemon chat
+```
+
+By default it opens at <http://127.0.0.1:8765> — your browser should launch automatically. Type a question in the input at the bottom; the daemon's reply streams into the chat as it generates. The same retrieval pipeline and feedback logging run behind the scenes, so chat queries also land in `data/feedback.db`.
+
+Flags:
+
+| Flag | Default | Notes |
+|---|---|---|
+| `--host` | `127.0.0.1` | Bind address. Stay on loopback unless you know what you're doing. |
+| `--port` | `8765` | Local port for the UI. |
+| `--native` | off | Open as a desktop window via `pywebview` instead of in your browser. Requires `pip install pywebview`. |
+
+Stop the server with `Ctrl+C` in the terminal that launched it.
+
+> Heads up: the first send after launch can take a few seconds — the embedding model and graph load lazily on the first query, then stay warm for the rest of the session.
+
 ## Useful commands
 
 | Command | What it does |
 |---|---|
+| `daemon chat` | Launch the warm-themed NiceGUI chat window (browser or `--native` desktop window) |
+| `daemon models download` | Pre-pull the embedding model into the local cache so queries stay offline afterward |
 | `daemon status` | Vault path, note count, vector chunk count, graph stats |
 | `daemon graph stats` | Top-PageRank notes and top tags |
 | `daemon search "phrase"` | Vector-only debug search (no graph, no LLM) |

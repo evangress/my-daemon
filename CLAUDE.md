@@ -14,7 +14,7 @@ Please read the [PROJECT_MANAGEMENT.md](PROJECT_MANAGEMENT.md) file to understan
 
 1. Always add any file with secrets to the .ignore file
 2. Always check the to-do section of the PROJECT_MANAGEMENT.md file to look for things that need changing or improvement
-3. Always resolve errors logged in the ./debug/error-log.md file
+3. Always check if there are errors to resolve in the ./debug/error-log.md file. If the file is empty, just skip this step.
 4. At the end of a coding session, 
    4. Always lint the code with a local linter
    5. Always perform a ```git add .``` to add your newly created files to the git repository
