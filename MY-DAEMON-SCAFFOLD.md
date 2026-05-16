@@ -418,11 +418,11 @@ Each phase ends with something usable. Don't start the next until the current on
 
 v0.1 is done when:
 
-1. `docker-compose up -d` starts Qdrant.
-2. `uv sync && daemon init && daemon ingest` succeeds against my real Obsidian vault.
-3. `daemon status` reports note count matching `find vault -name '*.md' | wc -l`.
-4. `daemon query "..."` returns an answer with cited sources, in under 5 seconds for vaults under ~2k notes.
-5. Re-running `daemon ingest` after editing 3 notes only re-embeds those 3 notes.
+1. [X] `docker-compose up -d` starts Qdrant.
+2. [X] `uv sync && daemon init && daemon ingest` succeeds against my real Obsidian vault.
+3. [X] `daemon status` reports note count matching `find vault -name '*.md' | wc -l`.
+4. [X] `daemon query "..."` returns an answer with cited sources, in under 5 seconds for vaults under ~2k notes.
+5. [X] Re-running `daemon ingest` after editing 3 notes only re-embeds those 3 notes.
 6. `tests/test_e2e.py` ingests the fixture vault and asserts a query returns expected citations.
 
 ---
