@@ -58,7 +58,10 @@ class RetrievalConfig(BaseModel):
 
 class LLMConfig(BaseModel):
     provider: Literal["anthropic"] = "anthropic"
-    model: str = "claude-opus-4-7"
+    # Sonnet 4.6 is the cost/quality sweet spot for RAG synthesis (~5x cheaper
+    # than Opus, near-Opus quality on this kind of task). Swap to Opus 4.7 for
+    # the highest fidelity or Haiku 4.5 for the lowest cost.
+    model: str = "claude-sonnet-4-6"
     max_tokens: int = 2048
     # Reasoning-capable models (e.g. Opus 4.7) reject `temperature`; leave unset for those.
     temperature: float | None = None

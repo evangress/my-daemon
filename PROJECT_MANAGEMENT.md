@@ -28,7 +28,6 @@ For the alpha version of the application, please work from the MY-DAEMON-SCAFFOL
 ## To-Do
 
 - [ ] Add a light setup ui for setting the settings and an os environment variable for the anthropic_api_key. The setup ui can have a button to compose the docker container
-- 
 
 ## AI Suggestions (Agent Thoughts)
 

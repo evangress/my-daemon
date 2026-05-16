@@ -32,7 +32,9 @@ retrieval:
 
 llm:
   provider: anthropic
-  model: claude-opus-4-7
+  # Sonnet 4.6 is the cost/quality sweet spot for personal RAG synthesis.
+  # Alternatives: claude-opus-4-7 (highest fidelity, ~5x cost), claude-haiku-4-5 (fastest, lowest cost).
+  model: claude-sonnet-4-6
   max_tokens: 2048
   # Opus 4.7 and other reasoning-capable models reject `temperature`. Leave it
   # unset (null) for those; set a float (e.g. 0.3) for Sonnet/Haiku if desired.

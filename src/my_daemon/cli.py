@@ -249,6 +249,18 @@ def graph_stats() -> None:
     console.print(tag_table)
 
 
+@app.command()
+def chat(
+    host: str = typer.Option("127.0.0.1", help="Host interface to bind."),
+    port: int = typer.Option(8765, help="Port for the local UI."),
+    native: bool = typer.Option(False, "--native", help="Open as a desktop window (requires pywebview)."),
+) -> None:
+    """Launch the warm-themed NiceGUI chat window for the daemon."""
+    from my_daemon.gui import launch_chat
+
+    launch_chat(host=host, port=port, native=native)
+
+
 @models_app.command("download")
 def models_download() -> None:
     """Pre-download the embedding model into the local cache folder.

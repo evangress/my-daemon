@@ -20,6 +20,7 @@ dependencies = [
     "anthropic>=0.34",
     "python-louvain>=0.16",
     "python-dotenv>=1.0",
+    "nicegui>=2.0",
 ]
 
 [project.optional-dependencies]
