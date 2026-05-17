@@ -125,6 +125,33 @@ class FeedbackStore:
             ).fetchall()
             return [dict(r) for r in rows]
 
+    def selections_since(
+        self,
+        cutoff: datetime,
+        *,
+        limit: int = 5000,
+    ) -> list[FeedbackEvent]:
+        """All ``candidate_selected`` events at/after ``cutoff``, oldest first.
+
+        Powers the hypothetical weight-evolution replay in the M3 analyzer:
+        we walk these events through ``weights.apply_selection`` on a
+        deep-copy of the snapshot graph to see what *would* shift if we'd
+        decayed and re-applied. Live state is never touched.
+        """
+
+        with self._connect() as conn:
+            rows = conn.execute(
+                """
+                SELECT * FROM feedback
+                WHERE signal = 'candidate_selected'
+                  AND timestamp >= ?
+                ORDER BY timestamp ASC, id ASC
+                LIMIT ?
+                """,
+                (cutoff.isoformat(), limit),
+            ).fetchall()
+            return [_row_to_event(r) for r in rows]
+
 
 def _row_to_event(row: sqlite3.Row) -> FeedbackEvent:
     raw = dict(row)

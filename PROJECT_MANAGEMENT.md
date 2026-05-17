@@ -51,23 +51,12 @@ graph + feedback state. Foundation for any heavy nightly analysis that
 must not contaminate live state. See the Done section below for the full
 implementation summary.
 
-### M3 — Structural-pattern analysis — [ ]
+### M3 — Structural-pattern analysis — **[x] shipped 2026-05-17**
 
 **Goal:** a pure-Python pass over a snapshot that produces a structured
 report. No LLM yet. Lets us inspect what the graph has learned without
-booting the model.
-
-Deliverables:
-- `analysis/structural.py::compute_report` — Louvain communities, sampled
-  betweenness centrality (bridging notes), `nx.bridges` (load-bearing
-  links), orphans, dangling targets, edge-weight cohort (warmest regions)
-- `analysis/structural.py::simulate_evolution` — replay N days of
-  `candidate_selected` events against a deep copy of the snapshot graph,
-  diff against the snapshot — *hypothetical weight evolution* (live state
-  untouched)
-- `StructuralReport` + `WeightEvolutionReport` pydantic models in
-  `models.py`; outputs persist to `data/consolidation/<snapshot_id>/`
-- `daemon analyze <snapshot_id>` for standalone runs
+booting the model. See the Done section below for the full
+implementation summary.
 
 ### M4 — Observer LLM agent — [ ]
 
@@ -108,6 +97,8 @@ Separate from the Adaptive Memory Loop arc:
   "notes you keep meaning to write" (see AI Suggestions).
 
 ## Done
+
+- **Structural-pattern analysis (2026-05-17).** `daemon analyze <snapshot_id>` runs a pure-Python pass over a snapshot bundle and produces two reports without ever touching live state. `compute_report` (new module `analysis/structural.py`) extracts Louvain communities on the full undirected projection — tags are clustering glue, only note members are surfaced — plus sampled betweenness centrality for bridging notes, `nx.bridges` for load-bearing note↔note links, orphan notes (undirected degree ≤ 1, excluding dangling), dangling wikilink targets ranked by in-degree, and the warmest reinforced edges above a configurable threshold (default 1.5). `simulate_evolution` opens the snapshot read-only, deep-copies its graph into a shadow `GraphStore`, replays every `candidate_selected` event from the snapshotted feedback DB within a configurable lookback through `weights.apply_selection`, then diffs the post-replay shadow against the snapshot baseline — top edges by absolute Δweight and top notes by aggregated incident |Δ|. Reports persist as JSON at `data/consolidation/<snapshot_id>/structural.json` and `weight_evolution.json` for M4 to consume. New `ConsolidationConfig` (out_dir + caps + betweenness sample size + lookback) wired into `Settings` and both yaml files. `FeedbackStore.selections_since(cutoff)` added so the analyzer can pull events without raw SQL. Thirteen tests cover the report shape, orphan/dangling/warm/community detection, replay correctness, snapshot immutability after replay, lookback filtering, and JSON persistence; full suite 59 pass / 1 pre-existing skip; ruff clean. Plan file: `~/.claude/plans/this-project-uses-qdrant-optimized-pizza.md`.
 
 - **Snapshot mechanism (2026-05-17).** `daemon snapshot create | list | delete <id> | prune` produces a self-contained, read-only frozen copy of the daemon's state under `./data/snapshots/<ts>/`. Each bundle is the Qdrant native snapshot (downloaded from the docker-compose volume mount when available, otherwise pulled over the HTTP API; `--no-qdrant` skips it for graph+feedback-only bundles), a `shutil.copy2` of `graph.gpickle`, a SQLite `.backup()` of `feedback.db` (online-safe, never a raw file copy), the manifest, and a `metadata.json` with bundle version + provenance. New module `stores/snapshot.py` exposes `SnapshotBundle`, `create_snapshot`, `open_readonly` (returns a handle whose `GraphStore` and `FeedbackStore` both raise on any write — including `attach_signal` and `log` — so the M3 analyzer literally cannot contaminate live state), `list_snapshots`, `delete_snapshot`, `prune_snapshots`. `SnapshotConfig` (dir + retention_days, default 14) added to `config.py` and both yaml files. `GraphStore` gained an opt-in `read_only=True` mode whose `.save()` raises. Verified end-to-end with nine snapshot tests; full suite stays green. Plan file: `~/.claude/plans/this-project-uses-qdrant-optimized-pizza.md`.
 

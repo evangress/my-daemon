@@ -12,6 +12,8 @@ from rich.prompt import Prompt
 from rich.table import Table
 
 from my_daemon import __version__
+from my_daemon.analysis import compute_report, persist_reports, simulate_evolution
+from my_daemon.analysis.structural import report_dir_for
 from my_daemon.config import Settings, load_settings
 from my_daemon.embeddings import Embedder, SparseEmbedder
 from my_daemon.llm import LLMClient
@@ -29,6 +31,7 @@ from my_daemon.stores import (
     delete_snapshot,
     get_snapshot,
     list_snapshots,
+    open_readonly,
     prune_snapshots,
 )
 
@@ -593,6 +596,146 @@ def snapshot_delete(
         raise typer.Exit(code=1)
     delete_snapshot(bundle)
     console.print(f"[green]Deleted snapshot {snapshot_id}[/green]")
+
+
+@app.command()
+def analyze(
+    snapshot_id: str = typer.Argument(..., help="The snapshot id to analyze (from `daemon snapshot list`)."),
+    lookback_days: int | None = typer.Option(
+        None,
+        "--lookback-days",
+        help="Override the configured lookback window for the weight-evolution replay.",
+    ),
+    no_simulate: bool = typer.Option(
+        False,
+        "--no-simulate",
+        help="Skip the weight-evolution replay (structural report only).",
+    ),
+    no_write: bool = typer.Option(
+        False,
+        "--no-write",
+        help="Print the rich-table summaries but don't persist any JSON.",
+    ),
+) -> None:
+    """Run M3 structural analysis on a snapshot bundle.
+
+    Produces ``structural.json`` and (unless ``--no-simulate``) ``weight_evolution.json``
+    under ``consolidation.out_dir/<snapshot_id>/``. Pure-Python — no LLM.
+    """
+
+    s = _load()
+    bundle = get_snapshot(s, snapshot_id)
+    if bundle is None:
+        console.print(f"[red]No snapshot with id {snapshot_id} in {s.snapshot.dir}.[/red]")
+        raise typer.Exit(code=1)
+
+    cfg = s.consolidation
+    handle = open_readonly(bundle)
+    try:
+        structural = compute_report(
+            handle.graph,
+            snapshot_id=bundle.id,
+            max_communities=cfg.max_communities,
+            max_bridging_notes=cfg.max_bridging_notes,
+            max_bridge_edges=cfg.max_bridge_edges,
+            max_orphans=cfg.max_orphans,
+            max_dangling=cfg.max_dangling,
+            max_warm_edges=cfg.max_warm_edges,
+            betweenness_sample_k=cfg.betweenness_sample_k,
+        )
+    finally:
+        handle.close()
+
+    evolution = None
+    if not no_simulate:
+        evolution = simulate_evolution(
+            bundle,
+            lookback_days=lookback_days if lookback_days is not None else cfg.simulate_lookback_days,
+        )
+
+    _print_structural(structural)
+    if evolution is not None:
+        _print_evolution(evolution)
+
+    if not no_write:
+        out_dir = report_dir_for(bundle.id, root=cfg.out_dir)
+        written = persist_reports(out_dir, structural=structural, evolution=evolution)
+        for name, path in written.items():
+            console.print(f"[green]wrote[/green] {name}: {path}")
+
+
+def _print_structural(report) -> None:  # noqa: ANN001 — local helper, pydantic model
+    summary = Table(title=f"Structural report ({report.snapshot_id or 'live'})")
+    summary.add_column("metric")
+    summary.add_column("value", justify="right")
+    summary.add_row("notes", str(report.note_count))
+    summary.add_row("tags", str(report.tag_count))
+    summary.add_row("edges", str(report.edge_count))
+    summary.add_row("communities", str(report.community_count))
+    summary.add_row("bridging notes", str(len(report.bridging_notes)))
+    summary.add_row("bridge edges", str(len(report.bridge_edges)))
+    summary.add_row("orphan notes", str(len(report.orphan_notes)))
+    summary.add_row("dangling targets", str(len(report.dangling_targets)))
+    summary.add_row("warm edges", str(len(report.warm_edges)))
+    console.print(summary)
+
+    if report.communities:
+        comm_table = Table(title="Top communities")
+        comm_table.add_column("id", justify="right")
+        comm_table.add_column("size", justify="right")
+        comm_table.add_column("members (first few)")
+        comm_table.add_column("top tags")
+        for c in report.communities:
+            members = ", ".join(c.members[:5]) + ("…" if len(c.members) > 5 else "")
+            tags = ", ".join(f"#{t} ({n})" for t, n in c.top_tags[:3])
+            comm_table.add_row(str(c.community_id), str(c.size), members, tags)
+        console.print(comm_table)
+
+    if report.bridging_notes:
+        bn_table = Table(title="Bridging notes (sampled betweenness)")
+        bn_table.add_column("note")
+        bn_table.add_column("betweenness", justify="right")
+        for b in report.bridging_notes:
+            bn_table.add_row(b.note_path, f"{b.betweenness:.4f}")
+        console.print(bn_table)
+
+    if report.warm_edges:
+        we_table = Table(title="Warmest edges (weight > threshold)")
+        we_table.add_column("src")
+        we_table.add_column("→")
+        we_table.add_column("dst")
+        we_table.add_column("kind")
+        we_table.add_column("weight", justify="right")
+        for e in report.warm_edges:
+            we_table.add_row(e.src, "→", e.dst, e.kind, f"{e.weight:.3f}")
+        console.print(we_table)
+
+
+def _print_evolution(report) -> None:  # noqa: ANN001 — local helper, pydantic model
+    head = Table(title=f"Weight-evolution preview ({report.lookback_days}d lookback)")
+    head.add_column("metric")
+    head.add_column("value", justify="right")
+    head.add_row("events replayed", str(report.events_replayed))
+    head.add_row("events skipped", str(report.events_skipped))
+    head.add_row("edges shifted", str(len(report.top_edges)))
+    head.add_row("notes touched", str(len(report.top_notes)))
+    console.print(head)
+
+    if report.top_edges:
+        et = Table(title="Top edge deltas")
+        et.add_column("src")
+        et.add_column("→")
+        et.add_column("dst")
+        et.add_column("kind")
+        et.add_column("before", justify="right")
+        et.add_column("after", justify="right")
+        et.add_column("Δ", justify="right")
+        for d in report.top_edges:
+            et.add_row(
+                d.src, "→", d.dst, d.kind,
+                f"{d.before:.3f}", f"{d.after:.3f}", f"{d.delta:+.3f}",
+            )
+        console.print(et)
 
 
 @snapshot_app.command("prune")

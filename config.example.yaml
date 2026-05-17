@@ -83,5 +83,22 @@ snapshot:
   # never expire on their own.
   retention_days: 14
 
+consolidation:
+  # `daemon analyze <snapshot_id>` writes structural.json + weight_evolution.json
+  # into <out_dir>/<snapshot_id>/. The M4 observer reads from the same place.
+  out_dir: ./data/consolidation
+  # Default lookback window for the hypothetical-weight-evolution replay.
+  simulate_lookback_days: 7
+  # Caps on the size of each ranked-list section of the report.
+  max_communities: 8
+  max_bridging_notes: 10
+  max_bridge_edges: 20
+  max_orphans: 20
+  max_dangling: 20
+  max_warm_edges: 20
+  # Sampling for betweenness centrality. Full BC is O(VE), so we sample for
+  # large graphs; 200 is a sensible default for personal vaults.
+  betweenness_sample_k: 200
+
 logging:
   level: INFO

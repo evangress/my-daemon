@@ -120,6 +120,29 @@ class SnapshotConfig(BaseModel):
     retention_days: int = 14
 
 
+class ConsolidationConfig(BaseModel):
+    """Where M3 structural + weight-evolution reports persist.
+
+    One subdirectory per snapshot id: ``<out_dir>/<snapshot_id>/structural.json``
+    and ``weight_evolution.json``. The M4 observer reads from the same place.
+    """
+
+    out_dir: Path = Path("./data/consolidation")
+    # Default lookback for `daemon analyze` simulate_evolution. Per-run override
+    # via the CLI flag.
+    simulate_lookback_days: int = 7
+    # How many entries to keep in each ranked-list section of a report.
+    max_communities: int = 8
+    max_bridging_notes: int = 10
+    max_bridge_edges: int = 20
+    max_orphans: int = 20
+    max_dangling: int = 20
+    max_warm_edges: int = 20
+    # Sample size for `nx.betweenness_centrality(k=...)`. Full BC is O(VE); 200
+    # is a reasonable default and matches the M3 plan.
+    betweenness_sample_k: int = 200
+
+
 class LoggingConfig(BaseModel):
     level: str = "INFO"
 
@@ -142,6 +165,7 @@ class Settings(BaseSettings):
     llm: LLMConfig = Field(default_factory=LLMConfig)
     feedback: FeedbackConfig = Field(default_factory=FeedbackConfig)
     snapshot: SnapshotConfig = Field(default_factory=SnapshotConfig)
+    consolidation: ConsolidationConfig = Field(default_factory=ConsolidationConfig)
     logging: LoggingConfig = Field(default_factory=LoggingConfig)
     agent: AgentConfig = Field(default_factory=AgentConfig)
 
