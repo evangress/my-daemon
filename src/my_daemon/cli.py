@@ -19,6 +19,7 @@ from my_daemon.pipeline import QueryEngine, ingest_vault
 from my_daemon.pipeline.agent_extract import run_extract
 from my_daemon.pipeline.agent_link import run_link
 from my_daemon.pipeline.agent_reflect import run_reflect
+from my_daemon.retrieval.weights import apply_selection
 from my_daemon.stores import AgentStateStore, FeedbackStore, GraphStore, VectorStore
 
 app = typer.Typer(
@@ -203,6 +204,66 @@ def query(
 def ask(text: str = typer.Argument(...)) -> None:
     """Alias for query."""
     query(text=text)
+
+
+@app.command()
+def select(
+    feedback_id: int = typer.Argument(..., help="The feedback event id returned by `daemon query -v`."),
+    rank: int = typer.Argument(..., help="Which candidate to select (1-based, matching the table)."),
+) -> None:
+    """Record that the user picked candidate #rank for a past query.
+
+    Attaches a ``candidate_selected`` signal to the feedback row and reinforces
+    every edge on the shortest graph path from the seed note that produced
+    that candidate to the candidate's note. Reinforced edges feel "shorter"
+    to future graph expansions.
+    """
+    s = _load()
+    feedback_store = _build_feedback_store(s)
+    event = feedback_store.get(feedback_id)
+    if event is None:
+        console.print(f"[red]No feedback event with id {feedback_id}.[/red]")
+        raise typer.Exit(code=1)
+
+    ranked = event.retrieval_summary.get("ranked") or []
+    if not ranked:
+        console.print(
+            f"[red]Feedback #{feedback_id} has no ranked candidates "
+            "(was logged before the schema upgrade?).[/red]"
+        )
+        raise typer.Exit(code=1)
+    if rank < 1 or rank > len(ranked):
+        console.print(
+            f"[red]Rank {rank} out of range; this event has {len(ranked)} candidates.[/red]"
+        )
+        raise typer.Exit(code=1)
+
+    picked = ranked[rank - 1]
+    seed_note = picked.get("seed_note_path") or picked.get("note_path")
+    selected_note = picked.get("note_path")
+
+    graph_store = _build_graph_store(s)
+    graph_store.load()
+    result = apply_selection(
+        graph_store,
+        seed_note_path=seed_note,
+        selected_note_path=selected_note,
+    )
+    graph_store.save()
+
+    feedback_store.attach_signal(
+        feedback_id,
+        "candidate_selected",
+        selected_rank=rank,
+        selected_chunk_id=picked.get("chunk_id"),
+        selected_note_path=selected_note,
+    )
+
+    console.print(
+        f"[green]Recorded selection #{rank} → {selected_note}.[/green]\n"
+        f"Path: {' → '.join(n.removeprefix('note::').removeprefix('tag::') for n in result.path) or '(self)'}\n"
+        f"Edges reinforced: {result.edges_reinforced}, total Δweight: {result.total_delta:.3f}"
+    )
 
 
 @app.command()

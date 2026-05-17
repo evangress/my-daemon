@@ -9,6 +9,7 @@ The CLI's ``daemon chat`` command launches this; ``launch_chat`` is the entry po
 from __future__ import annotations
 
 import asyncio
+import html
 import logging
 import threading
 from collections.abc import Iterator
@@ -22,9 +23,11 @@ from nicegui import ui
 from my_daemon.config import Settings, load_settings
 from my_daemon.embeddings import Embedder, SparseEmbedder
 from my_daemon.llm import LLMClient
-from my_daemon.models import FeedbackEvent
+from my_daemon.models import FeedbackEvent, RetrievalResult
 from my_daemon.paths import log_path as _shared_log_path
+from my_daemon.pipeline import build_retrieval_summary
 from my_daemon.retrieval import RetrievalOrchestrator
+from my_daemon.retrieval.weights import apply_selection
 from my_daemon.stores import FeedbackStore, GraphStore, VectorStore
 
 log = logging.getLogger("my_daemon.chat")
@@ -110,6 +113,101 @@ def _build_context() -> _DaemonContext:
     return _DaemonContext(
         s, embedder, sparse_embedder, vector_store, graph_store, feedback_store, llm, orchestrator,
     )
+
+
+def _render_sources(
+    ctx: _DaemonContext,
+    container: ui.column,
+    result: RetrievalResult,
+    feedback_event_id: int,
+) -> None:
+    """Add a clickable list of retrieved candidates under the daemon's reply.
+
+    The user picks the one that actually fit — that pick attaches a
+    ``candidate_selected`` signal to the feedback row and reinforces the
+    graph path from the seed note to the chosen candidate's note via
+    ``retrieval.weights.apply_selection``.
+    """
+
+    summary = build_retrieval_summary(result)
+    ranked = summary["ranked"]
+    if not ranked:
+        return
+
+    # Map chunk_id → preview text so we don't re-implement preview extraction.
+    preview_by_id: dict[str, str] = {
+        rc.chunk.id: rc.chunk.text.strip().replace("\n", " ")[:160] for rc in result.ranked
+    }
+
+    with container, ui.row().classes("w-full justify-start"):
+        panel = ui.column().classes("sources-panel gap-2")
+    cards: list[ui.column] = []
+    locked = {"flag": False}
+
+    with panel:
+        ui.html('<div class="sources-prompt">Which one fit best?</div>')
+        for i, entry in enumerate(ranked, start=1):
+            card = ui.column().classes("source-card gap-0")
+            cards.append(card)
+            with card:
+                # Note titles/paths are user-controlled vault content — escape
+                # before splicing into ui.html, which renders raw HTML.
+                path = html.escape(entry.get("note_path", "?"))
+                heading = html.escape(" › ".join(entry.get("heading_path") or []))
+                preview = html.escape(preview_by_id.get(entry.get("chunk_id", ""), ""))
+                ui.html(
+                    f'<span class="source-rank">#{i}</span>'
+                    f'<span class="source-path">{path}</span>'
+                )
+                if heading:
+                    ui.html(f'<div class="source-heading">› {heading}</div>')
+                if preview:
+                    ui.html(f'<div class="source-preview">{preview}…</div>')
+
+        status = ui.html('<div class="sources-status"></div>')
+
+    async def _pick(rank: int, entry: dict) -> None:
+        if locked["flag"]:
+            return
+        locked["flag"] = True
+        panel.classes(add="locked")
+        cards[rank - 1].classes(add="picked")
+        status.content = '<div class="sources-status">…recording your pick</div>'
+
+        def _apply() -> str:
+            res = apply_selection(
+                ctx.graph_store,
+                seed_note_path=entry.get("seed_note_path") or entry.get("note_path"),
+                selected_note_path=entry.get("note_path"),
+            )
+            ctx.graph_store.save()
+            ctx.feedback_store.attach_signal(
+                feedback_event_id,
+                "candidate_selected",
+                selected_rank=rank,
+                selected_chunk_id=entry.get("chunk_id"),
+                selected_note_path=entry.get("note_path"),
+            )
+            if res.edges_reinforced == 0:
+                return "Recorded — this candidate was the seed itself; nothing to reinforce."
+            hops = max(len(res.path) - 1, 0)
+            return (
+                f"Reinforced {res.edges_reinforced} edge instance(s) "
+                f"along a {hops}-hop path (Δweight {res.total_delta:.2f})."
+            )
+
+        try:
+            msg = await asyncio.to_thread(_apply)
+            status.content = f'<div class="sources-status">{msg}</div>'
+        except Exception as exc:
+            log.exception("candidate selection failed")
+            status.content = (
+                f'<div class="sources-status">(error: {html.escape(str(exc))})</div>'
+            )
+
+    for i, entry in enumerate(ranked, start=1):
+        # Capture i and entry by default-arg to dodge the late-binding closure pitfall.
+        cards[i - 1].on("click", lambda _e, r=i, x=entry: _pick(r, x))
 
 
 async def _stream_into_label(label: ui.markdown, generator: Iterator[str], accumulator: list[str]) -> None:
@@ -307,6 +405,85 @@ def _mount_ui(ctx: _DaemonContext) -> None:
             text-transform: uppercase;
             font-weight: 500;
           }}
+
+          /* Candidate sources panel — under each daemon reply, the user picks
+             which retrieved chunk was actually the right one. The pick is
+             implicit-feedback signal that reinforces the graph path. */
+          .sources-panel {{
+            max-width: 70ch;
+            border-left: 2px solid oklch(82% 0.155 75 / 0.35);
+            padding: 4px 0 4px 14px;
+            margin-left: 6px;
+            opacity: 0.96;
+          }}
+          .sources-panel.locked {{ opacity: 0.55; }}
+          .source-card {{
+            display: block;
+            text-align: left;
+            background: oklch(18% 0.03 282 / 0.45);
+            border: 1px solid oklch(60% 0.05 285 / 0.20);
+            border-radius: 6px;
+            padding: 8px 12px;
+            cursor: pointer;
+            transition: border-color 180ms ease, background 180ms ease, transform 180ms ease;
+            color: var(--ink);
+          }}
+          .source-card:hover {{
+            border-color: oklch(82% 0.155 75 / 0.55);
+            background: oklch(22% 0.04 80 / 0.40);
+            transform: translateY(-1px);
+          }}
+          .source-card.picked {{
+            border-color: oklch(82% 0.155 75 / 0.85);
+            background: oklch(22% 0.04 80 / 0.55);
+          }}
+          .sources-panel.locked .source-card {{ cursor: default; transform: none; }}
+          .sources-panel.locked .source-card:hover {{
+            border-color: oklch(60% 0.05 285 / 0.20);
+            background: oklch(18% 0.03 282 / 0.45);
+          }}
+          .source-rank {{
+            font-family: var(--font-mono);
+            color: var(--gold);
+            font-size: 0.78rem;
+            letter-spacing: 0.15em;
+            margin-right: 0.6em;
+          }}
+          .source-path {{
+            font-family: var(--font-body);
+            font-size: 0.96rem;
+            color: var(--ink);
+          }}
+          .source-heading {{
+            font-family: var(--font-mono);
+            font-size: 0.72rem;
+            color: var(--ink-mute);
+            letter-spacing: 0.04em;
+            margin-top: 2px;
+          }}
+          .source-preview {{
+            font-family: var(--font-display);
+            font-style: italic;
+            font-size: 0.92rem;
+            color: var(--ink-mute);
+            margin-top: 4px;
+            line-height: 1.45;
+          }}
+          .sources-prompt {{
+            font-family: var(--font-mono);
+            text-transform: uppercase;
+            font-size: 0.62rem;
+            letter-spacing: 0.32em;
+            color: var(--ink-mute);
+            margin-bottom: 6px;
+          }}
+          .sources-status {{
+            font-family: var(--font-display);
+            font-style: italic;
+            font-size: 0.86rem;
+            color: var(--ink-mute);
+            margin-top: 6px;
+          }}
         </style>
         """
     )
@@ -370,19 +547,16 @@ def _mount_ui(ctx: _DaemonContext) -> None:
             answer = "".join(accumulator).strip()
 
             latency_ms = int((datetime.now(UTC) - t0).total_seconds() * 1000)
-            ctx.feedback_store.log(
+            feedback_event_id = ctx.feedback_store.log(
                 FeedbackEvent(
                     timestamp=t0,
                     query=query,
-                    retrieval_summary={
-                        "ranked_count": len(result.ranked),
-                        "seed_count": len(result.seeds),
-                        "expanded_count": len(result.expanded),
-                    },
+                    retrieval_summary=build_retrieval_summary(result),
                     answer=answer,
                     latency_ms=latency_ms,
                 )
             )
+            _render_sources(ctx, chat_column, result, feedback_event_id)
         except Exception as exc:
             log.exception("chat send failed")
             daemon_label.content = f"_(daemon error: {exc})_"

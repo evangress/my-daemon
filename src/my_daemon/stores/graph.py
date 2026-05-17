@@ -80,35 +80,71 @@ class GraphStore:
             return []
         return list(self.graph.nodes[node].get("chunk_ids", []))
 
-    def neighbors_within(self, rel_path: str, depth: int) -> dict[str, int]:
-        """BFS from a note, returning {neighbor_note_relative_path: distance} up to ``depth``.
+    def neighbors_within(
+        self,
+        rel_path: str,
+        depth: int,
+        *,
+        weighted: bool = False,
+    ) -> dict[str, float]:
+        """Distances from a note to reachable neighbor notes, up to ``depth`` hops.
 
-        Walks both wikilink (note→note) and tag (note→tag→note) edges. Distance is
-        measured in hops in the undirected projection so a sibling note via a shared
-        tag is at distance 2.
+        Walks both wikilink (note→note) and tag (note→tag→note) edges. With
+        ``weighted=False`` distance is integer hops in the undirected projection.
+        With ``weighted=True`` it's a Dijkstra distance over ``1/edge.weight`` —
+        so reinforced edges feel shorter and neighbors behind them rank higher
+        after the decay multiplier in ``retrieval.expand``. The hop budget
+        (``depth``) is still applied as an integer-hop cap so reinforcement
+        can't pull a chunk in from arbitrarily far away.
         """
 
         start = _note_node(rel_path)
         if start not in self.graph:
             return {}
 
-        # Undirected view for BFS so we can traverse both incoming and outgoing edges.
         ug = self.graph.to_undirected(as_view=True)
-        seen = {start: 0}
+
+        # Hop budget first — bounds the reachable set independent of weight.
+        hop_seen = {start: 0}
         queue: deque[str] = deque([start])
         while queue:
             current = queue.popleft()
-            d = seen[current]
+            d = hop_seen[current]
             if d >= depth:
                 continue
             for nb in ug.neighbors(current):
-                if nb in seen:
+                if nb in hop_seen:
                     continue
-                seen[nb] = d + 1
+                hop_seen[nb] = d + 1
                 queue.append(nb)
 
-        notes_only: dict[str, int] = {}
-        for node, dist in seen.items():
+        if weighted:
+            # On a MultiGraph, Dijkstra hands the weight callback a dict of
+            # parallel-edge data: ``{edge_key: {"weight": ..., ...}, ...}``.
+            # We take the strongest (highest weight) of the parallel edges, so
+            # a reinforced edge cancels out any weaker parallel siblings.
+            def _edge_cost(_u: str, _v: str, edata: dict) -> float:
+                weights = [
+                    float(d.get("weight", 1.0))
+                    for d in edata.values()
+                    if isinstance(d, dict)
+                ] or [float(edata.get("weight", 1.0))]
+                return 1.0 / max(max(weights), 0.1)
+
+            try:
+                weighted_dist = nx.single_source_dijkstra_path_length(
+                    ug.subgraph(hop_seen.keys()),
+                    start,
+                    weight=_edge_cost,
+                )
+            except nx.NodeNotFound:
+                weighted_dist = {start: 0.0}
+            distances: dict[str, float] = {n: float(weighted_dist.get(n, hop_seen[n])) for n in hop_seen}
+        else:
+            distances = {n: float(d) for n, d in hop_seen.items()}
+
+        notes_only: dict[str, float] = {}
+        for node, dist in distances.items():
             if node == start:
                 continue
             if self.graph.nodes[node].get("type") != "note":
@@ -118,6 +154,23 @@ class GraphStore:
             rel = node.removeprefix("note::")
             notes_only[rel] = dist
         return notes_only
+
+    def shortest_note_path(self, rel_from: str, rel_to: str) -> list[str] | None:
+        """Return the shortest hop path between two notes as a list of node ids.
+
+        Used by ``retrieval.weights.apply_selection`` to walk the edges it
+        should reinforce. Returns ``None`` if either endpoint is missing or
+        no path exists.
+        """
+
+        a, b = _note_node(rel_from), _note_node(rel_to)
+        if a not in self.graph or b not in self.graph:
+            return None
+        ug = self.graph.to_undirected(as_view=True)
+        try:
+            return nx.shortest_path(ug, a, b)
+        except nx.NetworkXNoPath:
+            return None
 
     def stats(self) -> GraphStats:
         notes = [n for n, d in self.graph.nodes(data=True) if d.get("type") == "note" and not d.get("dangling")]

@@ -22,6 +22,46 @@ class QueryResponse:
     latency_ms: int
 
 
+def build_retrieval_summary(result: RetrievalResult) -> dict:
+    """Persisted JSON shape for a query's ranked candidates.
+
+    Stored in ``feedback.retrieval_summary`` so the later ``daemon select``
+    command can map a candidate rank back to the chunk and note that produced
+    it — plus the seed it expanded from, which is the start point for the
+    graph-path reinforcement in ``retrieval.weights.apply_selection``.
+    """
+
+    seed_note_by_chunk: dict[str, str] = {s.chunk.id: s.chunk.note_path for s in result.seeds}
+
+    ranked: list[dict] = []
+    for rc in result.ranked:
+        seed_chunk_id = rc.seed_chunk_id or rc.chunk.id
+        # graph_distance==0 means the chunk *is* the seed; otherwise it was
+        # pulled in via expansion and the seed lookup gives us the start node.
+        if rc.graph_distance == 0:
+            seed_note = rc.chunk.note_path
+        else:
+            seed_note = seed_note_by_chunk.get(seed_chunk_id, rc.chunk.note_path)
+        ranked.append(
+            {
+                "chunk_id": rc.chunk.id,
+                "note_path": rc.chunk.note_path,
+                "heading_path": rc.chunk.heading_path,
+                "score": rc.combined_score,
+                "vector_score": rc.vector_score,
+                "graph_distance": rc.graph_distance,
+                "seed_chunk_id": seed_chunk_id,
+                "seed_note_path": seed_note,
+            }
+        )
+
+    return {
+        "ranked": ranked,
+        "seed_count": len(result.seeds),
+        "expanded_count": len(result.expanded),
+    }
+
+
 class QueryEngine:
     def __init__(
         self,
@@ -46,27 +86,11 @@ class QueryEngine:
         answer = self.llm.synthesize(query, result.ranked) if synthesize else ""
         latency_ms = int((time.perf_counter() - t0) * 1000)
 
-        summary = {
-            "ranked": [
-                {
-                    "chunk_id": rc.chunk.id,
-                    "note_path": rc.chunk.note_path,
-                    "heading_path": rc.chunk.heading_path,
-                    "score": rc.combined_score,
-                    "vector_score": rc.vector_score,
-                    "graph_distance": rc.graph_distance,
-                }
-                for rc in result.ranked
-            ],
-            "seed_count": len(result.seeds),
-            "expanded_count": len(result.expanded),
-        }
-
         event_id = self.feedback.log(
             FeedbackEvent(
                 timestamp=datetime.now(UTC),
                 query=query,
-                retrieval_summary=summary,
+                retrieval_summary=build_retrieval_summary(result),
                 answer=answer,
                 latency_ms=latency_ms,
             )

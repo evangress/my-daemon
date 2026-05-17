@@ -73,6 +73,13 @@ class FeedbackEvent(BaseModel):
     latency_ms: int
     signal: FeedbackSignal | None = None
     signal_captured_at: datetime | None = None
+    # Set when signal == "candidate_selected" — the picked candidate's rank
+    # (1-based, matching how candidates are displayed) and chunk id. These
+    # let the weights module reconstruct which path through the graph
+    # the user endorsed.
+    selected_rank: int | None = None
+    selected_chunk_id: str | None = None
+    selected_note_path: str | None = None
 
 
 class GraphStats(BaseModel):

@@ -27,7 +27,10 @@ def expand_from_seeds(
     client = vector_store._client_()
 
     for seed in seeds:
-        neighbors = graph_store.neighbors_within(seed.chunk.note_path, depth=depth)
+        # weighted=True: Dijkstra over 1/weight so feedback-reinforced edges
+        # produce a *smaller* distance and ride in with a higher decayed score.
+        # Hop budget still enforced inside the call.
+        neighbors = graph_store.neighbors_within(seed.chunk.note_path, depth=depth, weighted=True)
         for rel_path, distance in neighbors.items():
             if rel_path in seen_seed_paths:
                 # already represented by the seed itself
