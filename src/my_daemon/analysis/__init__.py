@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: Apache-2.0
 """Pure-Python analysis layer over a snapshot bundle (M3).
 
 The analyzer reads from a frozen snapshot — never the live state — and writes

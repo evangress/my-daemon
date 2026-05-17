@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: Apache-2.0
 """Snapshot bundle creation, read-only access, list/delete/prune."""
 
 from __future__ import annotations

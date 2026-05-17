@@ -105,7 +105,7 @@ my-daemon/
 │
 ├── scripts/
 │   ├── reset.py                 # Wipe local state (dev convenience)
-│   └── inspect.py               # Dump graph stats, vector counts
+│   └── inspect_state.py         # Dump graph stats, vector counts
 │
 ├── tests/
 │   ├── conftest.py

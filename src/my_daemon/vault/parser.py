@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: Apache-2.0
 """Parse a single markdown file into a Note: frontmatter, wikilinks, tags."""
 
 from __future__ import annotations

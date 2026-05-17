@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: Apache-2.0
 """Prompt builders + thin LLMClient wrappers for the three background-agent jobs.
 
 Each function takes a configured ``LLMClient`` (the same one the chat uses) and a

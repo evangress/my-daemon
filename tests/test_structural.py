@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: Apache-2.0
 """M3: structural-pattern analysis + hypothetical weight evolution."""
 
 from __future__ import annotations

@@ -21,3 +21,5 @@ Please read the [PROJECT_MANAGEMENT.md](PROJECT_MANAGEMENT.md) file to understan
    6. Create a commit summary and perform a commit to "master" (for now, we'll use dev branches in the future after a release)
 7. Add suggestions to an AI suggestions section in the project management file if you would like to store your thoughts on future tasks or improvements.
 8. Update the relevant documentation files with the changes or additions you made, if applicable.
+9. Always add the "SPDX-License-Identifier: Apache-2.0" header at the beginning of code files. 
+10. Always check if a new dependency you choose to use is compatible with the Apache-2.0 license. If it is not compatible, please ask the user for their choice on what to do and make suggestions for alternative dependencies.

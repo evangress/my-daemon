@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: Apache-2.0
 """Round-trip tests for stores/agent_state.py."""
 
 from __future__ import annotations

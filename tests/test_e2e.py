@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: Apache-2.0
 """Placeholder for the full end-to-end test from §9 of the scaffold.
 
 This test requires:

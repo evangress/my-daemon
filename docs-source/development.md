@@ -28,7 +28,7 @@ my-daemon/
 │   ├── pipeline/          # ingest, query, agent_extract/link/reflect
 │   └── gui/               # NiceGUI chat (app.py), Tkinter setup (setup.py)
 ├── tests/                 # pytest; fixtures/sample_vault for the parser tests
-├── scripts/               # inspect.py, reset.py (dev convenience)
+├── scripts/               # inspect_state.py, reset.py, license_check.py (dev convenience)
 ├── docs-source/           # this site's markdown source
 ├── docs-site/             # built HTML output (gitignored)
 ├── debug/error-log.md     # session error log

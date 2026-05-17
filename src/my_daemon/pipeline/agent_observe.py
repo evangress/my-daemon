@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: Apache-2.0
 """Observer pipeline (M4): snapshot → analyze → letter → index → decay.
 
 The closing loop of the adaptive memory cycle. The observer LLM reads the

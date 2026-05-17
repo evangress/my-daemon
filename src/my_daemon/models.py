@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: Apache-2.0
 """Shared data models. Everything else imports from here."""
 
 from __future__ import annotations

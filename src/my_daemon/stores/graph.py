@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: Apache-2.0
 """NetworkX MultiDiGraph wrapper with pickle persistence."""
 
 from __future__ import annotations

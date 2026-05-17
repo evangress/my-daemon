@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: Apache-2.0
 """Chunk a Note into retrievable units while preserving heading context."""
 
 from __future__ import annotations

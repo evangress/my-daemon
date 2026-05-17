@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: Apache-2.0
 """fastembed-based sparse encoder (BM42 by default) for hybrid retrieval.
 
 Same offline-first cache pattern as ``Embedder``: try ``local_files_only``

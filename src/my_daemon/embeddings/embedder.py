@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: Apache-2.0
 """Thin sentence-transformers wrapper with lazy model loading and batched encoding.
 
 The embedder pins the model to a project-local ``cache_folder`` and prefers

@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: Apache-2.0
 """Auto-linker / tagger.
 
 For each note, find candidate wikilinks and tags drawn from the rest of the

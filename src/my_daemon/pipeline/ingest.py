@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: Apache-2.0
 """Ingestion pipeline: vault → notes → chunks → vectors + graph.
 
 Incremental by default. A small manifest tracks each note's mtime and the chunk

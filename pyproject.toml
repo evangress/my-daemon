@@ -5,7 +5,8 @@ description = "Personal knowledge and memory system over an Obsidian vault — v
 authors = [{ name = "Evan Gress", email = "gress.evan@gmail.com" }]
 requires-python = ">=3.11,<3.15"
 readme = "README.md"
-license = { text = "MIT" }
+license = { text = "Apache-2.0" }
+license-files = ["LICENSE"]
 dependencies = [
     "pydantic>=2.6",
     "pydantic-settings>=2.2",

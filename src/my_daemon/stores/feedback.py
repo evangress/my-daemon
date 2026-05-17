@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: Apache-2.0
 """SQLite-backed feedback log. v0.1 records; phase 4 will apply the signals."""
 
 from __future__ import annotations

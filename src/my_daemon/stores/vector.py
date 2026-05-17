@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: Apache-2.0
 """Qdrant client wrapper for chunk vectors, hybrid (dense+sparse) search, and payload filters."""
 
 from __future__ import annotations

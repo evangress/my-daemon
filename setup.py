@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: Apache-2.0
 """My Daemon — cross-platform bootstrap helper.
 
 Run me from the project root to:

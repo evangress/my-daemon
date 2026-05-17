@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: Apache-2.0
 """Synthesis prompt template. Intentionally boring for v0.1 — tune later."""
 
 from __future__ import annotations

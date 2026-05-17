@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: Apache-2.0
 """Platform-appropriate runtime paths.
 
 Kept dependency-free so the lightweight Tkinter setup window can import it

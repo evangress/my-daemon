@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: Apache-2.0
 """Adaptive edge weights from implicit feedback.
 
 The graph starts with every edge at ``weight = 1.0``. When the user picks a

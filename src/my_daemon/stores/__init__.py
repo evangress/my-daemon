@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: Apache-2.0
 """Persistence layer: vector store (Qdrant), graph (NetworkX), feedback + agent-state (SQLite)."""
 
 from my_daemon.stores.agent_state import AgentStateStore

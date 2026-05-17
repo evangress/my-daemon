@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: Apache-2.0
 """Graph expansion: starting from seed chunks, walk wikilink/tag edges to neighbors."""
 
 from __future__ import annotations

@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: Apache-2.0
 """Snapshot bundles: a read-only frozen copy of vector + graph + feedback state.
 
 A bundle is a directory under ``settings.snapshot.dir`` that contains everything

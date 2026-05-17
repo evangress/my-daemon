@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: Apache-2.0
 """Walk an Obsidian vault and yield parsed Notes with resolved wikilinks."""
 
 from __future__ import annotations

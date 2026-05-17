@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: Apache-2.0
 """Adaptive edge-weight reinforcement and decay."""
 
 from __future__ import annotations

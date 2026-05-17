@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: Apache-2.0
 """Structural-pattern analysis over a snapshot's graph + feedback.
 
 Two passes — both pure-Python, no LLM:

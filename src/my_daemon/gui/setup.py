@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: Apache-2.0
 """Tkinter setup window — vault picker + API key entry.
 
 Saves the vault path to ``config.yaml`` and persists ``ANTHROPIC_API_KEY``:

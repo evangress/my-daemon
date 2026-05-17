@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: Apache-2.0
 """Reflection job: maintain themed memory files in `<vault>/Agent/memory-*.md`.
 
 For each configured theme, gather recent notes + recent chats, ask the LLM to

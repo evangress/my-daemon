@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: Apache-2.0
 """M4: observer pipeline — snapshot → analyze → letter → index → decay."""
 
 from __future__ import annotations

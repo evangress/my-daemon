@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: Apache-2.0
 """Vault ingestion layer — read Obsidian markdown into structured Notes and Chunks."""
 
 from my_daemon.vault.chunker import chunk_note

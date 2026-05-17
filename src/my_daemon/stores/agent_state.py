@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: Apache-2.0
 """SQLite-backed processed-state tables for the three background-agent jobs.
 
 Lives in the same DB as `FeedbackStore` (``data/feedback.db``) so users have

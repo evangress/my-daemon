@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: Apache-2.0
 """GUI surfaces for My Daemon: NiceGUI chat + Tkinter setup."""
 
 from my_daemon.gui.app import launch_chat

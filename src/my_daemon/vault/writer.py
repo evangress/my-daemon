@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: Apache-2.0
 """Safe vault writeback. Every change the daemon makes to a user's markdown
 file goes through this module so the safety discipline (containment check,
 opt-out, snapshot, idempotent sentinel markers, atomic write) is established

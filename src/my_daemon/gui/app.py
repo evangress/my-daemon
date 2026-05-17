@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: Apache-2.0
 """NiceGUI chat window for the daemon.
 
 Brand-aligned dark indigo palette per ../my-daemon-astro-website/BRAND.md:

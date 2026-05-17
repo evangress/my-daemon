@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: Apache-2.0
 """Layered configuration: defaults → config.yaml → environment variables.
 
 Env var overrides use the prefix ``MY_DAEMON_`` and double-underscore nesting,

@@ -5,11 +5,69 @@
   </component>
   <component name="ChangeListManager">
     <list default="true" id="df100eb5-408b-4cff-9fc7-db33bfe773d5" name="Changes" comment="updated defaults in the config yaml">
-      <change beforePath="$PROJECT_DIR$/config.example.yaml" beforeDir="false" afterPath="$PROJECT_DIR$/config.example.yaml" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/COMMERCIAL-LICENSE.md" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/CONTRIBUTING.md" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/LICENSE.md" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/debug/license-compliance.json" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/.idea/workspace.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/workspace.xml" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/CLAUDE.md" beforeDir="false" afterPath="$PROJECT_DIR$/CLAUDE.md" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/MY-DAEMON-SCAFFOLD.md" beforeDir="false" afterPath="$PROJECT_DIR$/MY-DAEMON-SCAFFOLD.md" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/docs-source/development.md" beforeDir="false" afterPath="$PROJECT_DIR$/docs-source/development.md" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/pyproject.toml" beforeDir="false" afterPath="$PROJECT_DIR$/pyproject.toml" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/setup.py" beforeDir="false" afterPath="$PROJECT_DIR$/setup.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/my_daemon/__init__.py" beforeDir="false" afterPath="$PROJECT_DIR$/src/my_daemon/__init__.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/my_daemon/analysis/__init__.py" beforeDir="false" afterPath="$PROJECT_DIR$/src/my_daemon/analysis/__init__.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/my_daemon/analysis/structural.py" beforeDir="false" afterPath="$PROJECT_DIR$/src/my_daemon/analysis/structural.py" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/src/my_daemon/cli.py" beforeDir="false" afterPath="$PROJECT_DIR$/src/my_daemon/cli.py" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/src/my_daemon/config.py" beforeDir="false" afterPath="$PROJECT_DIR$/src/my_daemon/config.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/my_daemon/embeddings/__init__.py" beforeDir="false" afterPath="$PROJECT_DIR$/src/my_daemon/embeddings/__init__.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/my_daemon/embeddings/embedder.py" beforeDir="false" afterPath="$PROJECT_DIR$/src/my_daemon/embeddings/embedder.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/my_daemon/embeddings/sparse.py" beforeDir="false" afterPath="$PROJECT_DIR$/src/my_daemon/embeddings/sparse.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/my_daemon/gui/__init__.py" beforeDir="false" afterPath="$PROJECT_DIR$/src/my_daemon/gui/__init__.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/my_daemon/gui/app.py" beforeDir="false" afterPath="$PROJECT_DIR$/src/my_daemon/gui/app.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/my_daemon/gui/setup.py" beforeDir="false" afterPath="$PROJECT_DIR$/src/my_daemon/gui/setup.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/my_daemon/llm/__init__.py" beforeDir="false" afterPath="$PROJECT_DIR$/src/my_daemon/llm/__init__.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/my_daemon/llm/agents.py" beforeDir="false" afterPath="$PROJECT_DIR$/src/my_daemon/llm/agents.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/my_daemon/llm/client.py" beforeDir="false" afterPath="$PROJECT_DIR$/src/my_daemon/llm/client.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/my_daemon/llm/prompts.py" beforeDir="false" afterPath="$PROJECT_DIR$/src/my_daemon/llm/prompts.py" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/src/my_daemon/models.py" beforeDir="false" afterPath="$PROJECT_DIR$/src/my_daemon/models.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/my_daemon/paths.py" beforeDir="false" afterPath="$PROJECT_DIR$/src/my_daemon/paths.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/my_daemon/pipeline/__init__.py" beforeDir="false" afterPath="$PROJECT_DIR$/src/my_daemon/pipeline/__init__.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/my_daemon/pipeline/agent_extract.py" beforeDir="false" afterPath="$PROJECT_DIR$/src/my_daemon/pipeline/agent_extract.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/my_daemon/pipeline/agent_link.py" beforeDir="false" afterPath="$PROJECT_DIR$/src/my_daemon/pipeline/agent_link.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/my_daemon/pipeline/agent_observe.py" beforeDir="false" afterPath="$PROJECT_DIR$/src/my_daemon/pipeline/agent_observe.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/my_daemon/pipeline/agent_reflect.py" beforeDir="false" afterPath="$PROJECT_DIR$/src/my_daemon/pipeline/agent_reflect.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/my_daemon/pipeline/ingest.py" beforeDir="false" afterPath="$PROJECT_DIR$/src/my_daemon/pipeline/ingest.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/my_daemon/pipeline/query.py" beforeDir="false" afterPath="$PROJECT_DIR$/src/my_daemon/pipeline/query.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/my_daemon/retrieval/__init__.py" beforeDir="false" afterPath="$PROJECT_DIR$/src/my_daemon/retrieval/__init__.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/my_daemon/retrieval/expand.py" beforeDir="false" afterPath="$PROJECT_DIR$/src/my_daemon/retrieval/expand.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/my_daemon/retrieval/orchestrator.py" beforeDir="false" afterPath="$PROJECT_DIR$/src/my_daemon/retrieval/orchestrator.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/my_daemon/retrieval/seed.py" beforeDir="false" afterPath="$PROJECT_DIR$/src/my_daemon/retrieval/seed.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/my_daemon/retrieval/weights.py" beforeDir="false" afterPath="$PROJECT_DIR$/src/my_daemon/retrieval/weights.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/my_daemon/stores/__init__.py" beforeDir="false" afterPath="$PROJECT_DIR$/src/my_daemon/stores/__init__.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/my_daemon/stores/agent_state.py" beforeDir="false" afterPath="$PROJECT_DIR$/src/my_daemon/stores/agent_state.py" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/src/my_daemon/stores/feedback.py" beforeDir="false" afterPath="$PROJECT_DIR$/src/my_daemon/stores/feedback.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/my_daemon/stores/graph.py" beforeDir="false" afterPath="$PROJECT_DIR$/src/my_daemon/stores/graph.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/my_daemon/stores/snapshot.py" beforeDir="false" afterPath="$PROJECT_DIR$/src/my_daemon/stores/snapshot.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/my_daemon/stores/vector.py" beforeDir="false" afterPath="$PROJECT_DIR$/src/my_daemon/stores/vector.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/my_daemon/vault/__init__.py" beforeDir="false" afterPath="$PROJECT_DIR$/src/my_daemon/vault/__init__.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/my_daemon/vault/chunker.py" beforeDir="false" afterPath="$PROJECT_DIR$/src/my_daemon/vault/chunker.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/my_daemon/vault/parser.py" beforeDir="false" afterPath="$PROJECT_DIR$/src/my_daemon/vault/parser.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/my_daemon/vault/reader.py" beforeDir="false" afterPath="$PROJECT_DIR$/src/my_daemon/vault/reader.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/my_daemon/vault/writer.py" beforeDir="false" afterPath="$PROJECT_DIR$/src/my_daemon/vault/writer.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/tests/conftest.py" beforeDir="false" afterPath="$PROJECT_DIR$/tests/conftest.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/tests/test_agent_state.py" beforeDir="false" afterPath="$PROJECT_DIR$/tests/test_agent_state.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/tests/test_chunker.py" beforeDir="false" afterPath="$PROJECT_DIR$/tests/test_chunker.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/tests/test_e2e.py" beforeDir="false" afterPath="$PROJECT_DIR$/tests/test_e2e.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/tests/test_feedback.py" beforeDir="false" afterPath="$PROJECT_DIR$/tests/test_feedback.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/tests/test_graph.py" beforeDir="false" afterPath="$PROJECT_DIR$/tests/test_graph.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/tests/test_observe.py" beforeDir="false" afterPath="$PROJECT_DIR$/tests/test_observe.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/tests/test_parser.py" beforeDir="false" afterPath="$PROJECT_DIR$/tests/test_parser.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/tests/test_reader.py" beforeDir="false" afterPath="$PROJECT_DIR$/tests/test_reader.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/tests/test_snapshot.py" beforeDir="false" afterPath="$PROJECT_DIR$/tests/test_snapshot.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/tests/test_structural.py" beforeDir="false" afterPath="$PROJECT_DIR$/tests/test_structural.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/tests/test_vault_writer.py" beforeDir="false" afterPath="$PROJECT_DIR$/tests/test_vault_writer.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/tests/test_weights.py" beforeDir="false" afterPath="$PROJECT_DIR$/tests/test_weights.py" afterDir="false" />
     </list>
     <option name="SHOW_DIALOG" value="false" />
     <option name="HIGHLIGHT_CONFLICTS" value="true" />
@@ -40,22 +98,23 @@
     <option name="hideEmptyMiddlePackages" value="true" />
     <option name="showLibraryContents" value="true" />
   </component>
-  <component name="PropertiesComponent">{
-  &quot;keyToString&quot;: {
-    &quot;ModuleVcsDetector.initialDetectionPerformed&quot;: &quot;true&quot;,
-    &quot;RunOnceActivity.ShowReadmeOnStart&quot;: &quot;true&quot;,
-    &quot;RunOnceActivity.TerminalTabsStorage.copyFrom.TerminalArrangementManager.252&quot;: &quot;true&quot;,
-    &quot;RunOnceActivity.git.unshallow&quot;: &quot;true&quot;,
-    &quot;RunOnceActivity.typescript.service.memoryLimit.init&quot;: &quot;true&quot;,
-    &quot;codeWithMe.voiceChat.enabledByDefault&quot;: &quot;false&quot;,
-    &quot;node.js.detected.package.eslint&quot;: &quot;true&quot;,
-    &quot;node.js.detected.package.tslint&quot;: &quot;true&quot;,
-    &quot;node.js.selected.package.eslint&quot;: &quot;(autodetect)&quot;,
-    &quot;node.js.selected.package.tslint&quot;: &quot;(autodetect)&quot;,
-    &quot;nodejs_package_manager_path&quot;: &quot;npm&quot;,
-    &quot;vue.rearranger.settings.migration&quot;: &quot;true&quot;
+  <component name="PropertiesComponent"><![CDATA[{
+  "keyToString": {
+    "ModuleVcsDetector.initialDetectionPerformed": "true",
+    "Python.license_check.executor": "Run",
+    "RunOnceActivity.ShowReadmeOnStart": "true",
+    "RunOnceActivity.TerminalTabsStorage.copyFrom.TerminalArrangementManager.252": "true",
+    "RunOnceActivity.git.unshallow": "true",
+    "RunOnceActivity.typescript.service.memoryLimit.init": "true",
+    "codeWithMe.voiceChat.enabledByDefault": "false",
+    "node.js.detected.package.eslint": "true",
+    "node.js.detected.package.tslint": "true",
+    "node.js.selected.package.eslint": "(autodetect)",
+    "node.js.selected.package.tslint": "(autodetect)",
+    "nodejs_package_manager_path": "npm",
+    "vue.rearranger.settings.migration": "true"
   }
-}</component>
+}]]></component>
   <component name="SharedIndexes">
     <attachedChunks>
       <set>
@@ -73,7 +132,7 @@
       <updated>1778937928112</updated>
       <workItem from="1778937929112" duration="16746000" />
       <workItem from="1778980342782" duration="4880000" />
-      <workItem from="1779015807369" duration="2619000" />
+      <workItem from="1779015807369" duration="8565000" />
     </task>
     <task id="LOCAL-00001" summary="workspace map">
       <option name="closed" value="true" />
@@ -167,5 +226,8 @@
   <component name="XSLT-Support.FileAssociations.UIState">
     <expand />
     <select />
+  </component>
+  <component name="com.intellij.coverage.CoverageDataManagerImpl">
+    <SUITE FILE_PATH="coverage/my_daemon$license_check.coverage" NAME="license_check Coverage Results" MODIFIED="1779024754184" SOURCE_PROVIDER="com.intellij.coverage.DefaultCoverageFileProvider" RUNNER="coverage.py" COVERAGE_BY_TEST_ENABLED="false" COVERAGE_TRACING_ENABLED="false" WORKING_DIRECTORY="$PROJECT_DIR$/scripts" />
   </component>
 </project>

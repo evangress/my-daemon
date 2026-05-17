@@ -1,0 +1,1 @@
+This software is also available under a commercial license; contact engage@my-daemon.ai for terms.

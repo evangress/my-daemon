@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: Apache-2.0
 """Unit tests for vault/writer.py.
 
 Focus on safety + idempotency, not LLM behavior:

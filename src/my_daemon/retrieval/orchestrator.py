@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: Apache-2.0
 """Compose seed + expand → dedupe → rank → trim to token budget."""
 
 from __future__ import annotations

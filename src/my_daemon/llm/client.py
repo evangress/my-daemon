@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: Apache-2.0
 """Thin Anthropic client wrapper for synthesis (sync + streaming)."""
 
 from __future__ import annotations

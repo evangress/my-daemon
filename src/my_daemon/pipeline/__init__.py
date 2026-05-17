@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: Apache-2.0
 """End-to-end pipelines: ingest and query."""
 
 from my_daemon.pipeline.ingest import ingest_vault

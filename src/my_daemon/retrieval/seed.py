@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: Apache-2.0
 """Vector top-K seed retrieval (dense, or dense+sparse RRF when hybrid is on)."""
 
 from __future__ import annotations

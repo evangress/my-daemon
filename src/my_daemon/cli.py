@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: Apache-2.0
 """Typer-based CLI: daemon init / ingest / query / status / search / graph / reset."""
 
 from __future__ import annotations

@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: Apache-2.0
 """Daily extractor: read recently-touched notes, append an `## Agent Notes` section.
 
 Selection: notes that have changed since their last extract run AND are at least
