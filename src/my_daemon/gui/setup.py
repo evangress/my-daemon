@@ -23,6 +23,8 @@ from tkinter import filedialog, ttk
 import yaml
 from dotenv import set_key
 
+from my_daemon.paths import log_path
+
 # Brand palette — hex approximations of the OKLCH values from THEME.md.
 # Tkinter doesn't support oklch(); these are the closest sRGB equivalents.
 BG = "#16162A"          # deep indigo background
@@ -270,9 +272,17 @@ class SetupWindow:
                 style="Link.TCheckbutton",
             ).grid(row=7, column=0, columnspan=3, sticky="w", pady=(14, 0))
 
+        # Where the chat window logs go. With --native the console is hidden,
+        # so this is the only place crashes show up.
+        ttk.Label(
+            container,
+            text=f"Chat log: {log_path()}",
+            style="Eyebrow.TLabel",
+        ).grid(row=8, column=0, columnspan=3, sticky="w", pady=(14, 0))
+
         # Footer — Save button right-aligned, status to its left.
         footer = ttk.Frame(container)
-        footer.grid(row=8, column=0, columnspan=3, sticky="ew", pady=(24, 0))
+        footer.grid(row=9, column=0, columnspan=3, sticky="ew", pady=(24, 0))
         footer.columnconfigure(0, weight=1)
 
         self.status_label = ttk.Label(footer, textvariable=self.status_var, style="Status.TLabel")

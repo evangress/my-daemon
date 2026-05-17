@@ -78,25 +78,34 @@ You'll see the synthesized answer plus at least three ranked candidate sources. 
 
 ### Chat with your daemon (GUI)
 
-For a warmer, less-terminal experience, launch the NiceGUI chat window:
+`daemon chat` opens a **native desktop window** by default (via `pywebview`, which now ships as a hard dependency). No browser tab, no terminal needed.
+
+| Platform | One-action launch |
+|---|---|
+| **Windows** | Double-click `launch-gui.vbs` — silent native window, no console flash. (`launch-gui.bat` is a debug fallback that keeps a visible console + browser tab for diagnosing startup errors.) |
+| **Linux** | `cp my-daemon.desktop ~/.local/share/applications/` once, then launch "My Daemon" from your activities menu. Or run `./launch-gui.sh` from anywhere. |
+| **macOS** | Double-click `launch-gui.command` from Finder. (For a fully terminal-free experience, wrap it in a 1-line AppleScript saved as a `.app` bundle.) |
+
+From a shell:
 
 ```bash
-daemon chat
+daemon chat                # native window (default)
+daemon chat --no-native    # browser tab at http://127.0.0.1:8765 — useful for remote dev
 ```
-
-By default it opens at <http://127.0.0.1:8765> — your browser should launch automatically. Type a question in the input at the bottom; the daemon's reply streams into the chat as it generates. The same retrieval pipeline and feedback logging run behind the scenes, so chat queries also land in `data/feedback.db`.
 
 Flags:
 
 | Flag | Default | Notes |
 |---|---|---|
 | `--host` | `127.0.0.1` | Bind address. Stay on loopback unless you know what you're doing. |
-| `--port` | `8765` | Local port for the UI. |
-| `--native` | off | Open as a desktop window via `pywebview` instead of in your browser. Requires `pip install pywebview`. |
+| `--port` | `8765` | Local port (browser mode) / loopback port (native mode). |
+| `--native` / `--no-native` | `--native` | Pass `--no-native` for a browser tab. |
 
-Stop the server with `Ctrl+C` in the terminal that launched it.
+Close the window to stop the daemon (native mode); `Ctrl+C` in the terminal (browser mode).
 
 > Heads up: the first send after launch can take a few seconds — the embedding model and graph load lazily on the first query, then stay warm for the rest of the session.
+
+> Logs: because the native window hides stdout, the chat writes to a platform-standard log file — `%LOCALAPPDATA%\my-daemon\daemon.log` on Windows, `~/Library/Logs/my-daemon/daemon.log` on macOS, `$XDG_STATE_HOME/my-daemon/daemon.log` (or `~/.local/state/...`) on Linux. The setup window prints the resolved path.
 
 ## Useful commands
 

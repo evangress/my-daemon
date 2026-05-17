@@ -4,7 +4,15 @@
     <option name="autoReloadType" value="ALL" />
   </component>
   <component name="ChangeListManager">
-    <list default="true" id="df100eb5-408b-4cff-9fc7-db33bfe773d5" name="Changes" comment="added docs" />
+    <list default="true" id="df100eb5-408b-4cff-9fc7-db33bfe773d5" name="Changes" comment="added mkdocs config changes">
+      <change beforePath="$PROJECT_DIR$/.idea/workspace.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/workspace.xml" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/README.md" beforeDir="false" afterPath="$PROJECT_DIR$/README.md" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/pyproject.toml" beforeDir="false" afterPath="$PROJECT_DIR$/pyproject.toml" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/setup.py" beforeDir="false" afterPath="$PROJECT_DIR$/setup.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/my_daemon/cli.py" beforeDir="false" afterPath="$PROJECT_DIR$/src/my_daemon/cli.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/my_daemon/gui/app.py" beforeDir="false" afterPath="$PROJECT_DIR$/src/my_daemon/gui/app.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/my_daemon/gui/setup.py" beforeDir="false" afterPath="$PROJECT_DIR$/src/my_daemon/gui/setup.py" afterDir="false" />
+    </list>
     <option name="SHOW_DIALOG" value="false" />
     <option name="HIGHLIGHT_CONFLICTS" value="true" />
     <option name="HIGHLIGHT_NON_ACTIVE_CHANGELIST" value="false" />
@@ -41,7 +49,6 @@
     "RunOnceActivity.TerminalTabsStorage.copyFrom.TerminalArrangementManager.252": "true",
     "RunOnceActivity.git.unshallow": "true",
     "RunOnceActivity.typescript.service.memoryLimit.init": "true",
-    "SHARE_PROJECT_CONFIGURATION_FILES": "true",
     "codeWithMe.voiceChat.enabledByDefault": "false",
     "node.js.detected.package.eslint": "true",
     "node.js.detected.package.tslint": "true",
@@ -67,6 +74,7 @@
       <option name="presentableId" value="Default" />
       <updated>1778937928112</updated>
       <workItem from="1778937929112" duration="16746000" />
+      <workItem from="1778980342782" duration="947000" />
     </task>
     <task id="LOCAL-00001" summary="workspace map">
       <option name="closed" value="true" />
@@ -100,7 +108,15 @@
       <option name="project" value="LOCAL" />
       <updated>1778969683937</updated>
     </task>
-    <option name="localTasksCounter" value="5" />
+    <task id="LOCAL-00005" summary="added mkdocs config changes">
+      <option name="closed" value="true" />
+      <created>1778980399527</created>
+      <option name="number" value="00005" />
+      <option name="presentableId" value="LOCAL-00005" />
+      <option name="project" value="LOCAL" />
+      <updated>1778980399527</updated>
+    </task>
+    <option name="localTasksCounter" value="6" />
     <servers />
   </component>
   <component name="TypeScriptGeneratedFilesManager">
@@ -110,7 +126,8 @@
     <MESSAGE value="workspace map" />
     <MESSAGE value="updated scaffold and dependancies" />
     <MESSAGE value="added docs" />
-    <option name="LAST_COMMIT_MESSAGE" value="added docs" />
+    <MESSAGE value="added mkdocs config changes" />
+    <option name="LAST_COMMIT_MESSAGE" value="added mkdocs config changes" />
   </component>
   <component name="XSLT-Support.FileAssociations.UIState">
     <expand />

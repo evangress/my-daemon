@@ -288,9 +288,13 @@ def graph_stats() -> None:
 def chat(
     host: str = typer.Option("127.0.0.1", help="Host interface to bind."),
     port: int = typer.Option(8765, help="Port for the local UI."),
-    native: bool = typer.Option(False, "--native", help="Open as a desktop window (requires pywebview)."),
+    native: bool = typer.Option(
+        True,
+        "--native/--no-native",
+        help="Open as a desktop window via pywebview (default). Use --no-native for the browser tab.",
+    ),
 ) -> None:
-    """Launch the warm-themed NiceGUI chat window for the daemon."""
+    """Launch the warm-themed chat window for the daemon."""
     from my_daemon.gui import launch_chat
 
     launch_chat(host=host, port=port, native=native)

@@ -9,10 +9,13 @@ The CLI's ``daemon chat`` command launches this; ``launch_chat`` is the entry po
 from __future__ import annotations
 
 import asyncio
+import logging
 import threading
 from collections.abc import Iterator
 from dataclasses import dataclass
 from datetime import UTC, datetime
+from logging.handlers import RotatingFileHandler
+from pathlib import Path
 
 from nicegui import ui
 
@@ -20,8 +23,32 @@ from my_daemon.config import Settings, load_settings
 from my_daemon.embeddings import Embedder, SparseEmbedder
 from my_daemon.llm import LLMClient
 from my_daemon.models import FeedbackEvent
+from my_daemon.paths import log_path as _shared_log_path
 from my_daemon.retrieval import RetrievalOrchestrator
 from my_daemon.stores import FeedbackStore, GraphStore, VectorStore
+
+log = logging.getLogger("my_daemon.chat")
+
+
+def _configure_file_logging() -> Path:
+    """Attach a rotating file handler to the root logger; return the log path.
+
+    Called once at chat-window startup. Native mode hides stdout, so without
+    this an unhandled exception would vanish into the void.
+    """
+    path = _shared_log_path()
+    path.parent.mkdir(parents=True, exist_ok=True)
+    handler = RotatingFileHandler(path, maxBytes=1_000_000, backupCount=3, encoding="utf-8")
+    handler.setFormatter(
+        logging.Formatter("%(asctime)s %(levelname)s %(name)s: %(message)s")
+    )
+    root = logging.getLogger()
+    # Avoid duplicate handlers when launch_chat is somehow called twice in-process.
+    if not any(getattr(h, "baseFilename", None) == str(path) for h in root.handlers):
+        root.addHandler(handler)
+    if root.level > logging.INFO or root.level == logging.NOTSET:
+        root.setLevel(logging.INFO)
+    return path
 
 # Brand palette (OKLCH). Source: my-daemon-astro-website/BRAND.md § 2.
 # A question (gold) calls a daemon (violet) which speaks back (cyan).
@@ -357,6 +384,7 @@ def _mount_ui(ctx: _DaemonContext) -> None:
                 )
             )
         except Exception as exc:
+            log.exception("chat send failed")
             daemon_label.content = f"_(daemon error: {exc})_"
         finally:
             busy["flag"] = False
@@ -367,12 +395,15 @@ def _mount_ui(ctx: _DaemonContext) -> None:
     input_box.on("keydown.enter", handle_send)
 
 
-def launch_chat(host: str = "127.0.0.1", port: int = 8765, native: bool = False) -> None:
+def launch_chat(host: str = "127.0.0.1", port: int = 8765, native: bool = True) -> None:
     """Start the NiceGUI chat window.
 
-    ``native=True`` opens a desktop window via pywebview (requires the optional
-    extra). Otherwise the UI is reachable in a browser at ``http://<host>:<port>``.
+    ``native=True`` (the default) opens a desktop window via pywebview, which
+    is a required dependency. Pass ``native=False`` to expose the UI as a
+    browser tab at ``http://<host>:<port>`` — useful for remote dev work.
     """
+    log_path = _configure_file_logging()
+    log.info("launching chat host=%s port=%d native=%s log=%s", host, port, native, log_path)
     ctx = _build_context()
 
     # NiceGUI 3.x requires either a script-file entry point or a ``root=`` callable
