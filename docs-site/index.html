@@ -1,0 +1,264 @@
+<!DOCTYPE html>
+<html class="writer-html5" lang="en" >
+<head>
+    <meta charset="utf-8" />
+    <meta http-equiv="X-UA-Compatible" content="IE=edge" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" /><meta name="description" content="Personal knowledge and memory system over an Obsidian vault — vector seeds, graph expansion, LLM synthesis." /><meta name="author" content="Evan Gress" /><link rel="canonical" href="https://my-daemon.ai/" />
+      <link rel="shortcut icon" href="img/favicon.ico" />
+    <title>My Daemon</title>
+    <link rel="stylesheet" href="css/theme.css" />
+    <link rel="stylesheet" href="css/theme_extra.css" />
+        <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.8.0/styles/github.min.css" />
+    
+      <script>
+        // Current page data
+        var mkdocs_page_name = "Home";
+        var mkdocs_page_input_path = "index.md";
+        var mkdocs_page_url = "/";
+      </script>
+    
+    <!--[if lt IE 9]>
+      <script src="js/html5shiv.min.js"></script>
+    <![endif]-->
+      <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.8.0/highlight.min.js"></script>
+        <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.8.0/languages/python.min.js"></script>
+        <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.8.0/languages/yaml.min.js"></script>
+        <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.8.0/languages/bash.min.js"></script>
+        <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.8.0/languages/sql.min.js"></script>
+      <script>hljs.highlightAll();</script> 
+</head>
+
+<body class="wy-body-for-nav" role="document">
+
+  <div class="wy-grid-for-nav">
+    <nav data-toggle="wy-nav-shift" class="wy-nav-side stickynav">
+    <div class="wy-side-scroll">
+      <div class="wy-side-nav-search">
+          <a href="." class="icon icon-home"> My Daemon
+        </a><div role="search">
+  <form id ="rtd-search-form" class="wy-form" action="./search.html" method="get">
+      <input type="text" name="q" placeholder="Search docs" aria-label="Search docs" title="Type search term here" />
+  </form>
+</div>
+      </div>
+
+      <div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="Navigation menu">
+              <ul class="current">
+                <li class="toctree-l1 current"><a class="reference internal current" href="#">Home</a>
+    <ul class="current">
+    <li class="toctree-l2"><a class="reference internal" href="#why-daemon">Why &ldquo;Daemon&rdquo;?</a>
+    </li>
+    <li class="toctree-l2"><a class="reference internal" href="#what-the-project-does">What the project does</a>
+    </li>
+    <li class="toctree-l2"><a class="reference internal" href="#where-to-start">Where to start</a>
+    </li>
+    <li class="toctree-l2"><a class="reference internal" href="#status">Status</a>
+    </li>
+    </ul>
+                </li>
+              </ul>
+              <ul>
+                <li class="toctree-l1"><a class="reference internal" href="getting-started/">Getting Started</a>
+                </li>
+              </ul>
+              <ul>
+                <li class="toctree-l1"><a class="reference internal" href="architecture/">Architecture</a>
+                </li>
+              </ul>
+              <ul>
+                <li class="toctree-l1"><a class="reference internal" href="cli/">CLI Reference</a>
+                </li>
+              </ul>
+              <ul>
+                <li class="toctree-l1"><a class="reference internal" href="configuration/">Configuration</a>
+                </li>
+              </ul>
+              <ul>
+                <li class="toctree-l1"><a class="reference internal" href="background-agents/">Background Agents</a>
+                </li>
+              </ul>
+              <p class="caption"><span class="caption-text">Modules</span></p>
+              <ul>
+                  <li class="toctree-l1"><a class="reference internal" href="modules/vault/">Vault</a>
+                  </li>
+                  <li class="toctree-l1"><a class="reference internal" href="modules/embeddings/">Embeddings</a>
+                  </li>
+                  <li class="toctree-l1"><a class="reference internal" href="modules/stores/">Stores</a>
+                  </li>
+                  <li class="toctree-l1"><a class="reference internal" href="modules/retrieval/">Retrieval</a>
+                  </li>
+                  <li class="toctree-l1"><a class="reference internal" href="modules/llm/">LLM</a>
+                  </li>
+                  <li class="toctree-l1"><a class="reference internal" href="modules/pipeline/">Pipeline</a>
+                  </li>
+                  <li class="toctree-l1"><a class="reference internal" href="modules/gui/">GUI</a>
+                  </li>
+              </ul>
+              <ul>
+                <li class="toctree-l1"><a class="reference internal" href="theme/">Theme</a>
+                </li>
+              </ul>
+              <ul>
+                <li class="toctree-l1"><a class="reference internal" href="roadmap/">Roadmap</a>
+                </li>
+              </ul>
+              <ul>
+                <li class="toctree-l1"><a class="reference internal" href="development/">Development</a>
+                </li>
+              </ul>
+      </div>
+    </div>
+    </nav>
+
+    <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap">
+      <nav class="wy-nav-top" role="navigation" aria-label="Mobile navigation menu">
+          <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
+          <a href=".">My Daemon</a>
+        
+      </nav>
+      <div class="wy-nav-content">
+        <div class="rst-content"><div role="navigation" aria-label="breadcrumbs navigation">
+  <ul class="wy-breadcrumbs">
+    <li><a href="." class="icon icon-home" aria-label="Docs"></a></li>
+      <li class="breadcrumb-item active">Home</li>
+    <li class="wy-breadcrumbs-aside">
+          <a href="https://github.com/evangress/my-daemon/edit/master/docs-source/index.md">Edit on evangress/my-daemon</a>
+    </li>
+  </ul>
+  <hr/>
+</div>
+          <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
+            <div class="section" itemprop="articleBody">
+              
+                <h1 id="my-daemon">My Daemon<a class="headerlink" href="#my-daemon" title="Permanent link">&para;</a></h1>
+<p><em>A personal knowledge and memory system over an Obsidian vault. Vector seeds,
+graph expansion, LLM synthesis — the kind of memory companion that grows with
+you over time.</em></p>
+<hr />
+<h2 id="why-daemon">Why &ldquo;Daemon&rdquo;?<a class="headerlink" href="#why-daemon" title="Permanent link">&para;</a></h2>
+<p>A triple pun:</p>
+<ul>
+<li>Philip Pullman&rsquo;s <em>daemon</em> — the external soul-companion in <em>His Dark
+  Materials</em> that knows its human completely.</li>
+<li>Socrates&rsquo; <em>daimonion</em> — the inner advisory voice.</li>
+<li>The Unix sense — a background process that runs quietly on your behalf.</li>
+</ul>
+<p>The intent here is all three: not a tool you operate, but a companion that
+grows with you, sometimes whispering, sometimes working quietly while you
+sleep.</p>
+<h2 id="what-the-project-does">What the project does<a class="headerlink" href="#what-the-project-does" title="Permanent link">&para;</a></h2>
+<p>My Daemon ingests your Obsidian vault and builds two complementary
+representations of it:</p>
+<table>
+<thead>
+<tr>
+<th>Layer</th>
+<th>What it stores</th>
+<th>What it&rsquo;s good at</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>Vector store</strong> (Qdrant)</td>
+<td>Dense + sparse embeddings of every chunk</td>
+<td>Paraphrased / conceptual recall, exact-token recall (BM42)</td>
+</tr>
+<tr>
+<td><strong>Graph</strong> (NetworkX)</td>
+<td>Note ↔ note (wikilinks) and note ↔ tag edges</td>
+<td>Following the structure you already gave your notes</td>
+</tr>
+</tbody>
+</table>
+<p>When you ask a question, the daemon:</p>
+<ol>
+<li>Embeds your query and finds top-K seed chunks (hybrid: dense + sparse RRF).</li>
+<li>BFS-expands each seed in the graph to depth N, with distance decay.</li>
+<li>De-duplicates, ranks by combined score, trims to a token budget.</li>
+<li>Sends the ranked context to Claude with a &ldquo;you are the user&rsquo;s daemon&rdquo; prompt.</li>
+<li>Logs every query, the candidates surfaced, and the latency to a SQLite
+   feedback log for future adaptive weighting.</li>
+</ol>
+<p>Beyond that, three optional background-agent jobs let the daemon <strong>write back
+into the vault</strong> rather than just read from it:</p>
+<ul>
+<li><code>daemon extract</code> — appends an <code>## Agent Notes</code> section to recently-changed
+  notes.</li>
+<li><code>daemon link</code> — auto-applies high-confidence wikilinks and tags, queues
+  borderline ones for review.</li>
+<li><code>daemon reflect</code> — maintains themed memory files in <code>&lt;vault&gt;/Agent/</code> that
+  distill who you are over time.</li>
+</ul>
+<h2 id="where-to-start">Where to start<a class="headerlink" href="#where-to-start" title="Permanent link">&para;</a></h2>
+<ul>
+<li><a href="getting-started/">Getting Started</a> — install, configure, ingest, ask.</li>
+<li><a href="architecture/">Architecture</a> — the data flow from a <code>.md</code> file to a
+  cited answer.</li>
+<li><a href="cli/">CLI Reference</a> — every <code>daemon</code> subcommand.</li>
+<li><a href="configuration/">Configuration</a> — every key in <code>config.yaml</code>.</li>
+<li><a href="background-agents/">Background Agents</a> — the writeback jobs, the safety
+  discipline, and how to schedule them.</li>
+<li><a href="roadmap/">Roadmap</a> — what&rsquo;s done, what&rsquo;s next, what&rsquo;s been intentionally
+  deferred.</li>
+</ul>
+<h2 id="status">Status<a class="headerlink" href="#status" title="Permanent link">&para;</a></h2>
+<p>v0.1. The end-to-end pipeline (ingest → retrieve → synthesize → log) works
+against a real vault. Background-agent writeback is wired up but gated behind
+<code>agent.enabled: false</code> until you confirm thresholds with <code>--dry-run</code>. Adaptive
+edge weighting, nightly consolidation, and the observer LLM are deliberate
+Phase 4+ deferrals — see <a href="https://github.com/evangress/my-daemon/blob/master/MY-DAEMON-SCAFFOLD.md"><code>MY-DAEMON-SCAFFOLD.md</code></a>
+for the full phasing.</p>
+              
+            </div>
+          </div><footer>
+    <div class="rst-footer-buttons" role="navigation" aria-label="Footer Navigation">
+        <a href="getting-started/" class="btn btn-neutral float-right" title="Getting Started">Next <span class="icon icon-circle-arrow-right"></span></a>
+    </div>
+
+  <hr/>
+
+  <div role="contentinfo">
+    <!-- Copyright etc -->
+  </div>
+
+  Built with <a href="https://www.mkdocs.org/">MkDocs</a> using a <a href="https://github.com/readthedocs/sphinx_rtd_theme">theme</a> provided by <a href="https://readthedocs.org">Read the Docs</a>.
+</footer>
+          
+        </div>
+      </div>
+
+    </section>
+
+  </div>
+
+  <div class="rst-versions" role="note" aria-label="Versions">
+  <span class="rst-current-version" data-toggle="rst-current-version">
+    
+        <span>
+          <a href="https://github.com/evangress/my-daemon" class="fa fa-code-fork" style="color: #fcfcfc"> evangress/my-daemon</a>
+        </span>
+    
+    
+    
+      <span><a href="getting-started/" style="color: #fcfcfc">Next &raquo;</a></span>
+    
+  </span>
+</div>
+    <script src="js/jquery-3.6.0.min.js"></script>
+    <script>var base_url = ".";</script>
+    <script src="js/theme_extra.js"></script>
+    <script src="js/theme.js"></script>
+      <script src="search/main.js"></script>
+    <script>
+        jQuery(function () {
+            SphinxRtdTheme.Navigation.enable(true);
+        });
+    </script>
+
+</body>
+</html>
+
+<!--
+MkDocs version : 1.6.1
+Build Date UTC : 2026-05-17 01:44:00.437377+00:00
+-->

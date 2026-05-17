@@ -1,0 +1,382 @@
+<!DOCTYPE html>
+<html class="writer-html5" lang="en" >
+<head>
+    <meta charset="utf-8" />
+    <meta http-equiv="X-UA-Compatible" content="IE=edge" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" /><meta name="author" content="Evan Gress" /><link rel="canonical" href="https://my-daemon.ai/background-agents/" />
+      <link rel="shortcut icon" href="../img/favicon.ico" />
+    <title>Background Agents - My Daemon</title>
+    <link rel="stylesheet" href="../css/theme.css" />
+    <link rel="stylesheet" href="../css/theme_extra.css" />
+        <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.8.0/styles/github.min.css" />
+    
+      <script>
+        // Current page data
+        var mkdocs_page_name = "Background Agents";
+        var mkdocs_page_input_path = "background-agents.md";
+        var mkdocs_page_url = "/background-agents/";
+      </script>
+    
+    <!--[if lt IE 9]>
+      <script src="../js/html5shiv.min.js"></script>
+    <![endif]-->
+      <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.8.0/highlight.min.js"></script>
+        <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.8.0/languages/python.min.js"></script>
+        <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.8.0/languages/yaml.min.js"></script>
+        <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.8.0/languages/bash.min.js"></script>
+        <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.8.0/languages/sql.min.js"></script>
+      <script>hljs.highlightAll();</script> 
+</head>
+
+<body class="wy-body-for-nav" role="document">
+
+  <div class="wy-grid-for-nav">
+    <nav data-toggle="wy-nav-shift" class="wy-nav-side stickynav">
+    <div class="wy-side-scroll">
+      <div class="wy-side-nav-search">
+          <a href=".." class="icon icon-home"> My Daemon
+        </a><div role="search">
+  <form id ="rtd-search-form" class="wy-form" action="../search.html" method="get">
+      <input type="text" name="q" placeholder="Search docs" aria-label="Search docs" title="Type search term here" />
+  </form>
+</div>
+      </div>
+
+      <div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="Navigation menu">
+              <ul>
+                <li class="toctree-l1"><a class="reference internal" href="..">Home</a>
+                </li>
+              </ul>
+              <ul>
+                <li class="toctree-l1"><a class="reference internal" href="../getting-started/">Getting Started</a>
+                </li>
+              </ul>
+              <ul>
+                <li class="toctree-l1"><a class="reference internal" href="../architecture/">Architecture</a>
+                </li>
+              </ul>
+              <ul>
+                <li class="toctree-l1"><a class="reference internal" href="../cli/">CLI Reference</a>
+                </li>
+              </ul>
+              <ul>
+                <li class="toctree-l1"><a class="reference internal" href="../configuration/">Configuration</a>
+                </li>
+              </ul>
+              <ul class="current">
+                <li class="toctree-l1 current"><a class="reference internal current" href="#">Background Agents</a>
+    <ul class="current">
+    <li class="toctree-l2"><a class="reference internal" href="#the-trio-at-a-glance">The trio at a glance</a>
+    </li>
+    <li class="toctree-l2"><a class="reference internal" href="#the-safety-discipline-built-once-applied-everywhere">The safety discipline — built once, applied everywhere</a>
+    </li>
+    <li class="toctree-l2"><a class="reference internal" href="#daemon-extract">daemon extract</a>
+        <ul>
+    <li class="toctree-l3"><a class="reference internal" href="#selection">Selection</a>
+    </li>
+    <li class="toctree-l3"><a class="reference internal" href="#output">Output</a>
+    </li>
+        </ul>
+    </li>
+    <li class="toctree-l2"><a class="reference internal" href="#daemon-link">daemon link</a>
+        <ul>
+    <li class="toctree-l3"><a class="reference internal" href="#how-candidates-are-scored">How candidates are scored</a>
+    </li>
+    <li class="toctree-l3"><a class="reference internal" href="#tags">Tags</a>
+    </li>
+    <li class="toctree-l3"><a class="reference internal" href="#writeback">Writeback</a>
+    </li>
+    <li class="toctree-l3"><a class="reference internal" href="#suggestions-file">Suggestions file</a>
+    </li>
+        </ul>
+    </li>
+    <li class="toctree-l2"><a class="reference internal" href="#daemon-reflect">daemon reflect</a>
+        <ul>
+    <li class="toctree-l3"><a class="reference internal" href="#what-reflection-means">What &ldquo;reflection&rdquo; means</a>
+    </li>
+    <li class="toctree-l3"><a class="reference internal" href="#editing-the-memory">Editing the memory</a>
+    </li>
+        </ul>
+    </li>
+    <li class="toctree-l2"><a class="reference internal" href="#scheduling">Scheduling</a>
+        <ul>
+    <li class="toctree-l3"><a class="reference internal" href="#windows">Windows</a>
+    </li>
+    <li class="toctree-l3"><a class="reference internal" href="#linux-macos">Linux / macOS</a>
+    </li>
+        </ul>
+    </li>
+    <li class="toctree-l2"><a class="reference internal" href="#recommended-rollout">Recommended rollout</a>
+    </li>
+    </ul>
+                </li>
+              </ul>
+              <p class="caption"><span class="caption-text">Modules</span></p>
+              <ul>
+                  <li class="toctree-l1"><a class="reference internal" href="../modules/vault/">Vault</a>
+                  </li>
+                  <li class="toctree-l1"><a class="reference internal" href="../modules/embeddings/">Embeddings</a>
+                  </li>
+                  <li class="toctree-l1"><a class="reference internal" href="../modules/stores/">Stores</a>
+                  </li>
+                  <li class="toctree-l1"><a class="reference internal" href="../modules/retrieval/">Retrieval</a>
+                  </li>
+                  <li class="toctree-l1"><a class="reference internal" href="../modules/llm/">LLM</a>
+                  </li>
+                  <li class="toctree-l1"><a class="reference internal" href="../modules/pipeline/">Pipeline</a>
+                  </li>
+                  <li class="toctree-l1"><a class="reference internal" href="../modules/gui/">GUI</a>
+                  </li>
+              </ul>
+              <ul>
+                <li class="toctree-l1"><a class="reference internal" href="../theme/">Theme</a>
+                </li>
+              </ul>
+              <ul>
+                <li class="toctree-l1"><a class="reference internal" href="../roadmap/">Roadmap</a>
+                </li>
+              </ul>
+              <ul>
+                <li class="toctree-l1"><a class="reference internal" href="../development/">Development</a>
+                </li>
+              </ul>
+      </div>
+    </div>
+    </nav>
+
+    <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap">
+      <nav class="wy-nav-top" role="navigation" aria-label="Mobile navigation menu">
+          <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
+          <a href="..">My Daemon</a>
+        
+      </nav>
+      <div class="wy-nav-content">
+        <div class="rst-content"><div role="navigation" aria-label="breadcrumbs navigation">
+  <ul class="wy-breadcrumbs">
+    <li><a href=".." class="icon icon-home" aria-label="Docs"></a></li>
+      <li class="breadcrumb-item active">Background Agents</li>
+    <li class="wy-breadcrumbs-aside">
+          <a href="https://github.com/evangress/my-daemon/edit/master/docs-source/background-agents.md">Edit on evangress/my-daemon</a>
+    </li>
+  </ul>
+  <hr/>
+</div>
+          <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
+            <div class="section" itemprop="articleBody">
+              
+                <h1 id="background-agents">Background Agents<a class="headerlink" href="#background-agents" title="Permanent link">&para;</a></h1>
+<p>The three writeback jobs that let the daemon <strong>shape</strong> the vault, not just
+read from it. All gated behind <code>agent.enabled: true</code> in <code>config.yaml</code>.</p>
+<h2 id="the-trio-at-a-glance">The trio at a glance<a class="headerlink" href="#the-trio-at-a-glance" title="Permanent link">&para;</a></h2>
+<table>
+<thead>
+<tr>
+<th>Job</th>
+<th>What it writes</th>
+<th>Where</th>
+<th>When to run</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>daemon extract</code></td>
+<td><code>## Agent Notes</code> section per note (summary, key points, themes, feelings, open questions)</td>
+<td>Inside the note itself, between <code>&lt;!-- daemon:start --&gt; ... &lt;!-- daemon:end --&gt;</code> sentinels</td>
+<td>Daily or after a burst of journaling</td>
+</tr>
+<tr>
+<td><code>daemon link</code></td>
+<td>Wikilinks (auto-applied at strict thresholds), tags (auto-applied at graph-density thresholds), suggestions file for review</td>
+<td>Inside each source note; lower-confidence to <code>Agent/link-suggestions-YYYY-MM-DD.md</code></td>
+<td>Weekly, or after a big ingest</td>
+</tr>
+<tr>
+<td><code>daemon reflect</code></td>
+<td>Themed memory files distilling who the user is</td>
+<td><code>&lt;vault&gt;/Agent/memory-&lt;theme&gt;.md</code> + a rolling journal</td>
+<td>Nightly (<code>schtasks</code> checkbox on Windows; <code>cron</code> on Linux/macOS)</td>
+</tr>
+</tbody>
+</table>
+<h2 id="the-safety-discipline-built-once-applied-everywhere">The safety discipline — built once, applied everywhere<a class="headerlink" href="#the-safety-discipline-built-once-applied-everywhere" title="Permanent link">&para;</a></h2>
+<p>Every write goes through <code>vault/writer.py</code>, which enforces five gates in
+order. The first one to fail aborts the write with a reason that surfaces in
+the stats table.</p>
+<ol>
+<li><strong>Containment check.</strong> The resolved path must live inside <code>vault.path</code>.
+   Defends against a malicious <code>[[../../etc/passwd]]</code> target.</li>
+<li><strong>Agent-folder guard.</strong> Nothing inside <code>&lt;vault&gt;/&lt;agent.folder_name&gt;/</code> (the
+   daemon&rsquo;s own folder) may be modified by an agent job. The reflection
+   writer is the only thing that touches it, via direct file IO.</li>
+<li><strong>Frontmatter opt-out.</strong> A note with <code>daemon: ignore</code> in its frontmatter is
+   invisible to every job.</li>
+<li><strong>Grace period.</strong> Files modified within <code>agent.write_grace_minutes</code> (default
+   30) are skipped — you&rsquo;re probably still typing.</li>
+<li><strong>Snapshot backup.</strong> Before any successful write, the original is copied to
+   <code>&lt;vault&gt;/&lt;agent.folder_name&gt;/backups/&lt;rel&gt;.&lt;unix_ts&gt;.md</code>. Add
+   <code>Agent/backups/</code> to your vault&rsquo;s <code>.gitignore</code> if you keep the vault in git.</li>
+</ol>
+<p>Writes themselves are atomic: a tempfile + <code>os.replace()</code> dance, so a crash
+mid-write can never leave a half-written file.</p>
+<h2 id="daemon-extract"><code>daemon extract</code><a class="headerlink" href="#daemon-extract" title="Permanent link">&para;</a></h2>
+<h3 id="selection">Selection<a class="headerlink" href="#selection" title="Permanent link">&para;</a></h3>
+<p>A note is eligible if:</p>
+<ul>
+<li>Its word count ≥ <code>agent.extract_min_word_count</code> (default 80).</li>
+<li>Its mtime is newer than the last recorded extract run (tracked in the
+  <code>agent_extract_runs</code> table inside <code>feedback.db</code>).</li>
+<li>It passes all five writer gates.</li>
+</ul>
+<p>Pass <code>--all</code> to override the mtime filter; pass <code>--note &lt;relative-path&gt;</code> to
+restrict to a single note.</p>
+<h3 id="output">Output<a class="headerlink" href="#output" title="Permanent link">&para;</a></h3>
+<p>The LLM (<code>llm.batch_model</code>, default Haiku 4.5) returns a structured JSON
+payload — summary, key points, themes, feelings, topics, open questions —
+which gets rendered into the markdown block that lives between the sentinel
+markers. The block always carries an &ldquo;Last updated YYYY-MM-DD by your daemon
+(model: …)&rdquo; line for transparency.</p>
+<p>Re-running extract on an unchanged note is a no-op: the writer sees the
+section is already correct and returns <code>changed=False</code>.</p>
+<h2 id="daemon-link"><code>daemon link</code><a class="headerlink" href="#daemon-link" title="Permanent link">&para;</a></h2>
+<h3 id="how-candidates-are-scored">How candidates are scored<a class="headerlink" href="#how-candidates-are-scored" title="Permanent link">&para;</a></h3>
+<p>For each source note:</p>
+<ol>
+<li>The note body (first 6000 chars) is embedded.</li>
+<li>Qdrant returns the top ~40 chunks. Best chunk score per <em>target note</em> is kept.</li>
+<li>Two thresholds split the ranked list:
+   - <code>cosine ≥ link_apply_cosine</code> (default 0.85) <strong>AND</strong> the target title
+     appears verbatim (case-insensitive, word-boundary) in the source body →
+     auto-apply.
+   - <code>cosine ≥ link_suggest_cosine</code> (default 0.78) and below the apply gate
+     → &ldquo;suggest only,&rdquo; written to the daily suggestions file.</li>
+<li>Optionally (<code>llm</code> argument), an LLM second-opinion proposes anchor text
+   and a confidence score. This annotates the suggestions file; it does <em>not</em>
+   bypass the apply gate.</li>
+</ol>
+<h3 id="tags">Tags<a class="headerlink" href="#tags" title="Permanent link">&para;</a></h3>
+<p>Tags use a different signal: graph density. For each tag carried by ≥
+<code>agent.tag_apply_min_neighbor_count</code> (default 4) graph-nearby notes (depth 2,
+both wikilinks and shared tags) but missing from the source, the linker
+appends it to the source&rsquo;s frontmatter <code>tags:</code> block. Always frontmatter,
+never inline <code>#tag</code> — frontmatter is a single safe surface to mutate.</p>
+<h3 id="writeback">Writeback<a class="headerlink" href="#writeback" title="Permanent link">&para;</a></h3>
+<p>The linker uses <code>insert_wikilinks()</code> (first-match-only, skips code fences and
+existing wikilinks) for links and <code>add_tags()</code> for tags. Each note gets at
+most one wikilink write and one tag write per run.</p>
+<h3 id="suggestions-file">Suggestions file<a class="headerlink" href="#suggestions-file" title="Permanent link">&para;</a></h3>
+<p>When borderline candidates exist, the linker writes (or rewrites)
+<code>&lt;vault&gt;/Agent/link-suggestions-YYYY-MM-DD.md</code>. One H3 block per source note,
+listing candidate <code>[[Target]]</code> lines with cosine and optional LLM reason.
+You accept by editing the source note directly — the linker won&rsquo;t
+auto-apply anything in that file.</p>
+<h2 id="daemon-reflect"><code>daemon reflect</code><a class="headerlink" href="#daemon-reflect" title="Permanent link">&para;</a></h2>
+<h3 id="what-reflection-means">What &ldquo;reflection&rdquo; means<a class="headerlink" href="#what-reflection-means" title="Permanent link">&para;</a></h3>
+<p>For each configured theme (default: personality, projects, relationships,
+themes), the daemon maintains one memory file at
+<code>&lt;vault&gt;/&lt;agent.folder_name&gt;/memory-&lt;theme&gt;.md</code>. Each run:</p>
+<ol>
+<li>Pulls notes modified in the last <code>agent.reflect_lookback_days</code> days
+   (default 7).</li>
+<li>Pulls the last ~20 chat events from the feedback DB.</li>
+<li>Sends them to the LLM along with the prior memory body. The system prompt
+   instructs Claude to <strong>preserve any user edits as ground truth</strong> and to
+   note explicit uncertainty when evidence is thin.</li>
+<li>Writes the new body atomically, with the original snapshotted first. A
+   YAML frontmatter block records <code>theme</code>, <code>updated</code>, <code>model</code>, and source
+   counts so a future ingest can reason about provenance.</li>
+<li>Appends a one-block summary to <code>&lt;vault&gt;/&lt;agent.folder_name&gt;/memory-rolling.md</code>.</li>
+</ol>
+<p>If the source signature (note mtimes + chat ids) hasn&rsquo;t changed since the
+last run, the theme is skipped — re-running an idempotent run does nothing.</p>
+<h3 id="editing-the-memory">Editing the memory<a class="headerlink" href="#editing-the-memory" title="Permanent link">&para;</a></h3>
+<p>The memory files are designed to be edited by you. The system prompt for the
+reflection LLM treats your edits as ground truth, so correcting a hallucination
+or sharpening a sentence will stick on the next run. Delete the file entirely
+to start a theme over.</p>
+<h2 id="scheduling">Scheduling<a class="headerlink" href="#scheduling" title="Permanent link">&para;</a></h2>
+<h3 id="windows">Windows<a class="headerlink" href="#windows" title="Permanent link">&para;</a></h3>
+<p>The <code>daemon setup</code> window has a checkbox: <em>&ldquo;Run <code>daemon reflect</code> daily at
+03:00 (Windows Task Scheduler).&rdquo;</em> Saving the form runs <code>schtasks /Create</code>
+under the hood. The task is named <code>MyDaemonReflect</code>; unchecking it on a
+subsequent save removes the task.</p>
+<h3 id="linux-macos">Linux / macOS<a class="headerlink" href="#linux-macos" title="Permanent link">&para;</a></h3>
+<div class="codehilite"><pre><span></span><code># crontab -e
+ 0 3 * * *  /path/to/my-daemon/.venv/bin/daemon reflect
+15 3 * * *  /path/to/my-daemon/.venv/bin/daemon extract
+</code></pre></div>
+
+<p>The 15-minute gap exists because <code>reflect</code> reads recent notes; running
+<code>extract</code> afterward lets the next reflection see the new <code>## Agent Notes</code>
+sections.</p>
+<h2 id="recommended-rollout">Recommended rollout<a class="headerlink" href="#recommended-rollout" title="Permanent link">&para;</a></h2>
+<p>If you&rsquo;ve never run any of the writeback jobs against your vault:</p>
+<div class="codehilite"><pre><span></span><code><span class="c1"># 1. Preview against your real vault, agent.enabled still false.</span>
+daemon<span class="w"> </span>extract<span class="w"> </span>--dry-run<span class="w"> </span>-v
+daemon<span class="w"> </span>link<span class="w"> </span>--dry-run<span class="w"> </span>-v
+daemon<span class="w"> </span>reflect<span class="w"> </span>--dry-run<span class="w"> </span>-v
+
+<span class="c1"># 2. Pick a single note to see actual output.</span>
+daemon<span class="w"> </span>extract<span class="w"> </span>--note<span class="w"> </span><span class="s2">&quot;Inbox/today.md&quot;</span>
+
+<span class="c1"># 3. Eyeball the result. If you like the format, flip the gate.</span>
+<span class="c1"># (edit config.yaml → agent.enabled: true)</span>
+
+<span class="c1"># 4. Run for real, small scope first.</span>
+daemon<span class="w"> </span>link<span class="w"> </span>--note<span class="w"> </span><span class="s2">&quot;Inbox/today.md&quot;</span>
+daemon<span class="w"> </span>reflect<span class="w"> </span>--theme<span class="w"> </span>personality
+</code></pre></div>
+
+<p>The 30-minute grace, the snapshot, and the <code>daemon: ignore</code> opt-out mean
+you can stop or roll back at any point.</p>
+              
+            </div>
+          </div><footer>
+    <div class="rst-footer-buttons" role="navigation" aria-label="Footer Navigation">
+        <a href="../configuration/" class="btn btn-neutral float-left" title="Configuration"><span class="icon icon-circle-arrow-left"></span> Previous</a>
+        <a href="../modules/vault/" class="btn btn-neutral float-right" title="Vault">Next <span class="icon icon-circle-arrow-right"></span></a>
+    </div>
+
+  <hr/>
+
+  <div role="contentinfo">
+    <!-- Copyright etc -->
+  </div>
+
+  Built with <a href="https://www.mkdocs.org/">MkDocs</a> using a <a href="https://github.com/readthedocs/sphinx_rtd_theme">theme</a> provided by <a href="https://readthedocs.org">Read the Docs</a>.
+</footer>
+          
+        </div>
+      </div>
+
+    </section>
+
+  </div>
+
+  <div class="rst-versions" role="note" aria-label="Versions">
+  <span class="rst-current-version" data-toggle="rst-current-version">
+    
+        <span>
+          <a href="https://github.com/evangress/my-daemon" class="fa fa-code-fork" style="color: #fcfcfc"> evangress/my-daemon</a>
+        </span>
+    
+    
+      <span><a href="../configuration/" style="color: #fcfcfc">&laquo; Previous</a></span>
+    
+    
+      <span><a href="../modules/vault/" style="color: #fcfcfc">Next &raquo;</a></span>
+    
+  </span>
+</div>
+    <script src="../js/jquery-3.6.0.min.js"></script>
+    <script>var base_url = "..";</script>
+    <script src="../js/theme_extra.js"></script>
+    <script src="../js/theme.js"></script>
+      <script src="../search/main.js"></script>
+    <script>
+        jQuery(function () {
+            SphinxRtdTheme.Navigation.enable(true);
+        });
+    </script>
+
+</body>
+</html>

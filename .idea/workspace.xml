@@ -4,14 +4,74 @@
     <option name="autoReloadType" value="ALL" />
   </component>
   <component name="ChangeListManager">
-    <list default="true" id="df100eb5-408b-4cff-9fc7-db33bfe773d5" name="Changes" comment="added mkdocs config changes">
+    <list default="true" id="df100eb5-408b-4cff-9fc7-db33bfe773d5" name="Changes" comment="trying to fix gui launch">
+      <change afterPath="$PROJECT_DIR$/.idea/pyLspTools.xml" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/docs-site/404.html" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/docs-site/architecture/index.html" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/docs-site/background-agents/index.html" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/docs-site/cli/index.html" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/docs-site/configuration/index.html" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/docs-site/css/fonts/Roboto-Slab-Bold.woff" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/docs-site/css/fonts/Roboto-Slab-Bold.woff2" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/docs-site/css/fonts/Roboto-Slab-Regular.woff" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/docs-site/css/fonts/Roboto-Slab-Regular.woff2" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/docs-site/css/fonts/fontawesome-webfont.eot" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/docs-site/css/fonts/fontawesome-webfont.svg" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/docs-site/css/fonts/fontawesome-webfont.ttf" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/docs-site/css/fonts/fontawesome-webfont.woff" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/docs-site/css/fonts/fontawesome-webfont.woff2" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/docs-site/css/fonts/lato-bold-italic.woff" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/docs-site/css/fonts/lato-bold-italic.woff2" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/docs-site/css/fonts/lato-bold.woff" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/docs-site/css/fonts/lato-bold.woff2" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/docs-site/css/fonts/lato-normal-italic.woff" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/docs-site/css/fonts/lato-normal-italic.woff2" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/docs-site/css/fonts/lato-normal.woff" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/docs-site/css/fonts/lato-normal.woff2" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/docs-site/css/theme.css" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/docs-site/css/theme_extra.css" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/docs-site/development/index.html" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/docs-site/getting-started/index.html" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/docs-site/img/favicon.ico" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/docs-site/index.html" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/docs-site/js/html5shiv.min.js" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/docs-site/js/jquery-3.6.0.min.js" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/docs-site/js/theme.js" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/docs-site/js/theme_extra.js" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/docs-site/modules/embeddings/index.html" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/docs-site/modules/gui/index.html" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/docs-site/modules/llm/index.html" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/docs-site/modules/pipeline/index.html" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/docs-site/modules/retrieval/index.html" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/docs-site/modules/stores/index.html" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/docs-site/modules/vault/index.html" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/docs-site/roadmap/index.html" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/docs-site/search.html" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/docs-site/search/lunr.js" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/docs-site/search/main.js" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/docs-site/search/search_index.json" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/docs-site/search/worker.js" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/docs-site/sitemap.xml" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/docs-site/sitemap.xml.gz" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/docs-site/theme/index.html" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/docs-source/architecture.md" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/docs-source/background-agents.md" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/docs-source/cli.md" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/docs-source/configuration.md" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/docs-source/development.md" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/docs-source/getting-started.md" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/docs-source/index.md" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/docs-source/modules/embeddings.md" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/docs-source/modules/gui.md" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/docs-source/modules/llm.md" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/docs-source/modules/pipeline.md" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/docs-source/modules/retrieval.md" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/docs-source/modules/stores.md" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/docs-source/modules/vault.md" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/docs-source/roadmap.md" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/docs-source/theme.md" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/src/my_daemon/paths.py" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/.idea/workspace.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/workspace.xml" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/README.md" beforeDir="false" afterPath="$PROJECT_DIR$/README.md" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/pyproject.toml" beforeDir="false" afterPath="$PROJECT_DIR$/pyproject.toml" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/setup.py" beforeDir="false" afterPath="$PROJECT_DIR$/setup.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/src/my_daemon/cli.py" beforeDir="false" afterPath="$PROJECT_DIR$/src/my_daemon/cli.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/src/my_daemon/gui/app.py" beforeDir="false" afterPath="$PROJECT_DIR$/src/my_daemon/gui/app.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/src/my_daemon/gui/setup.py" beforeDir="false" afterPath="$PROJECT_DIR$/src/my_daemon/gui/setup.py" afterDir="false" />
     </list>
     <option name="SHOW_DIALOG" value="false" />
     <option name="HIGHLIGHT_CONFLICTS" value="true" />
@@ -74,7 +134,7 @@
       <option name="presentableId" value="Default" />
       <updated>1778937928112</updated>
       <workItem from="1778937929112" duration="16746000" />
-      <workItem from="1778980342782" duration="947000" />
+      <workItem from="1778980342782" duration="2018000" />
     </task>
     <task id="LOCAL-00001" summary="workspace map">
       <option name="closed" value="true" />
@@ -116,7 +176,23 @@
       <option name="project" value="LOCAL" />
       <updated>1778980399527</updated>
     </task>
-    <option name="localTasksCounter" value="6" />
+    <task id="LOCAL-00006" summary="enhanced gui function">
+      <option name="closed" value="true" />
+      <created>1778982377889</created>
+      <option name="number" value="00006" />
+      <option name="presentableId" value="LOCAL-00006" />
+      <option name="project" value="LOCAL" />
+      <updated>1778982377889</updated>
+    </task>
+    <task id="LOCAL-00007" summary="trying to fix gui launch">
+      <option name="closed" value="true" />
+      <created>1778983111148</created>
+      <option name="number" value="00007" />
+      <option name="presentableId" value="LOCAL-00007" />
+      <option name="project" value="LOCAL" />
+      <updated>1778983111148</updated>
+    </task>
+    <option name="localTasksCounter" value="8" />
     <servers />
   </component>
   <component name="TypeScriptGeneratedFilesManager">
@@ -127,7 +203,9 @@
     <MESSAGE value="updated scaffold and dependancies" />
     <MESSAGE value="added docs" />
     <MESSAGE value="added mkdocs config changes" />
-    <option name="LAST_COMMIT_MESSAGE" value="added mkdocs config changes" />
+    <MESSAGE value="enhanced gui function" />
+    <MESSAGE value="trying to fix gui launch" />
+    <option name="LAST_COMMIT_MESSAGE" value="trying to fix gui launch" />
   </component>
   <component name="XSLT-Support.FileAssociations.UIState">
     <expand />

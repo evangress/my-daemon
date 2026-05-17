@@ -1,0 +1,271 @@
+<!DOCTYPE html>
+<html class="writer-html5" lang="en" >
+<head>
+    <meta charset="utf-8" />
+    <meta http-equiv="X-UA-Compatible" content="IE=edge" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" /><meta name="author" content="Evan Gress" /><link rel="canonical" href="https://my-daemon.ai/modules/retrieval/" />
+      <link rel="shortcut icon" href="../../img/favicon.ico" />
+    <title>Retrieval - My Daemon</title>
+    <link rel="stylesheet" href="../../css/theme.css" />
+    <link rel="stylesheet" href="../../css/theme_extra.css" />
+        <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.8.0/styles/github.min.css" />
+    
+      <script>
+        // Current page data
+        var mkdocs_page_name = "Retrieval";
+        var mkdocs_page_input_path = "modules/retrieval.md";
+        var mkdocs_page_url = "/modules/retrieval/";
+      </script>
+    
+    <!--[if lt IE 9]>
+      <script src="../../js/html5shiv.min.js"></script>
+    <![endif]-->
+      <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.8.0/highlight.min.js"></script>
+        <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.8.0/languages/python.min.js"></script>
+        <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.8.0/languages/yaml.min.js"></script>
+        <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.8.0/languages/bash.min.js"></script>
+        <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.8.0/languages/sql.min.js"></script>
+      <script>hljs.highlightAll();</script> 
+</head>
+
+<body class="wy-body-for-nav" role="document">
+
+  <div class="wy-grid-for-nav">
+    <nav data-toggle="wy-nav-shift" class="wy-nav-side stickynav">
+    <div class="wy-side-scroll">
+      <div class="wy-side-nav-search">
+          <a href="../.." class="icon icon-home"> My Daemon
+        </a><div role="search">
+  <form id ="rtd-search-form" class="wy-form" action="../../search.html" method="get">
+      <input type="text" name="q" placeholder="Search docs" aria-label="Search docs" title="Type search term here" />
+  </form>
+</div>
+      </div>
+
+      <div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="Navigation menu">
+              <ul>
+                <li class="toctree-l1"><a class="reference internal" href="../..">Home</a>
+                </li>
+              </ul>
+              <ul>
+                <li class="toctree-l1"><a class="reference internal" href="../../getting-started/">Getting Started</a>
+                </li>
+              </ul>
+              <ul>
+                <li class="toctree-l1"><a class="reference internal" href="../../architecture/">Architecture</a>
+                </li>
+              </ul>
+              <ul>
+                <li class="toctree-l1"><a class="reference internal" href="../../cli/">CLI Reference</a>
+                </li>
+              </ul>
+              <ul>
+                <li class="toctree-l1"><a class="reference internal" href="../../configuration/">Configuration</a>
+                </li>
+              </ul>
+              <ul>
+                <li class="toctree-l1"><a class="reference internal" href="../../background-agents/">Background Agents</a>
+                </li>
+              </ul>
+              <p class="caption"><span class="caption-text">Modules</span></p>
+              <ul class="current">
+                  <li class="toctree-l1"><a class="reference internal" href="../vault/">Vault</a>
+                  </li>
+                  <li class="toctree-l1"><a class="reference internal" href="../embeddings/">Embeddings</a>
+                  </li>
+                  <li class="toctree-l1"><a class="reference internal" href="../stores/">Stores</a>
+                  </li>
+                  <li class="toctree-l1 current"><a class="reference internal current" href="#">Retrieval</a>
+    <ul class="current">
+    <li class="toctree-l2"><a class="reference internal" href="#seedseed_search">seed.seed_search</a>
+    </li>
+    <li class="toctree-l2"><a class="reference internal" href="#expandexpand_from_seeds">expand.expand_from_seeds</a>
+    </li>
+    <li class="toctree-l2"><a class="reference internal" href="#orchestratorretrievalorchestrator">orchestrator.RetrievalOrchestrator</a>
+        <ul>
+    <li class="toctree-l3"><a class="reference internal" href="#return-shape">Return shape</a>
+    </li>
+        </ul>
+    </li>
+    <li class="toctree-l2"><a class="reference internal" href="#why-this-shape">Why this shape</a>
+    </li>
+    </ul>
+                  </li>
+                  <li class="toctree-l1"><a class="reference internal" href="../llm/">LLM</a>
+                  </li>
+                  <li class="toctree-l1"><a class="reference internal" href="../pipeline/">Pipeline</a>
+                  </li>
+                  <li class="toctree-l1"><a class="reference internal" href="../gui/">GUI</a>
+                  </li>
+              </ul>
+              <ul>
+                <li class="toctree-l1"><a class="reference internal" href="../../theme/">Theme</a>
+                </li>
+              </ul>
+              <ul>
+                <li class="toctree-l1"><a class="reference internal" href="../../roadmap/">Roadmap</a>
+                </li>
+              </ul>
+              <ul>
+                <li class="toctree-l1"><a class="reference internal" href="../../development/">Development</a>
+                </li>
+              </ul>
+      </div>
+    </div>
+    </nav>
+
+    <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap">
+      <nav class="wy-nav-top" role="navigation" aria-label="Mobile navigation menu">
+          <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
+          <a href="../..">My Daemon</a>
+        
+      </nav>
+      <div class="wy-nav-content">
+        <div class="rst-content"><div role="navigation" aria-label="breadcrumbs navigation">
+  <ul class="wy-breadcrumbs">
+    <li><a href="../.." class="icon icon-home" aria-label="Docs"></a></li>
+          <li class="breadcrumb-item">Modules</li>
+      <li class="breadcrumb-item active">Retrieval</li>
+    <li class="wy-breadcrumbs-aside">
+          <a href="https://github.com/evangress/my-daemon/edit/master/docs-source/modules/retrieval.md">Edit on evangress/my-daemon</a>
+    </li>
+  </ul>
+  <hr/>
+</div>
+          <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
+            <div class="section" itemprop="articleBody">
+              
+                <h1 id="retrieval-seed-expand-rank"><code>retrieval/</code> — Seed, expand, rank<a class="headerlink" href="#retrieval-seed-expand-rank" title="Permanent link">&para;</a></h1>
+<p>Source: <code>src/my_daemon/retrieval/</code>.</p>
+<p>Three small functions, one orchestrator. Each is unit-testable in isolation.</p>
+<h2 id="seedseed_search"><code>seed.seed_search</code><a class="headerlink" href="#seedseed_search" title="Permanent link">&para;</a></h2>
+<div class="codehilite"><pre><span></span><code><span class="n">seed_search</span><span class="p">(</span><span class="n">query</span><span class="p">,</span> <span class="n">embedder</span><span class="p">,</span> <span class="n">vector_store</span><span class="p">,</span> <span class="n">top_k</span><span class="o">=</span><span class="mi">8</span><span class="p">,</span>
+            <span class="n">sparse_embedder</span><span class="o">=</span><span class="kc">None</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">list</span><span class="p">[</span><span class="n">RetrievedChunk</span><span class="p">]</span>
+</code></pre></div>
+
+<p>Embed the query (dense, plus sparse if hybrid is on) and ask Qdrant for the
+top-K hits. When <code>sparse_embedder</code> is provided, calls
+<code>VectorStore.hybrid_search</code> — Qdrant fuses the two prefetches with RRF
+server-side. Otherwise falls back to dense-only <code>VectorStore.search</code>.</p>
+<p>Each hit becomes a <code>RetrievedChunk</code> with:</p>
+<ul>
+<li><code>vector_score</code> = the hit&rsquo;s score (RRF score in hybrid mode, cosine in
+  dense-only)</li>
+<li><code>graph_distance = 0</code> (seeds are by definition at distance zero)</li>
+<li><code>seed_chunk_id</code> set to the chunk&rsquo;s own id (seeds are their own seed)</li>
+<li><code>combined_score = vector_score</code></li>
+</ul>
+<h2 id="expandexpand_from_seeds"><code>expand.expand_from_seeds</code><a class="headerlink" href="#expandexpand_from_seeds" title="Permanent link">&para;</a></h2>
+<div class="codehilite"><pre><span></span><code><span class="n">expand_from_seeds</span><span class="p">(</span><span class="n">seeds</span><span class="p">,</span> <span class="n">graph_store</span><span class="p">,</span> <span class="n">vector_store</span><span class="p">,</span>
+                  <span class="n">depth</span><span class="o">=</span><span class="mi">2</span><span class="p">,</span> <span class="n">decay</span><span class="o">=</span><span class="mf">0.5</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">list</span><span class="p">[</span><span class="n">RetrievedChunk</span><span class="p">]</span>
+</code></pre></div>
+
+<p>For each seed:</p>
+<ol>
+<li>Look up the seed&rsquo;s parent note in the graph.</li>
+<li>BFS to <code>depth</code> hops in the undirected projection (so a sibling via a
+   shared tag is at distance 2).</li>
+<li>For each neighbor note, <code>scroll</code> Qdrant with a payload filter on
+   <code>note_path</code> to pull all its chunks (cap of 64 per note).</li>
+<li>Score each expanded chunk: <code>combined = seed.vector_score * decay**distance</code>.</li>
+</ol>
+<p>A chunk reachable from multiple seeds keeps the best score (max-merge,
+keyed by chunk id). Chunks whose parent note is already represented by a
+seed are skipped to avoid double-counting.</p>
+<h2 id="orchestratorretrievalorchestrator"><code>orchestrator.RetrievalOrchestrator</code><a class="headerlink" href="#orchestratorretrievalorchestrator" title="Permanent link">&para;</a></h2>
+<div class="codehilite"><pre><span></span><code><span class="n">RetrievalOrchestrator</span><span class="p">(</span><span class="n">settings</span><span class="p">,</span> <span class="n">embedder</span><span class="p">,</span> <span class="n">vector_store</span><span class="p">,</span> <span class="n">graph_store</span><span class="p">,</span>
+                      <span class="n">sparse_embedder</span><span class="o">=</span><span class="kc">None</span><span class="p">)</span>
+  <span class="o">.</span><span class="n">retrieve</span><span class="p">(</span><span class="n">query</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">RetrievalResult</span>
+</code></pre></div>
+
+<p>The composed pipeline:</p>
+<ol>
+<li><code>seed_search</code> → seeds.</li>
+<li><code>expand_from_seeds</code> → expanded chunks.</li>
+<li>Merge seeds + expanded, keeping the best score per chunk id.</li>
+<li>Sort by <code>combined_score</code> descending.</li>
+<li><strong>Trim to token budget</strong>, but respect the minimum candidate floor:</li>
+</ol>
+<p><code>python
+   for rc in ranked:
+       cost = approx_tokens(rc.chunk.text)        # chars // 4
+       if kept and used + cost &gt; budget and len(kept) &gt;= min_candidates:
+           break
+       kept.append(rc); used += cost</code></p>
+<p>The candidate floor exists because project policy is to surface at least N
+   (<code>retrieval.candidate_pool</code>, default 3) candidates to the user even if the
+   token budget would otherwise cut off earlier. The first candidate always
+   makes it in, regardless of budget — losing all context is worse than
+   slightly overshooting.</p>
+<h3 id="return-shape">Return shape<a class="headerlink" href="#return-shape" title="Permanent link">&para;</a></h3>
+<div class="codehilite"><pre><span></span><code><span class="n">RetrievalResult</span><span class="p">(</span>
+  <span class="n">query</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span>
+  <span class="n">seeds</span><span class="p">:</span> <span class="nb">list</span><span class="p">[</span><span class="n">RetrievedChunk</span><span class="p">],</span>     <span class="c1"># everything from the vector store</span>
+  <span class="n">expanded</span><span class="p">:</span> <span class="nb">list</span><span class="p">[</span><span class="n">RetrievedChunk</span><span class="p">],</span>  <span class="c1"># everything walked from the graph</span>
+  <span class="n">ranked</span><span class="p">:</span> <span class="nb">list</span><span class="p">[</span><span class="n">RetrievedChunk</span><span class="p">],</span>    <span class="c1"># the trimmed list actually sent to the LLM</span>
+<span class="p">)</span>
+</code></pre></div>
+
+<p>The chat UI and CLI both render <code>ranked</code> as a candidate table; verbose mode
+exposes <code>len(seeds)</code> and <code>len(expanded)</code> for tuning.</p>
+<h2 id="why-this-shape">Why this shape<a class="headerlink" href="#why-this-shape" title="Permanent link">&para;</a></h2>
+<p>Hybrid retrieval gives you exact-phrase recall <em>and</em> paraphrase recall.
+Graph expansion gives you the <em>structural</em> recall — the connections you
+yourself drew between notes. The token budget keeps Claude&rsquo;s input bounded.
+The candidate floor keeps the user in the loop.</p>
+<p>The orchestrator is intentionally simple. The Phase 4 plan layers
+adaptive edge weighting (mutating those <code>weight=1.0</code> defaults based on which
+candidates you pick) and an observer LLM on top of this same plumbing — none
+of which require changing the retrieval surface above.</p>
+              
+            </div>
+          </div><footer>
+    <div class="rst-footer-buttons" role="navigation" aria-label="Footer Navigation">
+        <a href="../stores/" class="btn btn-neutral float-left" title="Stores"><span class="icon icon-circle-arrow-left"></span> Previous</a>
+        <a href="../llm/" class="btn btn-neutral float-right" title="LLM">Next <span class="icon icon-circle-arrow-right"></span></a>
+    </div>
+
+  <hr/>
+
+  <div role="contentinfo">
+    <!-- Copyright etc -->
+  </div>
+
+  Built with <a href="https://www.mkdocs.org/">MkDocs</a> using a <a href="https://github.com/readthedocs/sphinx_rtd_theme">theme</a> provided by <a href="https://readthedocs.org">Read the Docs</a>.
+</footer>
+          
+        </div>
+      </div>
+
+    </section>
+
+  </div>
+
+  <div class="rst-versions" role="note" aria-label="Versions">
+  <span class="rst-current-version" data-toggle="rst-current-version">
+    
+        <span>
+          <a href="https://github.com/evangress/my-daemon" class="fa fa-code-fork" style="color: #fcfcfc"> evangress/my-daemon</a>
+        </span>
+    
+    
+      <span><a href="../stores/" style="color: #fcfcfc">&laquo; Previous</a></span>
+    
+    
+      <span><a href="../llm/" style="color: #fcfcfc">Next &raquo;</a></span>
+    
+  </span>
+</div>
+    <script src="../../js/jquery-3.6.0.min.js"></script>
+    <script>var base_url = "../..";</script>
+    <script src="../../js/theme_extra.js"></script>
+    <script src="../../js/theme.js"></script>
+      <script src="../../search/main.js"></script>
+    <script>
+        jQuery(function () {
+            SphinxRtdTheme.Navigation.enable(true);
+        });
+    </script>
+
+</body>
+</html>

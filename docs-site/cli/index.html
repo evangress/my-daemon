@@ -1,0 +1,355 @@
+<!DOCTYPE html>
+<html class="writer-html5" lang="en" >
+<head>
+    <meta charset="utf-8" />
+    <meta http-equiv="X-UA-Compatible" content="IE=edge" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" /><meta name="author" content="Evan Gress" /><link rel="canonical" href="https://my-daemon.ai/cli/" />
+      <link rel="shortcut icon" href="../img/favicon.ico" />
+    <title>CLI Reference - My Daemon</title>
+    <link rel="stylesheet" href="../css/theme.css" />
+    <link rel="stylesheet" href="../css/theme_extra.css" />
+        <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.8.0/styles/github.min.css" />
+    
+      <script>
+        // Current page data
+        var mkdocs_page_name = "CLI Reference";
+        var mkdocs_page_input_path = "cli.md";
+        var mkdocs_page_url = "/cli/";
+      </script>
+    
+    <!--[if lt IE 9]>
+      <script src="../js/html5shiv.min.js"></script>
+    <![endif]-->
+      <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.8.0/highlight.min.js"></script>
+        <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.8.0/languages/python.min.js"></script>
+        <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.8.0/languages/yaml.min.js"></script>
+        <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.8.0/languages/bash.min.js"></script>
+        <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.8.0/languages/sql.min.js"></script>
+      <script>hljs.highlightAll();</script> 
+</head>
+
+<body class="wy-body-for-nav" role="document">
+
+  <div class="wy-grid-for-nav">
+    <nav data-toggle="wy-nav-shift" class="wy-nav-side stickynav">
+    <div class="wy-side-scroll">
+      <div class="wy-side-nav-search">
+          <a href=".." class="icon icon-home"> My Daemon
+        </a><div role="search">
+  <form id ="rtd-search-form" class="wy-form" action="../search.html" method="get">
+      <input type="text" name="q" placeholder="Search docs" aria-label="Search docs" title="Type search term here" />
+  </form>
+</div>
+      </div>
+
+      <div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="Navigation menu">
+              <ul>
+                <li class="toctree-l1"><a class="reference internal" href="..">Home</a>
+                </li>
+              </ul>
+              <ul>
+                <li class="toctree-l1"><a class="reference internal" href="../getting-started/">Getting Started</a>
+                </li>
+              </ul>
+              <ul>
+                <li class="toctree-l1"><a class="reference internal" href="../architecture/">Architecture</a>
+                </li>
+              </ul>
+              <ul class="current">
+                <li class="toctree-l1 current"><a class="reference internal current" href="#">CLI Reference</a>
+    <ul class="current">
+    <li class="toctree-l2"><a class="reference internal" href="#top-level">Top-level</a>
+        <ul>
+    <li class="toctree-l3"><a class="reference internal" href="#daemon-init">daemon init</a>
+    </li>
+    <li class="toctree-l3"><a class="reference internal" href="#daemon-setup">daemon setup</a>
+    </li>
+    <li class="toctree-l3"><a class="reference internal" href="#daemon-chat">daemon chat</a>
+    </li>
+    <li class="toctree-l3"><a class="reference internal" href="#daemon-version">daemon version</a>
+    </li>
+        </ul>
+    </li>
+    <li class="toctree-l2"><a class="reference internal" href="#ingest-query">Ingest &amp; query</a>
+        <ul>
+    <li class="toctree-l3"><a class="reference internal" href="#daemon-ingest">daemon ingest</a>
+    </li>
+    <li class="toctree-l3"><a class="reference internal" href="#daemon-query">daemon query</a>
+    </li>
+    <li class="toctree-l3"><a class="reference internal" href="#daemon-ask">daemon ask</a>
+    </li>
+    <li class="toctree-l3"><a class="reference internal" href="#daemon-search">daemon search</a>
+    </li>
+        </ul>
+    </li>
+    <li class="toctree-l2"><a class="reference internal" href="#inspection">Inspection</a>
+        <ul>
+    <li class="toctree-l3"><a class="reference internal" href="#daemon-status">daemon status</a>
+    </li>
+    <li class="toctree-l3"><a class="reference internal" href="#daemon-graph-stats">daemon graph stats</a>
+    </li>
+        </ul>
+    </li>
+    <li class="toctree-l2"><a class="reference internal" href="#maintenance">Maintenance</a>
+        <ul>
+    <li class="toctree-l3"><a class="reference internal" href="#daemon-reset">daemon reset</a>
+    </li>
+    <li class="toctree-l3"><a class="reference internal" href="#daemon-models-download">daemon models download</a>
+    </li>
+        </ul>
+    </li>
+    <li class="toctree-l2"><a class="reference internal" href="#background-agents">Background agents</a>
+        <ul>
+    <li class="toctree-l3"><a class="reference internal" href="#daemon-extract">daemon extract</a>
+    </li>
+    <li class="toctree-l3"><a class="reference internal" href="#daemon-link">daemon link</a>
+    </li>
+    <li class="toctree-l3"><a class="reference internal" href="#daemon-reflect">daemon reflect</a>
+    </li>
+        </ul>
+    </li>
+    <li class="toctree-l2"><a class="reference internal" href="#environment-variable-overrides">Environment variable overrides</a>
+    </li>
+    <li class="toctree-l2"><a class="reference internal" href="#exit-codes">Exit codes</a>
+    </li>
+    </ul>
+                </li>
+              </ul>
+              <ul>
+                <li class="toctree-l1"><a class="reference internal" href="../configuration/">Configuration</a>
+                </li>
+              </ul>
+              <ul>
+                <li class="toctree-l1"><a class="reference internal" href="../background-agents/">Background Agents</a>
+                </li>
+              </ul>
+              <p class="caption"><span class="caption-text">Modules</span></p>
+              <ul>
+                  <li class="toctree-l1"><a class="reference internal" href="../modules/vault/">Vault</a>
+                  </li>
+                  <li class="toctree-l1"><a class="reference internal" href="../modules/embeddings/">Embeddings</a>
+                  </li>
+                  <li class="toctree-l1"><a class="reference internal" href="../modules/stores/">Stores</a>
+                  </li>
+                  <li class="toctree-l1"><a class="reference internal" href="../modules/retrieval/">Retrieval</a>
+                  </li>
+                  <li class="toctree-l1"><a class="reference internal" href="../modules/llm/">LLM</a>
+                  </li>
+                  <li class="toctree-l1"><a class="reference internal" href="../modules/pipeline/">Pipeline</a>
+                  </li>
+                  <li class="toctree-l1"><a class="reference internal" href="../modules/gui/">GUI</a>
+                  </li>
+              </ul>
+              <ul>
+                <li class="toctree-l1"><a class="reference internal" href="../theme/">Theme</a>
+                </li>
+              </ul>
+              <ul>
+                <li class="toctree-l1"><a class="reference internal" href="../roadmap/">Roadmap</a>
+                </li>
+              </ul>
+              <ul>
+                <li class="toctree-l1"><a class="reference internal" href="../development/">Development</a>
+                </li>
+              </ul>
+      </div>
+    </div>
+    </nav>
+
+    <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap">
+      <nav class="wy-nav-top" role="navigation" aria-label="Mobile navigation menu">
+          <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
+          <a href="..">My Daemon</a>
+        
+      </nav>
+      <div class="wy-nav-content">
+        <div class="rst-content"><div role="navigation" aria-label="breadcrumbs navigation">
+  <ul class="wy-breadcrumbs">
+    <li><a href=".." class="icon icon-home" aria-label="Docs"></a></li>
+      <li class="breadcrumb-item active">CLI Reference</li>
+    <li class="wy-breadcrumbs-aside">
+          <a href="https://github.com/evangress/my-daemon/edit/master/docs-source/cli.md">Edit on evangress/my-daemon</a>
+    </li>
+  </ul>
+  <hr/>
+</div>
+          <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
+            <div class="section" itemprop="articleBody">
+              
+                <h1 id="cli-reference">CLI Reference<a class="headerlink" href="#cli-reference" title="Permanent link">&para;</a></h1>
+<p>The <code>daemon</code> binary is a Typer app installed by the project. Every command
+below loads <code>config.yaml</code> from the current working directory (or
+<code>$MY_DAEMON_CONFIG</code>), merges environment overrides, and reads
+<code>ANTHROPIC_API_KEY</code> from the environment / <code>.env</code>.</p>
+<p>Run <code>daemon --help</code> for the live listing.</p>
+<h2 id="top-level">Top-level<a class="headerlink" href="#top-level" title="Permanent link">&para;</a></h2>
+<h3 id="daemon-init"><code>daemon init</code><a class="headerlink" href="#daemon-init" title="Permanent link">&para;</a></h3>
+<div class="codehilite"><pre><span></span><code>daemon init [--vault PATH] [--force]
+</code></pre></div>
+
+<p>Generates <code>config.yaml</code> (from <code>config.example.yaml</code>) and <code>.env</code> (from
+<code>.env.example</code>). If <code>--vault</code> is omitted, prompts for the vault path
+interactively. Refuses to overwrite an existing <code>config.yaml</code> without
+<code>--force</code>.</p>
+<h3 id="daemon-setup"><code>daemon setup</code><a class="headerlink" href="#daemon-setup" title="Permanent link">&para;</a></h3>
+<p>Opens the Tkinter setup window. Lets you browse to your vault folder, paste
+the Anthropic API key (<code>.env</code> always; on Windows additionally via <code>setx</code> so
+the key is a true OS env var), and — on Windows — toggle a daily
+<code>daemon reflect</code> job in Task Scheduler.</p>
+<h3 id="daemon-chat"><code>daemon chat</code><a class="headerlink" href="#daemon-chat" title="Permanent link">&para;</a></h3>
+<div class="codehilite"><pre><span></span><code>daemon chat [--host 127.0.0.1] [--port 8765] [--native]
+</code></pre></div>
+
+<p>Launches the warm-themed NiceGUI chat window. Streams Claude&rsquo;s response as it
+generates. The retrieval pipeline + feedback logging are identical to the CLI
+<code>query</code> command. <code>--native</code> opens as a desktop window via pywebview (install
+separately).</p>
+<h3 id="daemon-version"><code>daemon version</code><a class="headerlink" href="#daemon-version" title="Permanent link">&para;</a></h3>
+<p>Print the installed package version.</p>
+<h2 id="ingest-query">Ingest &amp; query<a class="headerlink" href="#ingest-query" title="Permanent link">&para;</a></h2>
+<h3 id="daemon-ingest"><code>daemon ingest</code><a class="headerlink" href="#daemon-ingest" title="Permanent link">&para;</a></h3>
+<div class="codehilite"><pre><span></span><code>daemon ingest [--full] [-v]
+</code></pre></div>
+
+<p>Walk the vault, embed new/changed notes, update the graph. Incremental by
+default — the manifest at <code>./data/manifest.json</code> lets unchanged notes be
+skipped. <code>--full</code> clears the graph and manifest and re-ingests everything;
+necessary after switching <code>embeddings.hybrid</code> on or off.</p>
+<h3 id="daemon-query"><code>daemon query</code><a class="headerlink" href="#daemon-query" title="Permanent link">&para;</a></h3>
+<div class="codehilite"><pre><span></span><code>daemon query &lt;text&gt; [--no-llm] [-v]
+</code></pre></div>
+
+<p>Ask the daemon a question. Prints the synthesized answer, then a ranked
+candidates table (at least <code>retrieval.candidate_pool</code>, default 3). <code>--no-llm</code>
+skips synthesis and shows ranked context only — useful while tuning retrieval.
+<code>-v</code> adds seeds/expanded counts, latency, and the feedback row id.</p>
+<h3 id="daemon-ask"><code>daemon ask</code><a class="headerlink" href="#daemon-ask" title="Permanent link">&para;</a></h3>
+<p>Alias for <code>daemon query</code>.</p>
+<h3 id="daemon-search"><code>daemon search</code><a class="headerlink" href="#daemon-search" title="Permanent link">&para;</a></h3>
+<div class="codehilite"><pre><span></span><code>daemon search &lt;text&gt; [-k N]
+</code></pre></div>
+
+<p>Vector-only debug path: no graph expansion, no LLM. Useful for sanity-checking
+the embedding model and seeing what the dense+sparse fusion is returning
+before the expander touches it.</p>
+<h2 id="inspection">Inspection<a class="headerlink" href="#inspection" title="Permanent link">&para;</a></h2>
+<h3 id="daemon-status"><code>daemon status</code><a class="headerlink" href="#daemon-status" title="Permanent link">&para;</a></h3>
+<p>Prints the vault path, vector chunk count, graph note/tag/edge counts, and
+the manifest location.</p>
+<h3 id="daemon-graph-stats"><code>daemon graph stats</code><a class="headerlink" href="#daemon-graph-stats" title="Permanent link">&para;</a></h3>
+<p>Top notes by PageRank and top tags by degree. Reads from the gpickle; no
+LLM or vector calls.</p>
+<h2 id="maintenance">Maintenance<a class="headerlink" href="#maintenance" title="Permanent link">&para;</a></h2>
+<h3 id="daemon-reset"><code>daemon reset</code><a class="headerlink" href="#daemon-reset" title="Permanent link">&para;</a></h3>
+<div class="codehilite"><pre><span></span><code>daemon reset [--yes]
+</code></pre></div>
+
+<p>Deletes the entire <code>./data/</code> directory (Qdrant storage, models cache, graph
+pickle, manifest, feedback DB). Prompts for confirmation unless <code>--yes</code>.
+<strong>Never touches the vault itself.</strong></p>
+<h3 id="daemon-models-download"><code>daemon models download</code><a class="headerlink" href="#daemon-models-download" title="Permanent link">&para;</a></h3>
+<p>Forces a download of the embedding model(s) into <code>embeddings.cache_folder</code>
+(default <code>./data/models/</code>). The dense model always; the sparse model too when
+<code>embeddings.hybrid: true</code>. After this, queries run fully offline (no HF Hub
+calls) until the cache is cleared.</p>
+<h2 id="background-agents">Background agents<a class="headerlink" href="#background-agents" title="Permanent link">&para;</a></h2>
+<p>All three writeback jobs refuse to write until <code>agent.enabled: true</code> in
+<code>config.yaml</code>. They accept <code>--dry-run</code> to preview at any time.</p>
+<h3 id="daemon-extract"><code>daemon extract</code><a class="headerlink" href="#daemon-extract" title="Permanent link">&para;</a></h3>
+<div class="codehilite"><pre><span></span><code>daemon extract [--all] [--note PATH] [--dry-run] [-v]
+</code></pre></div>
+
+<p>Append an <code>## Agent Notes</code> section (summary, key points, themes, feelings,
+open questions) to recently-changed notes — between
+<code>&lt;!-- daemon:start --&gt; ... &lt;!-- daemon:end --&gt;</code> sentinels so re-runs are
+idempotent. <code>--all</code> overrides the &ldquo;changed since last run&rdquo; filter;
+<code>--note &lt;relative-path&gt;</code> restricts to a single note.</p>
+<h3 id="daemon-link"><code>daemon link</code><a class="headerlink" href="#daemon-link" title="Permanent link">&para;</a></h3>
+<div class="codehilite"><pre><span></span><code>daemon link [--note PATH] [--dry-run] [--no-llm] [-v]
+</code></pre></div>
+
+<p>Walk the vault, propose wikilinks and tags. <strong>Auto-applies</strong> wikilinks at
+cosine ≥ <code>agent.link_apply_cosine</code> (default 0.85) <em>and</em> the target title
+appears verbatim in the source body. <strong>Auto-applies</strong> tags carried by ≥
+<code>agent.tag_apply_min_neighbor_count</code> graph-nearby notes (default 4).
+Borderline candidates are written to
+<code>&lt;vault&gt;/Agent/link-suggestions-YYYY-MM-DD.md</code> for you to review. <code>--no-llm</code>
+skips the LLM second-opinion.</p>
+<h3 id="daemon-reflect"><code>daemon reflect</code><a class="headerlink" href="#daemon-reflect" title="Permanent link">&para;</a></h3>
+<div class="codehilite"><pre><span></span><code>daemon reflect [--theme NAME] [--dry-run] [-v]
+</code></pre></div>
+
+<p>Update themed memory files in <code>&lt;vault&gt;/Agent/memory-&lt;theme&gt;.md</code> (default
+themes: personality, projects, relationships, themes). Pulls recent notes
+(last <code>agent.reflect_lookback_days</code>) and recent chats from the feedback log,
+sends them to Claude with the prior memory as context, and rewrites the
+file atomically with a snapshot beforehand. Also appends a one-block-per-run
+summary to <code>&lt;vault&gt;/Agent/memory-rolling.md</code>.</p>
+<h2 id="environment-variable-overrides">Environment variable overrides<a class="headerlink" href="#environment-variable-overrides" title="Permanent link">&para;</a></h2>
+<p>Any config key can be overridden by an env var with the <code>MY_DAEMON_</code> prefix
+and double-underscore nesting:</p>
+<div class="codehilite"><pre><span></span><code><span class="nb">export</span><span class="w"> </span><span class="nv">MY_DAEMON_LLM__MODEL</span><span class="o">=</span>claude-opus-4-7
+<span class="nb">export</span><span class="w"> </span><span class="nv">MY_DAEMON_GRAPH__EXPANSION_DEPTH</span><span class="o">=</span><span class="m">3</span>
+<span class="nb">export</span><span class="w"> </span><span class="nv">MY_DAEMON_EMBEDDINGS__HYBRID</span><span class="o">=</span><span class="nb">false</span>
+</code></pre></div>
+
+<p><code>MY_DAEMON_CONFIG=/path/to/other.yaml</code> chooses an alternate config file.</p>
+<h2 id="exit-codes">Exit codes<a class="headerlink" href="#exit-codes" title="Permanent link">&para;</a></h2>
+<ul>
+<li><code>0</code> — success.</li>
+<li><code>1</code> — refused (missing <code>config.yaml</code>, <code>agent.enabled</code> false, user declined
+  a destructive prompt).</li>
+<li>Other non-zero — unexpected exception; see the stack trace.</li>
+</ul>
+              
+            </div>
+          </div><footer>
+    <div class="rst-footer-buttons" role="navigation" aria-label="Footer Navigation">
+        <a href="../architecture/" class="btn btn-neutral float-left" title="Architecture"><span class="icon icon-circle-arrow-left"></span> Previous</a>
+        <a href="../configuration/" class="btn btn-neutral float-right" title="Configuration">Next <span class="icon icon-circle-arrow-right"></span></a>
+    </div>
+
+  <hr/>
+
+  <div role="contentinfo">
+    <!-- Copyright etc -->
+  </div>
+
+  Built with <a href="https://www.mkdocs.org/">MkDocs</a> using a <a href="https://github.com/readthedocs/sphinx_rtd_theme">theme</a> provided by <a href="https://readthedocs.org">Read the Docs</a>.
+</footer>
+          
+        </div>
+      </div>
+
+    </section>
+
+  </div>
+
+  <div class="rst-versions" role="note" aria-label="Versions">
+  <span class="rst-current-version" data-toggle="rst-current-version">
+    
+        <span>
+          <a href="https://github.com/evangress/my-daemon" class="fa fa-code-fork" style="color: #fcfcfc"> evangress/my-daemon</a>
+        </span>
+    
+    
+      <span><a href="../architecture/" style="color: #fcfcfc">&laquo; Previous</a></span>
+    
+    
+      <span><a href="../configuration/" style="color: #fcfcfc">Next &raquo;</a></span>
+    
+  </span>
+</div>
+    <script src="../js/jquery-3.6.0.min.js"></script>
+    <script>var base_url = "..";</script>
+    <script src="../js/theme_extra.js"></script>
+    <script src="../js/theme.js"></script>
+      <script src="../search/main.js"></script>
+    <script>
+        jQuery(function () {
+            SphinxRtdTheme.Navigation.enable(true);
+        });
+    </script>
+
+</body>
+</html>

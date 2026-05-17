@@ -1,0 +1,604 @@
+<!DOCTYPE html>
+<html class="writer-html5" lang="en" >
+<head>
+    <meta charset="utf-8" />
+    <meta http-equiv="X-UA-Compatible" content="IE=edge" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" /><meta name="author" content="Evan Gress" /><link rel="canonical" href="https://my-daemon.ai/configuration/" />
+      <link rel="shortcut icon" href="../img/favicon.ico" />
+    <title>Configuration - My Daemon</title>
+    <link rel="stylesheet" href="../css/theme.css" />
+    <link rel="stylesheet" href="../css/theme_extra.css" />
+        <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.8.0/styles/github.min.css" />
+    
+      <script>
+        // Current page data
+        var mkdocs_page_name = "Configuration";
+        var mkdocs_page_input_path = "configuration.md";
+        var mkdocs_page_url = "/configuration/";
+      </script>
+    
+    <!--[if lt IE 9]>
+      <script src="../js/html5shiv.min.js"></script>
+    <![endif]-->
+      <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.8.0/highlight.min.js"></script>
+        <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.8.0/languages/python.min.js"></script>
+        <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.8.0/languages/yaml.min.js"></script>
+        <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.8.0/languages/bash.min.js"></script>
+        <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.8.0/languages/sql.min.js"></script>
+      <script>hljs.highlightAll();</script> 
+</head>
+
+<body class="wy-body-for-nav" role="document">
+
+  <div class="wy-grid-for-nav">
+    <nav data-toggle="wy-nav-shift" class="wy-nav-side stickynav">
+    <div class="wy-side-scroll">
+      <div class="wy-side-nav-search">
+          <a href=".." class="icon icon-home"> My Daemon
+        </a><div role="search">
+  <form id ="rtd-search-form" class="wy-form" action="../search.html" method="get">
+      <input type="text" name="q" placeholder="Search docs" aria-label="Search docs" title="Type search term here" />
+  </form>
+</div>
+      </div>
+
+      <div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="Navigation menu">
+              <ul>
+                <li class="toctree-l1"><a class="reference internal" href="..">Home</a>
+                </li>
+              </ul>
+              <ul>
+                <li class="toctree-l1"><a class="reference internal" href="../getting-started/">Getting Started</a>
+                </li>
+              </ul>
+              <ul>
+                <li class="toctree-l1"><a class="reference internal" href="../architecture/">Architecture</a>
+                </li>
+              </ul>
+              <ul>
+                <li class="toctree-l1"><a class="reference internal" href="../cli/">CLI Reference</a>
+                </li>
+              </ul>
+              <ul class="current">
+                <li class="toctree-l1 current"><a class="reference internal current" href="#">Configuration</a>
+    <ul class="current">
+    <li class="toctree-l2"><a class="reference internal" href="#section-by-section">Section by section</a>
+        <ul>
+    <li class="toctree-l3"><a class="reference internal" href="#vault">vault</a>
+    </li>
+    <li class="toctree-l3"><a class="reference internal" href="#chunking">chunking</a>
+    </li>
+    <li class="toctree-l3"><a class="reference internal" href="#embeddings">embeddings</a>
+    </li>
+    <li class="toctree-l3"><a class="reference internal" href="#vector_store">vector_store</a>
+    </li>
+    <li class="toctree-l3"><a class="reference internal" href="#graph">graph</a>
+    </li>
+    <li class="toctree-l3"><a class="reference internal" href="#retrieval">retrieval</a>
+    </li>
+    <li class="toctree-l3"><a class="reference internal" href="#llm">llm</a>
+    </li>
+    <li class="toctree-l3"><a class="reference internal" href="#agent">agent</a>
+    </li>
+    <li class="toctree-l3"><a class="reference internal" href="#feedback">feedback</a>
+    </li>
+    <li class="toctree-l3"><a class="reference internal" href="#logging">logging</a>
+    </li>
+        </ul>
+    </li>
+    <li class="toctree-l2"><a class="reference internal" href="#switching-models">Switching models</a>
+    </li>
+    <li class="toctree-l2"><a class="reference internal" href="#validation">Validation</a>
+    </li>
+    </ul>
+                </li>
+              </ul>
+              <ul>
+                <li class="toctree-l1"><a class="reference internal" href="../background-agents/">Background Agents</a>
+                </li>
+              </ul>
+              <p class="caption"><span class="caption-text">Modules</span></p>
+              <ul>
+                  <li class="toctree-l1"><a class="reference internal" href="../modules/vault/">Vault</a>
+                  </li>
+                  <li class="toctree-l1"><a class="reference internal" href="../modules/embeddings/">Embeddings</a>
+                  </li>
+                  <li class="toctree-l1"><a class="reference internal" href="../modules/stores/">Stores</a>
+                  </li>
+                  <li class="toctree-l1"><a class="reference internal" href="../modules/retrieval/">Retrieval</a>
+                  </li>
+                  <li class="toctree-l1"><a class="reference internal" href="../modules/llm/">LLM</a>
+                  </li>
+                  <li class="toctree-l1"><a class="reference internal" href="../modules/pipeline/">Pipeline</a>
+                  </li>
+                  <li class="toctree-l1"><a class="reference internal" href="../modules/gui/">GUI</a>
+                  </li>
+              </ul>
+              <ul>
+                <li class="toctree-l1"><a class="reference internal" href="../theme/">Theme</a>
+                </li>
+              </ul>
+              <ul>
+                <li class="toctree-l1"><a class="reference internal" href="../roadmap/">Roadmap</a>
+                </li>
+              </ul>
+              <ul>
+                <li class="toctree-l1"><a class="reference internal" href="../development/">Development</a>
+                </li>
+              </ul>
+      </div>
+    </div>
+    </nav>
+
+    <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap">
+      <nav class="wy-nav-top" role="navigation" aria-label="Mobile navigation menu">
+          <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
+          <a href="..">My Daemon</a>
+        
+      </nav>
+      <div class="wy-nav-content">
+        <div class="rst-content"><div role="navigation" aria-label="breadcrumbs navigation">
+  <ul class="wy-breadcrumbs">
+    <li><a href=".." class="icon icon-home" aria-label="Docs"></a></li>
+      <li class="breadcrumb-item active">Configuration</li>
+    <li class="wy-breadcrumbs-aside">
+          <a href="https://github.com/evangress/my-daemon/edit/master/docs-source/configuration.md">Edit on evangress/my-daemon</a>
+    </li>
+  </ul>
+  <hr/>
+</div>
+          <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
+            <div class="section" itemprop="articleBody">
+              
+                <h1 id="configuration">Configuration<a class="headerlink" href="#configuration" title="Permanent link">&para;</a></h1>
+<p>Every knob the daemon exposes lives in <code>config.yaml</code>. Defaults come from
+<code>src/my_daemon/config.py</code>; values in <code>config.yaml</code> override defaults; env
+vars (<code>MY_DAEMON_&lt;SECTION&gt;__&lt;KEY&gt;</code>) override the YAML.</p>
+<p>The Anthropic API key is <strong>never</strong> read from <code>config.yaml</code>. It comes from the
+environment (or the project-local <code>.env</code>, auto-loaded on startup).</p>
+<h2 id="section-by-section">Section by section<a class="headerlink" href="#section-by-section" title="Permanent link">&para;</a></h2>
+<h3 id="vault"><code>vault</code><a class="headerlink" href="#vault" title="Permanent link">&para;</a></h3>
+<div class="codehilite"><pre><span></span><code><span class="nt">vault</span><span class="p">:</span>
+<span class="w">  </span><span class="nt">path</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">~/Documents/Obsidian/MyVault</span>
+<span class="w">  </span><span class="nt">exclude_dirs</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">[</span><span class="s">&quot;.obsidian&quot;</span><span class="p p-Indicator">,</span><span class="w"> </span><span class="s">&quot;.trash&quot;</span><span class="p p-Indicator">,</span><span class="w"> </span><span class="s">&quot;templates&quot;</span><span class="p p-Indicator">,</span><span class="w"> </span><span class="s">&quot;Agent&quot;</span><span class="p p-Indicator">]</span>
+</code></pre></div>
+
+<table>
+<thead>
+<tr>
+<th>Key</th>
+<th>Default</th>
+<th>Notes</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>path</code></td>
+<td><code>~/Documents/Obsidian/MyVault</code></td>
+<td>Vault root. Tilde-expanded at load.</td>
+</tr>
+<tr>
+<td><code>exclude_dirs</code></td>
+<td><code>.obsidian, .trash, templates, Agent</code></td>
+<td>Case-insensitive directory names to skip during walk. <code>Agent</code> is the daemon&rsquo;s own folder — keep it excluded or your reflection memory will start ingesting itself.</td>
+</tr>
+</tbody>
+</table>
+<h3 id="chunking"><code>chunking</code><a class="headerlink" href="#chunking" title="Permanent link">&para;</a></h3>
+<div class="codehilite"><pre><span></span><code><span class="nt">chunking</span><span class="p">:</span>
+<span class="w">  </span><span class="nt">max_tokens</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">512</span>
+<span class="w">  </span><span class="nt">overlap_tokens</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">50</span>
+<span class="w">  </span><span class="nt">split_on_headers</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">[</span><span class="s">&quot;#&quot;</span><span class="p p-Indicator">,</span><span class="w"> </span><span class="s">&quot;##&quot;</span><span class="p p-Indicator">,</span><span class="w"> </span><span class="s">&quot;###&quot;</span><span class="p p-Indicator">]</span>
+</code></pre></div>
+
+<table>
+<thead>
+<tr>
+<th>Key</th>
+<th>Default</th>
+<th>Notes</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>max_tokens</code></td>
+<td><code>512</code></td>
+<td>Approximate token budget per chunk (heuristic = chars/4). Oversized header sections are secondary-split.</td>
+</tr>
+<tr>
+<td><code>overlap_tokens</code></td>
+<td><code>50</code></td>
+<td>Tail/head overlap when secondary-splitting.</td>
+</tr>
+<tr>
+<td><code>split_on_headers</code></td>
+<td>H1/H2/H3</td>
+<td>Primary split level. Lower headings stay inside their parent chunk.</td>
+</tr>
+</tbody>
+</table>
+<h3 id="embeddings"><code>embeddings</code><a class="headerlink" href="#embeddings" title="Permanent link">&para;</a></h3>
+<div class="codehilite"><pre><span></span><code><span class="nt">embeddings</span><span class="p">:</span>
+<span class="w">  </span><span class="nt">model</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">BAAI/bge-small-en-v1.5</span>
+<span class="w">  </span><span class="nt">batch_size</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">32</span>
+<span class="w">  </span><span class="nt">device</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">auto</span><span class="w">         </span><span class="c1"># auto | cpu | cuda | mps</span>
+<span class="w">  </span><span class="nt">cache_folder</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">./data/models</span>
+<span class="w">  </span><span class="nt">hybrid</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">true</span>
+<span class="w">  </span><span class="nt">sparse_model</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">Qdrant/bm42-all-minilm-l6-v2-attentions</span>
+</code></pre></div>
+
+<table>
+<thead>
+<tr>
+<th>Key</th>
+<th>Default</th>
+<th>Notes</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>model</code></td>
+<td><code>BAAI/bge-small-en-v1.5</code></td>
+<td>384-dim dense encoder. Fast on CPU.</td>
+</tr>
+<tr>
+<td><code>batch_size</code></td>
+<td><code>32</code></td>
+<td>Encode batch size. Raise if you have GPU memory.</td>
+</tr>
+<tr>
+<td><code>device</code></td>
+<td><code>auto</code></td>
+<td><code>auto</code> lets sentence-transformers pick; override to <code>cpu</code>/<code>cuda</code>/<code>mps</code>.</td>
+</tr>
+<tr>
+<td><code>cache_folder</code></td>
+<td><code>./data/models</code></td>
+<td>Model cache. First run populates; later runs stay offline.</td>
+</tr>
+<tr>
+<td><code>hybrid</code></td>
+<td><code>true</code></td>
+<td>If true, also store a sparse vector and fuse with dense via Qdrant RRF on query.</td>
+</tr>
+<tr>
+<td><code>sparse_model</code></td>
+<td><code>Qdrant/bm42-all-minilm-l6-v2-attentions</code></td>
+<td>fastembed BM42. Toggling <code>hybrid</code> requires <code>daemon ingest --full</code>.</td>
+</tr>
+</tbody>
+</table>
+<h3 id="vector_store"><code>vector_store</code><a class="headerlink" href="#vector_store" title="Permanent link">&para;</a></h3>
+<div class="codehilite"><pre><span></span><code><span class="nt">vector_store</span><span class="p">:</span>
+<span class="w">  </span><span class="nt">backend</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">qdrant</span>
+<span class="w">  </span><span class="nt">qdrant</span><span class="p">:</span>
+<span class="w">    </span><span class="nt">url</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">http://localhost:6333</span>
+<span class="w">    </span><span class="nt">collection</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">chunks</span>
+</code></pre></div>
+
+<table>
+<thead>
+<tr>
+<th>Key</th>
+<th>Default</th>
+<th>Notes</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>backend</code></td>
+<td><code>qdrant</code></td>
+<td>Only backend supported.</td>
+</tr>
+<tr>
+<td><code>qdrant.url</code></td>
+<td><code>http://localhost:6333</code></td>
+<td>HTTP endpoint. The Docker compose service binds here.</td>
+</tr>
+<tr>
+<td><code>qdrant.collection</code></td>
+<td><code>chunks</code></td>
+<td>Collection name.</td>
+</tr>
+</tbody>
+</table>
+<h3 id="graph"><code>graph</code><a class="headerlink" href="#graph" title="Permanent link">&para;</a></h3>
+<div class="codehilite"><pre><span></span><code><span class="nt">graph</span><span class="p">:</span>
+<span class="w">  </span><span class="nt">path</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">./data/graph.gpickle</span>
+<span class="w">  </span><span class="nt">manifest_path</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">./data/manifest.json</span>
+<span class="w">  </span><span class="nt">expansion_depth</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">2</span>
+<span class="w">  </span><span class="nt">distance_decay</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">0.5</span>
+</code></pre></div>
+
+<table>
+<thead>
+<tr>
+<th>Key</th>
+<th>Default</th>
+<th>Notes</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>path</code></td>
+<td><code>./data/graph.gpickle</code></td>
+<td>Pickle of the <code>MultiDiGraph</code>.</td>
+</tr>
+<tr>
+<td><code>manifest_path</code></td>
+<td><code>./data/manifest.json</code></td>
+<td>Incremental-ingest tracker.</td>
+</tr>
+<tr>
+<td><code>expansion_depth</code></td>
+<td><code>2</code></td>
+<td>BFS depth from each seed. Sibling notes via a shared tag sit at distance 2.</td>
+</tr>
+<tr>
+<td><code>distance_decay</code></td>
+<td><code>0.5</code></td>
+<td><code>combined = vector_score * decay**distance</code> for expanded chunks.</td>
+</tr>
+</tbody>
+</table>
+<h3 id="retrieval"><code>retrieval</code><a class="headerlink" href="#retrieval" title="Permanent link">&para;</a></h3>
+<div class="codehilite"><pre><span></span><code><span class="nt">retrieval</span><span class="p">:</span>
+<span class="w">  </span><span class="nt">seed_top_k</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">8</span>
+<span class="w">  </span><span class="nt">context_token_budget</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">6000</span>
+<span class="w">  </span><span class="nt">candidate_pool</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">3</span>
+</code></pre></div>
+
+<table>
+<thead>
+<tr>
+<th>Key</th>
+<th>Default</th>
+<th>Notes</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>seed_top_k</code></td>
+<td><code>8</code></td>
+<td>Vector hits used as seeds.</td>
+</tr>
+<tr>
+<td><code>context_token_budget</code></td>
+<td><code>6000</code></td>
+<td>Cap on combined chunk text shipped to Claude.</td>
+</tr>
+<tr>
+<td><code>candidate_pool</code></td>
+<td><code>3</code></td>
+<td>Minimum candidates surfaced regardless of token budget — project policy is to always show at least N so the user picks the winner.</td>
+</tr>
+</tbody>
+</table>
+<h3 id="llm"><code>llm</code><a class="headerlink" href="#llm" title="Permanent link">&para;</a></h3>
+<div class="codehilite"><pre><span></span><code><span class="nt">llm</span><span class="p">:</span>
+<span class="w">  </span><span class="nt">provider</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">anthropic</span>
+<span class="w">  </span><span class="nt">model</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">claude-sonnet-4-6</span>
+<span class="w">  </span><span class="nt">max_tokens</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">2048</span>
+<span class="w">  </span><span class="nt">temperature</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">null</span>
+<span class="w">  </span><span class="nt">batch_model</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">claude-haiku-4-5</span>
+</code></pre></div>
+
+<table>
+<thead>
+<tr>
+<th>Key</th>
+<th>Default</th>
+<th>Notes</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>provider</code></td>
+<td><code>anthropic</code></td>
+<td>Only provider supported.</td>
+</tr>
+<tr>
+<td><code>model</code></td>
+<td><code>claude-sonnet-4-6</code></td>
+<td>Synthesis model for chat / <code>daemon query</code>.</td>
+</tr>
+<tr>
+<td><code>max_tokens</code></td>
+<td><code>2048</code></td>
+<td>Cap on synthesized response length.</td>
+</tr>
+<tr>
+<td><code>temperature</code></td>
+<td><code>null</code></td>
+<td>Leave null for reasoning-capable models (e.g. Opus 4.7) which reject <code>temperature</code>. Float (e.g. 0.3) for Sonnet/Haiku.</td>
+</tr>
+<tr>
+<td><code>batch_model</code></td>
+<td><code>claude-haiku-4-5</code></td>
+<td>Cheaper model used by the three background-agent jobs (~15× cheaper than Opus). Falls back to <code>model</code> when null.</td>
+</tr>
+</tbody>
+</table>
+<h3 id="agent"><code>agent</code><a class="headerlink" href="#agent" title="Permanent link">&para;</a></h3>
+<div class="codehilite"><pre><span></span><code><span class="nt">agent</span><span class="p">:</span>
+<span class="w">  </span><span class="nt">enabled</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">false</span>
+<span class="w">  </span><span class="nt">folder_name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">Agent</span>
+<span class="w">  </span><span class="nt">link_apply_cosine</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">0.85</span>
+<span class="w">  </span><span class="nt">link_apply_requires_title_substring</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">true</span>
+<span class="w">  </span><span class="nt">link_suggest_cosine</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">0.78</span>
+<span class="w">  </span><span class="nt">link_max_per_note</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">5</span>
+<span class="w">  </span><span class="nt">tag_apply_min_neighbor_count</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">4</span>
+<span class="w">  </span><span class="nt">extract_min_word_count</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">80</span>
+<span class="w">  </span><span class="nt">extract_skip_if_processed_within_hours</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">18</span>
+<span class="w">  </span><span class="nt">reflect_themes</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">[</span><span class="nv">personality</span><span class="p p-Indicator">,</span><span class="w"> </span><span class="nv">projects</span><span class="p p-Indicator">,</span><span class="w"> </span><span class="nv">relationships</span><span class="p p-Indicator">,</span><span class="w"> </span><span class="nv">themes</span><span class="p p-Indicator">]</span>
+<span class="w">  </span><span class="nt">reflect_lookback_days</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">7</span>
+<span class="w">  </span><span class="nt">write_grace_minutes</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">30</span>
+</code></pre></div>
+
+<table>
+<thead>
+<tr>
+<th>Key</th>
+<th>Default</th>
+<th>Notes</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>enabled</code></td>
+<td><code>false</code></td>
+<td>Master switch. Every writeback command refuses to write unless this is true. <code>--dry-run</code> works regardless.</td>
+</tr>
+<tr>
+<td><code>folder_name</code></td>
+<td><code>Agent</code></td>
+<td>The daemon&rsquo;s own folder under the vault — backups, suggestion files, memory files all live here. The writer refuses to touch anything inside it.</td>
+</tr>
+<tr>
+<td><code>link_apply_cosine</code></td>
+<td><code>0.85</code></td>
+<td>Auto-apply threshold for the linker.</td>
+</tr>
+<tr>
+<td><code>link_apply_requires_title_substring</code></td>
+<td><code>true</code></td>
+<td>Additional gate: the target title must appear verbatim (case-insensitive) in the source body.</td>
+</tr>
+<tr>
+<td><code>link_suggest_cosine</code></td>
+<td><code>0.78</code></td>
+<td>Between this and <code>link_apply_cosine</code>, candidates land in <code>Agent/link-suggestions-YYYY-MM-DD.md</code>.</td>
+</tr>
+<tr>
+<td><code>link_max_per_note</code></td>
+<td><code>5</code></td>
+<td>Cap on auto-applied wikilinks per note per run.</td>
+</tr>
+<tr>
+<td><code>tag_apply_min_neighbor_count</code></td>
+<td><code>4</code></td>
+<td>Tag is auto-applied if ≥ N graph neighbors carry it and the source doesn&rsquo;t.</td>
+</tr>
+<tr>
+<td><code>extract_min_word_count</code></td>
+<td><code>80</code></td>
+<td>Don&rsquo;t extract observations from stubs.</td>
+</tr>
+<tr>
+<td><code>extract_skip_if_processed_within_hours</code></td>
+<td><code>18</code></td>
+<td>Currently advisory — the extractor primarily uses mtime-based dedup.</td>
+</tr>
+<tr>
+<td><code>reflect_themes</code></td>
+<td>personality, projects, relationships, themes</td>
+<td>One <code>memory-&lt;theme&gt;.md</code> file per theme.</td>
+</tr>
+<tr>
+<td><code>reflect_lookback_days</code></td>
+<td><code>7</code></td>
+<td>Window of &ldquo;recent&rdquo; notes for the reflection prompt.</td>
+</tr>
+<tr>
+<td><code>write_grace_minutes</code></td>
+<td><code>30</code></td>
+<td>The writer skips any file modified within this many minutes (avoids collisions with a save in progress).</td>
+</tr>
+</tbody>
+</table>
+<h3 id="feedback"><code>feedback</code><a class="headerlink" href="#feedback" title="Permanent link">&para;</a></h3>
+<div class="codehilite"><pre><span></span><code><span class="nt">feedback</span><span class="p">:</span>
+<span class="w">  </span><span class="nt">db_path</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">./data/feedback.db</span>
+</code></pre></div>
+
+<table>
+<thead>
+<tr>
+<th>Key</th>
+<th>Default</th>
+<th>Notes</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>db_path</code></td>
+<td><code>./data/feedback.db</code></td>
+<td>SQLite file. Holds both the <code>feedback</code> table (every query) and the three <code>agent_*_runs</code> state tables. One file to back up.</td>
+</tr>
+</tbody>
+</table>
+<h3 id="logging"><code>logging</code><a class="headerlink" href="#logging" title="Permanent link">&para;</a></h3>
+<div class="codehilite"><pre><span></span><code><span class="nt">logging</span><span class="p">:</span>
+<span class="w">  </span><span class="nt">level</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">INFO</span>
+</code></pre></div>
+
+<p>Standard Python log level. The CLI&rsquo;s verbose flags layer on top of this.</p>
+<h2 id="switching-models">Switching models<a class="headerlink" href="#switching-models" title="Permanent link">&para;</a></h2>
+<p>Change models without re-editing the YAML:</p>
+<div class="codehilite"><pre><span></span><code><span class="c1"># A one-off Opus query with a roomier budget</span>
+<span class="nv">MY_DAEMON_LLM__MODEL</span><span class="o">=</span>claude-opus-4-7<span class="w"> </span><span class="se">\</span>
+<span class="nv">MY_DAEMON_LLM__MAX_TOKENS</span><span class="o">=</span><span class="m">4096</span><span class="w"> </span><span class="se">\</span>
+<span class="w">  </span>daemon<span class="w"> </span>query<span class="w"> </span><span class="s2">&quot;draw a long thread through the last six months of journaling&quot;</span>
+
+<span class="c1"># Cheap, dense-only retrieval for a single run</span>
+<span class="nv">MY_DAEMON_EMBEDDINGS__HYBRID</span><span class="o">=</span><span class="nb">false</span><span class="w"> </span>daemon<span class="w"> </span>search<span class="w"> </span><span class="s2">&quot;exact phrase here&quot;</span>
+</code></pre></div>
+
+<p>The <code>MY_DAEMON_</code> env-var override lane is type-checked the same way the YAML
+is, so a typo will fail at startup rather than silently use the wrong value.</p>
+<h2 id="validation">Validation<a class="headerlink" href="#validation" title="Permanent link">&para;</a></h2>
+<p><code>load_settings()</code> runs all values through Pydantic. If a field is invalid
+(wrong type, unsupported literal, missing required key), the CLI exits with a
+red-formatted error before any side-effect.</p>
+              
+            </div>
+          </div><footer>
+    <div class="rst-footer-buttons" role="navigation" aria-label="Footer Navigation">
+        <a href="../cli/" class="btn btn-neutral float-left" title="CLI Reference"><span class="icon icon-circle-arrow-left"></span> Previous</a>
+        <a href="../background-agents/" class="btn btn-neutral float-right" title="Background Agents">Next <span class="icon icon-circle-arrow-right"></span></a>
+    </div>
+
+  <hr/>
+
+  <div role="contentinfo">
+    <!-- Copyright etc -->
+  </div>
+
+  Built with <a href="https://www.mkdocs.org/">MkDocs</a> using a <a href="https://github.com/readthedocs/sphinx_rtd_theme">theme</a> provided by <a href="https://readthedocs.org">Read the Docs</a>.
+</footer>
+          
+        </div>
+      </div>
+
+    </section>
+
+  </div>
+
+  <div class="rst-versions" role="note" aria-label="Versions">
+  <span class="rst-current-version" data-toggle="rst-current-version">
+    
+        <span>
+          <a href="https://github.com/evangress/my-daemon" class="fa fa-code-fork" style="color: #fcfcfc"> evangress/my-daemon</a>
+        </span>
+    
+    
+      <span><a href="../cli/" style="color: #fcfcfc">&laquo; Previous</a></span>
+    
+    
+      <span><a href="../background-agents/" style="color: #fcfcfc">Next &raquo;</a></span>
+    
+  </span>
+</div>
+    <script src="../js/jquery-3.6.0.min.js"></script>
+    <script>var base_url = "..";</script>
+    <script src="../js/theme_extra.js"></script>
+    <script src="../js/theme.js"></script>
+      <script src="../search/main.js"></script>
+    <script>
+        jQuery(function () {
+            SphinxRtdTheme.Navigation.enable(true);
+        });
+    </script>
+
+</body>
+</html>

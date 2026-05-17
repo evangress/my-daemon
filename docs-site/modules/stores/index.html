@@ -1,0 +1,371 @@
+<!DOCTYPE html>
+<html class="writer-html5" lang="en" >
+<head>
+    <meta charset="utf-8" />
+    <meta http-equiv="X-UA-Compatible" content="IE=edge" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" /><meta name="author" content="Evan Gress" /><link rel="canonical" href="https://my-daemon.ai/modules/stores/" />
+      <link rel="shortcut icon" href="../../img/favicon.ico" />
+    <title>Stores - My Daemon</title>
+    <link rel="stylesheet" href="../../css/theme.css" />
+    <link rel="stylesheet" href="../../css/theme_extra.css" />
+        <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.8.0/styles/github.min.css" />
+    
+      <script>
+        // Current page data
+        var mkdocs_page_name = "Stores";
+        var mkdocs_page_input_path = "modules/stores.md";
+        var mkdocs_page_url = "/modules/stores/";
+      </script>
+    
+    <!--[if lt IE 9]>
+      <script src="../../js/html5shiv.min.js"></script>
+    <![endif]-->
+      <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.8.0/highlight.min.js"></script>
+        <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.8.0/languages/python.min.js"></script>
+        <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.8.0/languages/yaml.min.js"></script>
+        <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.8.0/languages/bash.min.js"></script>
+        <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.8.0/languages/sql.min.js"></script>
+      <script>hljs.highlightAll();</script> 
+</head>
+
+<body class="wy-body-for-nav" role="document">
+
+  <div class="wy-grid-for-nav">
+    <nav data-toggle="wy-nav-shift" class="wy-nav-side stickynav">
+    <div class="wy-side-scroll">
+      <div class="wy-side-nav-search">
+          <a href="../.." class="icon icon-home"> My Daemon
+        </a><div role="search">
+  <form id ="rtd-search-form" class="wy-form" action="../../search.html" method="get">
+      <input type="text" name="q" placeholder="Search docs" aria-label="Search docs" title="Type search term here" />
+  </form>
+</div>
+      </div>
+
+      <div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="Navigation menu">
+              <ul>
+                <li class="toctree-l1"><a class="reference internal" href="../..">Home</a>
+                </li>
+              </ul>
+              <ul>
+                <li class="toctree-l1"><a class="reference internal" href="../../getting-started/">Getting Started</a>
+                </li>
+              </ul>
+              <ul>
+                <li class="toctree-l1"><a class="reference internal" href="../../architecture/">Architecture</a>
+                </li>
+              </ul>
+              <ul>
+                <li class="toctree-l1"><a class="reference internal" href="../../cli/">CLI Reference</a>
+                </li>
+              </ul>
+              <ul>
+                <li class="toctree-l1"><a class="reference internal" href="../../configuration/">Configuration</a>
+                </li>
+              </ul>
+              <ul>
+                <li class="toctree-l1"><a class="reference internal" href="../../background-agents/">Background Agents</a>
+                </li>
+              </ul>
+              <p class="caption"><span class="caption-text">Modules</span></p>
+              <ul class="current">
+                  <li class="toctree-l1"><a class="reference internal" href="../vault/">Vault</a>
+                  </li>
+                  <li class="toctree-l1"><a class="reference internal" href="../embeddings/">Embeddings</a>
+                  </li>
+                  <li class="toctree-l1 current"><a class="reference internal current" href="#">Stores</a>
+    <ul class="current">
+    <li class="toctree-l2"><a class="reference internal" href="#vectorstore-qdrant">VectorStore (Qdrant)</a>
+        <ul>
+    <li class="toctree-l3"><a class="reference internal" href="#schema">Schema</a>
+    </li>
+    <li class="toctree-l3"><a class="reference internal" href="#public-surface">Public surface</a>
+    </li>
+        </ul>
+    </li>
+    <li class="toctree-l2"><a class="reference internal" href="#graphstore-networkx">GraphStore (NetworkX)</a>
+        <ul>
+    <li class="toctree-l3"><a class="reference internal" href="#node-shapes">Node shapes</a>
+    </li>
+    <li class="toctree-l3"><a class="reference internal" href="#public-surface_1">Public surface</a>
+    </li>
+    <li class="toctree-l3"><a class="reference internal" href="#stats">Stats</a>
+    </li>
+        </ul>
+    </li>
+    <li class="toctree-l2"><a class="reference internal" href="#feedbackstore-sqlite-query-log">FeedbackStore (SQLite — query log)</a>
+    </li>
+    <li class="toctree-l2"><a class="reference internal" href="#agentstatestore-sqlite-writeback-state">AgentStateStore (SQLite — writeback state)</a>
+    </li>
+    </ul>
+                  </li>
+                  <li class="toctree-l1"><a class="reference internal" href="../retrieval/">Retrieval</a>
+                  </li>
+                  <li class="toctree-l1"><a class="reference internal" href="../llm/">LLM</a>
+                  </li>
+                  <li class="toctree-l1"><a class="reference internal" href="../pipeline/">Pipeline</a>
+                  </li>
+                  <li class="toctree-l1"><a class="reference internal" href="../gui/">GUI</a>
+                  </li>
+              </ul>
+              <ul>
+                <li class="toctree-l1"><a class="reference internal" href="../../theme/">Theme</a>
+                </li>
+              </ul>
+              <ul>
+                <li class="toctree-l1"><a class="reference internal" href="../../roadmap/">Roadmap</a>
+                </li>
+              </ul>
+              <ul>
+                <li class="toctree-l1"><a class="reference internal" href="../../development/">Development</a>
+                </li>
+              </ul>
+      </div>
+    </div>
+    </nav>
+
+    <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap">
+      <nav class="wy-nav-top" role="navigation" aria-label="Mobile navigation menu">
+          <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
+          <a href="../..">My Daemon</a>
+        
+      </nav>
+      <div class="wy-nav-content">
+        <div class="rst-content"><div role="navigation" aria-label="breadcrumbs navigation">
+  <ul class="wy-breadcrumbs">
+    <li><a href="../.." class="icon icon-home" aria-label="Docs"></a></li>
+          <li class="breadcrumb-item">Modules</li>
+      <li class="breadcrumb-item active">Stores</li>
+    <li class="wy-breadcrumbs-aside">
+          <a href="https://github.com/evangress/my-daemon/edit/master/docs-source/modules/stores.md">Edit on evangress/my-daemon</a>
+    </li>
+  </ul>
+  <hr/>
+</div>
+          <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
+            <div class="section" itemprop="articleBody">
+              
+                <h1 id="stores-persistence-layer"><code>stores/</code> — Persistence layer<a class="headerlink" href="#stores-persistence-layer" title="Permanent link">&para;</a></h1>
+<p>Source: <code>src/my_daemon/stores/</code>. Three persistence concerns, three files.</p>
+<h2 id="vectorstore-qdrant"><code>VectorStore</code> (Qdrant)<a class="headerlink" href="#vectorstore-qdrant" title="Permanent link">&para;</a></h2>
+<p><code>stores/vector.py</code>. Wraps <code>qdrant_client.QdrantClient</code> for the <code>chunks</code>
+collection.</p>
+<h3 id="schema">Schema<a class="headerlink" href="#schema" title="Permanent link">&para;</a></h3>
+<p>Hybrid mode (default) uses <strong>named vector slots</strong> on each point:</p>
+<table>
+<thead>
+<tr>
+<th>Slot</th>
+<th>Type</th>
+<th>Purpose</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>dense</code></td>
+<td>384-dim float, cosine distance</td>
+<td>Semantic recall</td>
+</tr>
+<tr>
+<td><code>sparse</code></td>
+<td><code>SparseVectorParams()</code></td>
+<td>BM25-style exact-token recall</td>
+</tr>
+</tbody>
+</table>
+<p>Each point&rsquo;s id is <code>uuid5(NAMESPACE_URL, "my-daemon/chunk/" + chunk_id)</code> —
+deterministic, so re-ingesting the same chunk lands on the same point.</p>
+<p>Payload (display + filter fields):</p>
+<div class="codehilite"><pre><span></span><code>chunk_id, note_path, heading_path, chunk_index, tags, wikilinks,
+text  (truncated to 4000 chars; full text isn&#39;t stored here)
+</code></pre></div>
+
+<p>Dense-only mode keeps the old single-slot schema. The two are not
+compatible; <code>ensure_collection()</code> detects a schema mismatch on startup, drops
+the legacy collection, and prints a one-liner telling you to
+<code>daemon ingest --full</code>.</p>
+<h3 id="public-surface">Public surface<a class="headerlink" href="#public-surface" title="Permanent link">&para;</a></h3>
+<div class="codehilite"><pre><span></span><code><span class="n">VectorStore</span><span class="p">(</span><span class="n">url</span><span class="p">,</span> <span class="n">collection</span><span class="p">,</span> <span class="n">dim</span><span class="p">,</span> <span class="n">hybrid</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+  <span class="o">.</span><span class="n">ensure_collection</span><span class="p">()</span>
+  <span class="o">.</span><span class="n">upsert</span><span class="p">(</span><span class="n">chunks</span><span class="p">,</span> <span class="n">vectors</span><span class="p">,</span> <span class="n">sparse_vectors</span><span class="o">=</span><span class="kc">None</span><span class="p">)</span>
+  <span class="o">.</span><span class="n">search</span><span class="p">(</span><span class="n">vector</span><span class="p">,</span> <span class="n">top_k</span><span class="o">=</span><span class="mi">8</span><span class="p">)</span>                          <span class="c1"># dense-only</span>
+  <span class="o">.</span><span class="n">hybrid_search</span><span class="p">(</span><span class="n">dense_vec</span><span class="p">,</span> <span class="p">(</span><span class="n">idx</span><span class="p">,</span> <span class="n">val</span><span class="p">),</span> <span class="n">top_k</span><span class="o">=</span><span class="mi">8</span><span class="p">)</span>    <span class="c1"># server-side RRF</span>
+  <span class="o">.</span><span class="n">delete_by_note</span><span class="p">(</span><span class="n">note_path</span><span class="p">)</span>
+  <span class="o">.</span><span class="n">count</span><span class="p">()</span>
+</code></pre></div>
+
+<p><code>hybrid_search</code> issues a single <code>query_points</code> with two <code>Prefetch</code>es (one
+dense, one sparse) and a <code>FusionQuery(fusion=Fusion.RRF)</code> — Qdrant does the
+rank fusion server-side. This is why the daemon&rsquo;s hybrid query is one round
+trip, not two.</p>
+<p><code>delete_by_note</code> uses a payload filter on <code>note_path</code>, which is also the
+mechanism the retrieval expander uses to pull all chunks of a neighbor note.</p>
+<h2 id="graphstore-networkx"><code>GraphStore</code> (NetworkX)<a class="headerlink" href="#graphstore-networkx" title="Permanent link">&para;</a></h2>
+<p><code>stores/graph.py</code>. Pickle-persisted <code>nx.MultiDiGraph</code>.</p>
+<h3 id="node-shapes">Node shapes<a class="headerlink" href="#node-shapes" title="Permanent link">&para;</a></h3>
+<table>
+<thead>
+<tr>
+<th>Node id</th>
+<th>type</th>
+<th>Attributes</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>note::&lt;relative_path&gt;</code></td>
+<td><code>note</code></td>
+<td><code>title</code>, <code>mtime</code>, <code>chunk_ids</code>, optional <code>dangling=True</code></td>
+</tr>
+<tr>
+<td><code>tag::&lt;tag&gt;</code></td>
+<td><code>tag</code></td>
+<td><code>title</code></td>
+</tr>
+</tbody>
+</table>
+<p>Edges:</p>
+<table>
+<thead>
+<tr>
+<th>From</th>
+<th>To</th>
+<th><code>kind</code></th>
+<th><code>weight</code></th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>note</td>
+<td>note</td>
+<td><code>wikilink</code></td>
+<td><code>1.0</code> (Phase 4 will mutate)</td>
+</tr>
+<tr>
+<td>note</td>
+<td>tag</td>
+<td><code>tag</code></td>
+<td><code>1.0</code></td>
+</tr>
+</tbody>
+</table>
+<p>A dangling wikilink (<code>[[Note That Doesn't Exist Yet]]</code>) becomes a
+<code>note::...</code> node with <code>dangling=True</code>. Stats and the retrieval expander
+filter these out, but they&rsquo;re kept in place so a later ingest can promote
+them when the target note is created. This is the seed of the &ldquo;notes you
+mean to write&rdquo; feature in the roadmap.</p>
+<h3 id="public-surface_1">Public surface<a class="headerlink" href="#public-surface_1" title="Permanent link">&para;</a></h3>
+<div class="codehilite"><pre><span></span><code><span class="n">GraphStore</span><span class="p">(</span><span class="n">path</span><span class="p">)</span>
+  <span class="o">.</span><span class="n">load</span><span class="p">()</span>
+  <span class="o">.</span><span class="n">save</span><span class="p">()</span>
+  <span class="o">.</span><span class="n">add_note</span><span class="p">(</span><span class="n">note</span><span class="p">,</span> <span class="n">chunk_ids</span><span class="p">)</span>
+  <span class="o">.</span><span class="n">remove_note</span><span class="p">(</span><span class="n">rel_path</span><span class="p">)</span>
+  <span class="o">.</span><span class="n">chunk_ids_for</span><span class="p">(</span><span class="n">rel_path</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">list</span><span class="p">[</span><span class="nb">str</span><span class="p">]</span>
+  <span class="o">.</span><span class="n">neighbors_within</span><span class="p">(</span><span class="n">rel_path</span><span class="p">,</span> <span class="n">depth</span><span class="o">=</span><span class="mi">2</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="nb">int</span><span class="p">]</span>
+  <span class="o">.</span><span class="n">stats</span><span class="p">()</span> <span class="o">-&gt;</span> <span class="n">GraphStats</span>     <span class="c1"># note_count, tag_count, edge_count, top_pagerank, top_tags</span>
+</code></pre></div>
+
+<p><code>neighbors_within</code> runs a BFS over the <strong>undirected</strong> projection of the
+multi-digraph so it traverses both wikilink directions and the note↔tag↔note
+path. Returns <code>{neighbor_relative_path: distance}</code> for note nodes only.</p>
+<h3 id="stats">Stats<a class="headerlink" href="#stats" title="Permanent link">&para;</a></h3>
+<p><code>stats()</code> uses NetworkX <code>pagerank</code> (graceful fallback to <code>{}</code> if
+<code>PowerIterationFailedConvergence</code>). Tag ranking is by degree in the current
+v0.1.</p>
+<h2 id="feedbackstore-sqlite-query-log"><code>FeedbackStore</code> (SQLite — query log)<a class="headerlink" href="#feedbackstore-sqlite-query-log" title="Permanent link">&para;</a></h2>
+<p><code>stores/feedback.py</code>. One table:</p>
+<div class="codehilite"><pre><span></span><code><span class="k">CREATE</span><span class="w"> </span><span class="k">TABLE</span><span class="w"> </span><span class="n">feedback</span><span class="w"> </span><span class="p">(</span>
+<span class="w">    </span><span class="n">id</span><span class="w"> </span><span class="nb">INTEGER</span><span class="w"> </span><span class="k">PRIMARY</span><span class="w"> </span><span class="k">KEY</span><span class="w"> </span><span class="n">AUTOINCREMENT</span><span class="p">,</span>
+<span class="w">    </span><span class="k">timestamp</span><span class="w"> </span><span class="nb">TEXT</span><span class="w"> </span><span class="k">NOT</span><span class="w"> </span><span class="k">NULL</span><span class="p">,</span>
+<span class="w">    </span><span class="n">query</span><span class="w"> </span><span class="nb">TEXT</span><span class="w"> </span><span class="k">NOT</span><span class="w"> </span><span class="k">NULL</span><span class="p">,</span>
+<span class="w">    </span><span class="n">retrieval_summary</span><span class="w"> </span><span class="nb">TEXT</span><span class="w"> </span><span class="k">NOT</span><span class="w"> </span><span class="k">NULL</span><span class="p">,</span><span class="w">   </span><span class="c1">-- JSON: ranked chunk ids + scores, counts</span>
+<span class="w">    </span><span class="n">answer</span><span class="w"> </span><span class="nb">TEXT</span><span class="w"> </span><span class="k">NOT</span><span class="w"> </span><span class="k">NULL</span><span class="p">,</span>
+<span class="w">    </span><span class="n">latency_ms</span><span class="w"> </span><span class="nb">INTEGER</span><span class="w"> </span><span class="k">NOT</span><span class="w"> </span><span class="k">NULL</span><span class="p">,</span>
+<span class="w">    </span><span class="n">signal</span><span class="w"> </span><span class="nb">TEXT</span><span class="p">,</span><span class="w">                       </span><span class="c1">-- explicit_up / explicit_down / ...</span>
+<span class="w">    </span><span class="n">signal_captured_at</span><span class="w"> </span><span class="nb">TEXT</span>
+<span class="p">);</span>
+<span class="k">CREATE</span><span class="w"> </span><span class="k">INDEX</span><span class="w"> </span><span class="n">idx_feedback_timestamp</span><span class="w"> </span><span class="k">ON</span><span class="w"> </span><span class="n">feedback</span><span class="p">(</span><span class="k">timestamp</span><span class="p">);</span>
+</code></pre></div>
+
+<p>Every <code>daemon query</code> and every chat send writes one row at submission. A
+future <code>daemon select &lt;id&gt; &lt;candidate#&gt;</code> will attach a <code>candidate_selected</code>
+signal via <code>attach_signal()</code>. The <code>recent()</code> helper is what
+<code>daemon reflect</code> reads to find chat events for its context.</p>
+<h2 id="agentstatestore-sqlite-writeback-state"><code>AgentStateStore</code> (SQLite — writeback state)<a class="headerlink" href="#agentstatestore-sqlite-writeback-state" title="Permanent link">&para;</a></h2>
+<p><code>stores/agent_state.py</code>. Three tables, all in the same <code>feedback.db</code> file
+so the user only ever has <em>one</em> state file to back up or wipe:</p>
+<div class="codehilite"><pre><span></span><code><span class="k">CREATE</span><span class="w"> </span><span class="k">TABLE</span><span class="w"> </span><span class="n">agent_link_runs</span><span class="w"> </span><span class="p">(</span>
+<span class="w">    </span><span class="n">note_path</span><span class="w"> </span><span class="nb">TEXT</span><span class="w"> </span><span class="k">PRIMARY</span><span class="w"> </span><span class="k">KEY</span><span class="p">,</span>
+<span class="w">    </span><span class="n">last_run_at</span><span class="w"> </span><span class="nb">TEXT</span><span class="w"> </span><span class="k">NOT</span><span class="w"> </span><span class="k">NULL</span><span class="p">,</span>
+<span class="w">    </span><span class="n">note_mtime_seen</span><span class="w"> </span><span class="nb">REAL</span><span class="p">,</span>
+<span class="w">    </span><span class="n">applied_count</span><span class="w"> </span><span class="nb">INTEGER</span><span class="w"> </span><span class="k">NOT</span><span class="w"> </span><span class="k">NULL</span><span class="w"> </span><span class="k">DEFAULT</span><span class="w"> </span><span class="mi">0</span><span class="p">,</span>
+<span class="w">    </span><span class="n">suggested_count</span><span class="w"> </span><span class="nb">INTEGER</span><span class="w"> </span><span class="k">NOT</span><span class="w"> </span><span class="k">NULL</span><span class="w"> </span><span class="k">DEFAULT</span><span class="w"> </span><span class="mi">0</span>
+<span class="p">);</span>
+<span class="k">CREATE</span><span class="w"> </span><span class="k">TABLE</span><span class="w"> </span><span class="n">agent_extract_runs</span><span class="w"> </span><span class="p">(</span>
+<span class="w">    </span><span class="n">note_path</span><span class="w"> </span><span class="nb">TEXT</span><span class="w"> </span><span class="k">PRIMARY</span><span class="w"> </span><span class="k">KEY</span><span class="p">,</span>
+<span class="w">    </span><span class="n">last_run_at</span><span class="w"> </span><span class="nb">TEXT</span><span class="w"> </span><span class="k">NOT</span><span class="w"> </span><span class="k">NULL</span><span class="p">,</span>
+<span class="w">    </span><span class="n">note_mtime_seen</span><span class="w"> </span><span class="nb">REAL</span><span class="w"> </span><span class="k">NOT</span><span class="w"> </span><span class="k">NULL</span><span class="p">,</span>
+<span class="w">    </span><span class="n">summary_hash</span><span class="w"> </span><span class="nb">TEXT</span><span class="w"> </span><span class="k">NOT</span><span class="w"> </span><span class="k">NULL</span>
+<span class="p">);</span>
+<span class="k">CREATE</span><span class="w"> </span><span class="k">TABLE</span><span class="w"> </span><span class="n">agent_reflect_runs</span><span class="w"> </span><span class="p">(</span>
+<span class="w">    </span><span class="n">theme</span><span class="w"> </span><span class="nb">TEXT</span><span class="w"> </span><span class="k">PRIMARY</span><span class="w"> </span><span class="k">KEY</span><span class="p">,</span>
+<span class="w">    </span><span class="n">last_run_at</span><span class="w"> </span><span class="nb">TEXT</span><span class="w"> </span><span class="k">NOT</span><span class="w"> </span><span class="k">NULL</span><span class="p">,</span>
+<span class="w">    </span><span class="n">source_notes_hash</span><span class="w"> </span><span class="nb">TEXT</span><span class="w"> </span><span class="k">NOT</span><span class="w"> </span><span class="k">NULL</span><span class="p">,</span>
+<span class="w">    </span><span class="n">source_chat_count</span><span class="w"> </span><span class="nb">INTEGER</span><span class="w"> </span><span class="k">NOT</span><span class="w"> </span><span class="k">NULL</span><span class="w"> </span><span class="k">DEFAULT</span><span class="w"> </span><span class="mi">0</span>
+<span class="p">);</span>
+</code></pre></div>
+
+<p>Schemas are additive (<code>CREATE TABLE IF NOT EXISTS</code>), so the agent state
+appears on top of an existing query-log DB without a migration step.</p>
+              
+            </div>
+          </div><footer>
+    <div class="rst-footer-buttons" role="navigation" aria-label="Footer Navigation">
+        <a href="../embeddings/" class="btn btn-neutral float-left" title="Embeddings"><span class="icon icon-circle-arrow-left"></span> Previous</a>
+        <a href="../retrieval/" class="btn btn-neutral float-right" title="Retrieval">Next <span class="icon icon-circle-arrow-right"></span></a>
+    </div>
+
+  <hr/>
+
+  <div role="contentinfo">
+    <!-- Copyright etc -->
+  </div>
+
+  Built with <a href="https://www.mkdocs.org/">MkDocs</a> using a <a href="https://github.com/readthedocs/sphinx_rtd_theme">theme</a> provided by <a href="https://readthedocs.org">Read the Docs</a>.
+</footer>
+          
+        </div>
+      </div>
+
+    </section>
+
+  </div>
+
+  <div class="rst-versions" role="note" aria-label="Versions">
+  <span class="rst-current-version" data-toggle="rst-current-version">
+    
+        <span>
+          <a href="https://github.com/evangress/my-daemon" class="fa fa-code-fork" style="color: #fcfcfc"> evangress/my-daemon</a>
+        </span>
+    
+    
+      <span><a href="../embeddings/" style="color: #fcfcfc">&laquo; Previous</a></span>
+    
+    
+      <span><a href="../retrieval/" style="color: #fcfcfc">Next &raquo;</a></span>
+    
+  </span>
+</div>
+    <script src="../../js/jquery-3.6.0.min.js"></script>
+    <script>var base_url = "../..";</script>
+    <script src="../../js/theme_extra.js"></script>
+    <script src="../../js/theme.js"></script>
+      <script src="../../search/main.js"></script>
+    <script>
+        jQuery(function () {
+            SphinxRtdTheme.Navigation.enable(true);
+        });
+    </script>
+
+</body>
+</html>

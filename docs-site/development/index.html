@@ -1,0 +1,305 @@
+<!DOCTYPE html>
+<html class="writer-html5" lang="en" >
+<head>
+    <meta charset="utf-8" />
+    <meta http-equiv="X-UA-Compatible" content="IE=edge" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" /><meta name="author" content="Evan Gress" /><link rel="canonical" href="https://my-daemon.ai/development/" />
+      <link rel="shortcut icon" href="../img/favicon.ico" />
+    <title>Development - My Daemon</title>
+    <link rel="stylesheet" href="../css/theme.css" />
+    <link rel="stylesheet" href="../css/theme_extra.css" />
+        <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.8.0/styles/github.min.css" />
+    
+      <script>
+        // Current page data
+        var mkdocs_page_name = "Development";
+        var mkdocs_page_input_path = "development.md";
+        var mkdocs_page_url = "/development/";
+      </script>
+    
+    <!--[if lt IE 9]>
+      <script src="../js/html5shiv.min.js"></script>
+    <![endif]-->
+      <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.8.0/highlight.min.js"></script>
+        <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.8.0/languages/python.min.js"></script>
+        <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.8.0/languages/yaml.min.js"></script>
+        <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.8.0/languages/bash.min.js"></script>
+        <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.8.0/languages/sql.min.js"></script>
+      <script>hljs.highlightAll();</script> 
+</head>
+
+<body class="wy-body-for-nav" role="document">
+
+  <div class="wy-grid-for-nav">
+    <nav data-toggle="wy-nav-shift" class="wy-nav-side stickynav">
+    <div class="wy-side-scroll">
+      <div class="wy-side-nav-search">
+          <a href=".." class="icon icon-home"> My Daemon
+        </a><div role="search">
+  <form id ="rtd-search-form" class="wy-form" action="../search.html" method="get">
+      <input type="text" name="q" placeholder="Search docs" aria-label="Search docs" title="Type search term here" />
+  </form>
+</div>
+      </div>
+
+      <div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="Navigation menu">
+              <ul>
+                <li class="toctree-l1"><a class="reference internal" href="..">Home</a>
+                </li>
+              </ul>
+              <ul>
+                <li class="toctree-l1"><a class="reference internal" href="../getting-started/">Getting Started</a>
+                </li>
+              </ul>
+              <ul>
+                <li class="toctree-l1"><a class="reference internal" href="../architecture/">Architecture</a>
+                </li>
+              </ul>
+              <ul>
+                <li class="toctree-l1"><a class="reference internal" href="../cli/">CLI Reference</a>
+                </li>
+              </ul>
+              <ul>
+                <li class="toctree-l1"><a class="reference internal" href="../configuration/">Configuration</a>
+                </li>
+              </ul>
+              <ul>
+                <li class="toctree-l1"><a class="reference internal" href="../background-agents/">Background Agents</a>
+                </li>
+              </ul>
+              <p class="caption"><span class="caption-text">Modules</span></p>
+              <ul>
+                  <li class="toctree-l1"><a class="reference internal" href="../modules/vault/">Vault</a>
+                  </li>
+                  <li class="toctree-l1"><a class="reference internal" href="../modules/embeddings/">Embeddings</a>
+                  </li>
+                  <li class="toctree-l1"><a class="reference internal" href="../modules/stores/">Stores</a>
+                  </li>
+                  <li class="toctree-l1"><a class="reference internal" href="../modules/retrieval/">Retrieval</a>
+                  </li>
+                  <li class="toctree-l1"><a class="reference internal" href="../modules/llm/">LLM</a>
+                  </li>
+                  <li class="toctree-l1"><a class="reference internal" href="../modules/pipeline/">Pipeline</a>
+                  </li>
+                  <li class="toctree-l1"><a class="reference internal" href="../modules/gui/">GUI</a>
+                  </li>
+              </ul>
+              <ul>
+                <li class="toctree-l1"><a class="reference internal" href="../theme/">Theme</a>
+                </li>
+              </ul>
+              <ul>
+                <li class="toctree-l1"><a class="reference internal" href="../roadmap/">Roadmap</a>
+                </li>
+              </ul>
+              <ul class="current">
+                <li class="toctree-l1 current"><a class="reference internal current" href="#">Development</a>
+    <ul class="current">
+    <li class="toctree-l2"><a class="reference internal" href="#setup">Setup</a>
+    </li>
+    <li class="toctree-l2"><a class="reference internal" href="#project-layout">Project layout</a>
+    </li>
+    <li class="toctree-l2"><a class="reference internal" href="#running-tests">Running tests</a>
+    </li>
+    <li class="toctree-l2"><a class="reference internal" href="#linting">Linting</a>
+    </li>
+    <li class="toctree-l2"><a class="reference internal" href="#building-these-docs">Building these docs</a>
+    </li>
+    <li class="toctree-l2"><a class="reference internal" href="#session-hygiene">Session hygiene</a>
+    </li>
+    <li class="toctree-l2"><a class="reference internal" href="#adding-a-cli-command">Adding a CLI command</a>
+    </li>
+    <li class="toctree-l2"><a class="reference internal" href="#adding-a-config-key">Adding a config key</a>
+    </li>
+    <li class="toctree-l2"><a class="reference internal" href="#adding-a-writeback-job">Adding a writeback job</a>
+    </li>
+    <li class="toctree-l2"><a class="reference internal" href="#where-to-file-ideas">Where to file ideas</a>
+    </li>
+    </ul>
+                </li>
+              </ul>
+      </div>
+    </div>
+    </nav>
+
+    <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap">
+      <nav class="wy-nav-top" role="navigation" aria-label="Mobile navigation menu">
+          <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
+          <a href="..">My Daemon</a>
+        
+      </nav>
+      <div class="wy-nav-content">
+        <div class="rst-content"><div role="navigation" aria-label="breadcrumbs navigation">
+  <ul class="wy-breadcrumbs">
+    <li><a href=".." class="icon icon-home" aria-label="Docs"></a></li>
+      <li class="breadcrumb-item active">Development</li>
+    <li class="wy-breadcrumbs-aside">
+          <a href="https://github.com/evangress/my-daemon/edit/master/docs-source/development.md">Edit on evangress/my-daemon</a>
+    </li>
+  </ul>
+  <hr/>
+</div>
+          <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
+            <div class="section" itemprop="articleBody">
+              
+                <h1 id="development">Development<a class="headerlink" href="#development" title="Permanent link">&para;</a></h1>
+<h2 id="setup">Setup<a class="headerlink" href="#setup" title="Permanent link">&para;</a></h2>
+<div class="codehilite"><pre><span></span><code>git<span class="w"> </span>clone<span class="w"> </span>https://github.com/evangress/my-daemon
+<span class="nb">cd</span><span class="w"> </span>my-daemon
+python<span class="w"> </span>setup.py<span class="w">                   </span><span class="c1"># creates .venv, installs deps + dev extras</span>
+<span class="c1"># or, manually:</span>
+uv<span class="w"> </span>sync<span class="w">                            </span><span class="c1"># or: pip install -e &quot;.[dev]&quot;</span>
+</code></pre></div>
+
+<p>The dev extras add <code>pytest</code>, <code>pytest-asyncio</code>, <code>ruff</code>, and <code>mypy</code>.</p>
+<h2 id="project-layout">Project layout<a class="headerlink" href="#project-layout" title="Permanent link">&para;</a></h2>
+<div class="codehilite"><pre><span></span><code>my-daemon/
+├── src/my_daemon/         # the package
+│   ├── cli.py             # Typer entry — `daemon` script
+│   ├── config.py          # Pydantic Settings (yaml + env)
+│   ├── models.py          # Note / Chunk / RetrievedChunk / FeedbackEvent
+│   ├── vault/             # markdown → Notes + Chunks; safe writeback
+│   ├── embeddings/        # dense + sparse encoders
+│   ├── stores/            # Qdrant, NetworkX, SQLite
+│   ├── retrieval/         # seed → expand → orchestrate
+│   ├── llm/               # Anthropic client, prompts, agent prompts
+│   ├── pipeline/          # ingest, query, agent_extract/link/reflect
+│   └── gui/               # NiceGUI chat (app.py), Tkinter setup (setup.py)
+├── tests/                 # pytest; fixtures/sample_vault for the parser tests
+├── scripts/               # inspect.py, reset.py (dev convenience)
+├── docs-source/           # this site&#39;s markdown source
+├── docs-site/             # built HTML output (gitignored)
+├── debug/error-log.md     # session error log
+├── config.example.yaml    # template config
+├── docker-compose.yaml    # Qdrant
+└── pyproject.toml
+</code></pre></div>
+
+<h2 id="running-tests">Running tests<a class="headerlink" href="#running-tests" title="Permanent link">&para;</a></h2>
+<div class="codehilite"><pre><span></span><code>pytest<span class="w">                                  </span><span class="c1"># all unit tests; no external services</span>
+<span class="nv">MY_DAEMON_E2E</span><span class="o">=</span><span class="m">1</span><span class="w"> </span>pytest<span class="w"> </span>tests/test_e2e.py<span class="w">  </span><span class="c1"># full pipeline; needs Qdrant up</span>
+</code></pre></div>
+
+<p>The non-e2e tests use the fixture vault under <code>tests/fixtures/sample_vault/</code>
+and assert on parser / chunker / graph / writer behaviour without touching
+Qdrant or Claude. The e2e test ingests the fixture and asserts that a
+query returns expected citations — it requires <code>docker compose up -d</code>
+beforehand.</p>
+<h2 id="linting">Linting<a class="headerlink" href="#linting" title="Permanent link">&para;</a></h2>
+<div class="codehilite"><pre><span></span><code>ruff<span class="w"> </span>check<span class="w"> </span>.
+</code></pre></div>
+
+<p>The ruff config (in <code>pyproject.toml</code>) selects <code>E</code>, <code>F</code>, <code>I</code>, <code>B</code>, <code>UP</code>,
+<code>SIM</code>, ignores <code>E501</code>, and targets py311. CI is not yet wired up; the
+project-level rule from <code>CLAUDE.md</code> is &ldquo;lint before commit.&rdquo;</p>
+<h2 id="building-these-docs">Building these docs<a class="headerlink" href="#building-these-docs" title="Permanent link">&para;</a></h2>
+<div class="codehilite"><pre><span></span><code>.venv/bin/mkdocs<span class="w"> </span>build<span class="w">         </span><span class="c1"># writes ./docs-site/</span>
+.venv/bin/mkdocs<span class="w"> </span>serve<span class="w">         </span><span class="c1"># local preview at http://127.0.0.1:8000</span>
+</code></pre></div>
+
+<p>Only stock MkDocs is installed (the project deliberately avoids
+mkdocs-material to keep dev dependencies tight). The theme is the built-in
+<code>readthedocs</code> theme; nav is declared explicitly in <code>mkdocs.yaml</code>.</p>
+<h2 id="session-hygiene">Session hygiene<a class="headerlink" href="#session-hygiene" title="Permanent link">&para;</a></h2>
+<p>From <code>CLAUDE.md</code>:</p>
+<ol>
+<li>Any file with secrets goes in <code>.gitignore</code>.</li>
+<li>Check <code>PROJECT_MANAGEMENT.md</code> for pending tasks at the start of a session.</li>
+<li>Check <code>debug/error-log.md</code> for errors to resolve.</li>
+<li>At end of session: lint, <code>git add .</code>, commit to <code>master</code> (dev branches
+   land post-release).</li>
+<li>Speculative ideas go in <code>PROJECT_MANAGEMENT.md</code>&rsquo;s &ldquo;AI Suggestions&rdquo;
+   section, not into code.</li>
+</ol>
+<h2 id="adding-a-cli-command">Adding a CLI command<a class="headerlink" href="#adding-a-cli-command" title="Permanent link">&para;</a></h2>
+<ol>
+<li>Add the function under <code>src/my_daemon/cli.py</code> with a <code>@app.command()</code>
+   decorator (or <code>@graph_app.command()</code> etc. for a subgroup).</li>
+<li>Build the dependencies with the existing <code>_build_*</code> helpers — they keep
+   construction consistent and pick up the hybrid / cache_folder flags
+   correctly.</li>
+<li>Use <code>Console</code> (rich) for output. Tables for structured results; <code>Panel</code>
+   for highlighted blocks; <code>console.log(...)</code> for verbose-mode debug.</li>
+<li>Add a docstring as the help text — Typer surfaces it on <code>--help</code>.</li>
+</ol>
+<h2 id="adding-a-config-key">Adding a config key<a class="headerlink" href="#adding-a-config-key" title="Permanent link">&para;</a></h2>
+<ol>
+<li>Add it to the relevant <code>BaseModel</code> in <code>src/my_daemon/config.py</code> with a
+   sensible default.</li>
+<li>Mirror it in <code>config.example.yaml</code> (and in <code>config.yaml</code> for your local
+   dev, ideally not committed).</li>
+<li>Reference it from the consumer code via <code>settings.&lt;section&gt;.&lt;key&gt;</code>.</li>
+<li>Document it under <a href="../configuration/">Configuration</a>.</li>
+</ol>
+<p>Env-var override is automatic: any nested field is reachable as
+<code>MY_DAEMON_&lt;SECTION&gt;__&lt;KEY&gt;</code>.</p>
+<h2 id="adding-a-writeback-job">Adding a writeback job<a class="headerlink" href="#adding-a-writeback-job" title="Permanent link">&para;</a></h2>
+<p>The shape to copy is <code>pipeline/agent_extract.py</code>. Required pieces:</p>
+<ul>
+<li>Eligibility filter (which notes / themes / scope this run touches).</li>
+<li>One or more LLM prompts in <code>llm/agents.py</code> returning structured payloads
+  via <code>_coerce_json</code>.</li>
+<li>A render function that produces the markdown body.</li>
+<li>A call to the appropriate <code>vault/writer.py</code> function
+  (<code>write_agent_section</code>, <code>insert_wikilinks</code>, <code>add_tags</code>, or
+  <code>write_atomic</code> for full-file writes).</li>
+<li>A state table in <code>stores/agent_state.py</code> for dedup.</li>
+<li>A <code>@app.command</code> wrapper in <code>cli.py</code> that refuses to write unless
+  <code>agent.enabled</code> is true (or <code>--dry-run</code>).</li>
+</ul>
+<p>The safety discipline is the writer&rsquo;s responsibility, not yours. If you find
+yourself adding gates inside your job, ask whether they belong in
+<code>vault/writer.py</code> so the next job inherits them for free.</p>
+<h2 id="where-to-file-ideas">Where to file ideas<a class="headerlink" href="#where-to-file-ideas" title="Permanent link">&para;</a></h2>
+<p><code>PROJECT_MANAGEMENT.md</code> has a top-level &ldquo;AI Suggestions (Agent Thoughts)&rdquo;
+section. Half-formed ideas, future-phase work, and things deliberately not
+built belong there — not in code comments or new files.</p>
+              
+            </div>
+          </div><footer>
+    <div class="rst-footer-buttons" role="navigation" aria-label="Footer Navigation">
+        <a href="../roadmap/" class="btn btn-neutral float-left" title="Roadmap"><span class="icon icon-circle-arrow-left"></span> Previous</a>
+    </div>
+
+  <hr/>
+
+  <div role="contentinfo">
+    <!-- Copyright etc -->
+  </div>
+
+  Built with <a href="https://www.mkdocs.org/">MkDocs</a> using a <a href="https://github.com/readthedocs/sphinx_rtd_theme">theme</a> provided by <a href="https://readthedocs.org">Read the Docs</a>.
+</footer>
+          
+        </div>
+      </div>
+
+    </section>
+
+  </div>
+
+  <div class="rst-versions" role="note" aria-label="Versions">
+  <span class="rst-current-version" data-toggle="rst-current-version">
+    
+        <span>
+          <a href="https://github.com/evangress/my-daemon" class="fa fa-code-fork" style="color: #fcfcfc"> evangress/my-daemon</a>
+        </span>
+    
+    
+      <span><a href="../roadmap/" style="color: #fcfcfc">&laquo; Previous</a></span>
+    
+    
+  </span>
+</div>
+    <script src="../js/jquery-3.6.0.min.js"></script>
+    <script>var base_url = "..";</script>
+    <script src="../js/theme_extra.js"></script>
+    <script src="../js/theme.js"></script>
+      <script src="../search/main.js"></script>
+    <script>
+        jQuery(function () {
+            SphinxRtdTheme.Navigation.enable(true);
+        });
+    </script>
+
+</body>
+</html>

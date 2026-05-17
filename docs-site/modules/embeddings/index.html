@@ -1,0 +1,255 @@
+<!DOCTYPE html>
+<html class="writer-html5" lang="en" >
+<head>
+    <meta charset="utf-8" />
+    <meta http-equiv="X-UA-Compatible" content="IE=edge" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" /><meta name="author" content="Evan Gress" /><link rel="canonical" href="https://my-daemon.ai/modules/embeddings/" />
+      <link rel="shortcut icon" href="../../img/favicon.ico" />
+    <title>Embeddings - My Daemon</title>
+    <link rel="stylesheet" href="../../css/theme.css" />
+    <link rel="stylesheet" href="../../css/theme_extra.css" />
+        <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.8.0/styles/github.min.css" />
+    
+      <script>
+        // Current page data
+        var mkdocs_page_name = "Embeddings";
+        var mkdocs_page_input_path = "modules/embeddings.md";
+        var mkdocs_page_url = "/modules/embeddings/";
+      </script>
+    
+    <!--[if lt IE 9]>
+      <script src="../../js/html5shiv.min.js"></script>
+    <![endif]-->
+      <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.8.0/highlight.min.js"></script>
+        <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.8.0/languages/python.min.js"></script>
+        <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.8.0/languages/yaml.min.js"></script>
+        <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.8.0/languages/bash.min.js"></script>
+        <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.8.0/languages/sql.min.js"></script>
+      <script>hljs.highlightAll();</script> 
+</head>
+
+<body class="wy-body-for-nav" role="document">
+
+  <div class="wy-grid-for-nav">
+    <nav data-toggle="wy-nav-shift" class="wy-nav-side stickynav">
+    <div class="wy-side-scroll">
+      <div class="wy-side-nav-search">
+          <a href="../.." class="icon icon-home"> My Daemon
+        </a><div role="search">
+  <form id ="rtd-search-form" class="wy-form" action="../../search.html" method="get">
+      <input type="text" name="q" placeholder="Search docs" aria-label="Search docs" title="Type search term here" />
+  </form>
+</div>
+      </div>
+
+      <div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="Navigation menu">
+              <ul>
+                <li class="toctree-l1"><a class="reference internal" href="../..">Home</a>
+                </li>
+              </ul>
+              <ul>
+                <li class="toctree-l1"><a class="reference internal" href="../../getting-started/">Getting Started</a>
+                </li>
+              </ul>
+              <ul>
+                <li class="toctree-l1"><a class="reference internal" href="../../architecture/">Architecture</a>
+                </li>
+              </ul>
+              <ul>
+                <li class="toctree-l1"><a class="reference internal" href="../../cli/">CLI Reference</a>
+                </li>
+              </ul>
+              <ul>
+                <li class="toctree-l1"><a class="reference internal" href="../../configuration/">Configuration</a>
+                </li>
+              </ul>
+              <ul>
+                <li class="toctree-l1"><a class="reference internal" href="../../background-agents/">Background Agents</a>
+                </li>
+              </ul>
+              <p class="caption"><span class="caption-text">Modules</span></p>
+              <ul class="current">
+                  <li class="toctree-l1"><a class="reference internal" href="../vault/">Vault</a>
+                  </li>
+                  <li class="toctree-l1 current"><a class="reference internal current" href="#">Embeddings</a>
+    <ul class="current">
+    <li class="toctree-l2"><a class="reference internal" href="#embedder-dense-sentence-transformers">Embedder — dense (sentence-transformers)</a>
+        <ul>
+    <li class="toctree-l3"><a class="reference internal" href="#public-surface">Public surface</a>
+    </li>
+    <li class="toctree-l3"><a class="reference internal" href="#default-model">Default model</a>
+    </li>
+        </ul>
+    </li>
+    <li class="toctree-l2"><a class="reference internal" href="#sparseembedder-bm25-style-fastembed">SparseEmbedder — BM25-style (fastembed)</a>
+        <ul>
+    <li class="toctree-l3"><a class="reference internal" href="#public-surface_1">Public surface</a>
+    </li>
+        </ul>
+    </li>
+    <li class="toctree-l2"><a class="reference internal" href="#when-sparseembedder-is-built">When SparseEmbedder is built</a>
+    </li>
+    <li class="toctree-l2"><a class="reference internal" href="#why-offline-first">Why offline-first</a>
+    </li>
+    <li class="toctree-l2"><a class="reference internal" href="#daemon-models-download">daemon models download</a>
+    </li>
+    </ul>
+                  </li>
+                  <li class="toctree-l1"><a class="reference internal" href="../stores/">Stores</a>
+                  </li>
+                  <li class="toctree-l1"><a class="reference internal" href="../retrieval/">Retrieval</a>
+                  </li>
+                  <li class="toctree-l1"><a class="reference internal" href="../llm/">LLM</a>
+                  </li>
+                  <li class="toctree-l1"><a class="reference internal" href="../pipeline/">Pipeline</a>
+                  </li>
+                  <li class="toctree-l1"><a class="reference internal" href="../gui/">GUI</a>
+                  </li>
+              </ul>
+              <ul>
+                <li class="toctree-l1"><a class="reference internal" href="../../theme/">Theme</a>
+                </li>
+              </ul>
+              <ul>
+                <li class="toctree-l1"><a class="reference internal" href="../../roadmap/">Roadmap</a>
+                </li>
+              </ul>
+              <ul>
+                <li class="toctree-l1"><a class="reference internal" href="../../development/">Development</a>
+                </li>
+              </ul>
+      </div>
+    </div>
+    </nav>
+
+    <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap">
+      <nav class="wy-nav-top" role="navigation" aria-label="Mobile navigation menu">
+          <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
+          <a href="../..">My Daemon</a>
+        
+      </nav>
+      <div class="wy-nav-content">
+        <div class="rst-content"><div role="navigation" aria-label="breadcrumbs navigation">
+  <ul class="wy-breadcrumbs">
+    <li><a href="../.." class="icon icon-home" aria-label="Docs"></a></li>
+          <li class="breadcrumb-item">Modules</li>
+      <li class="breadcrumb-item active">Embeddings</li>
+    <li class="wy-breadcrumbs-aside">
+          <a href="https://github.com/evangress/my-daemon/edit/master/docs-source/modules/embeddings.md">Edit on evangress/my-daemon</a>
+    </li>
+  </ul>
+  <hr/>
+</div>
+          <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
+            <div class="section" itemprop="articleBody">
+              
+                <h1 id="embeddings-dense-and-sparse-encoders"><code>embeddings/</code> — Dense and sparse encoders<a class="headerlink" href="#embeddings-dense-and-sparse-encoders" title="Permanent link">&para;</a></h1>
+<p>Source: <code>src/my_daemon/embeddings/</code>.</p>
+<p>Two thin wrappers around the heavy-weight ML libraries the daemon depends on.
+Both prefer offline loads from <code>embeddings.cache_folder</code> so queries don&rsquo;t
+contact the Hugging Face Hub at runtime.</p>
+<h2 id="embedder-dense-sentence-transformers"><code>Embedder</code> — dense (sentence-transformers)<a class="headerlink" href="#embedder-dense-sentence-transformers" title="Permanent link">&para;</a></h2>
+<p><code>my_daemon.embeddings.Embedder</code> wraps a <code>SentenceTransformer</code> with:</p>
+<ul>
+<li><strong>Lazy load.</strong> The model isn&rsquo;t loaded until the first <code>encode()</code> or
+  <code>dimension</code> access. This is what makes <code>daemon status</code> cheap and the first
+  query slow.</li>
+<li><strong>Cache pinning.</strong> <code>cache_folder</code> (default <code>./data/models/</code>) is passed to
+  sentence-transformers. The loader tries <code>local_files_only=True</code> first;
+  only on cache miss does it fall back to a one-time download.</li>
+<li><strong>Normalized output.</strong> All vectors are L2-normalized at encode time so the
+  Qdrant <code>Distance.COSINE</code> distance is a plain dot product.</li>
+<li><strong>Batched.</strong> <code>batch_size</code> (default 32) is applied to multi-text encode calls.</li>
+</ul>
+<h3 id="public-surface">Public surface<a class="headerlink" href="#public-surface" title="Permanent link">&para;</a></h3>
+<div class="codehilite"><pre><span></span><code><span class="n">Embedder</span><span class="p">(</span><span class="n">model_name</span><span class="p">,</span> <span class="n">batch_size</span><span class="o">=</span><span class="mi">32</span><span class="p">,</span> <span class="n">device</span><span class="o">=</span><span class="s2">&quot;auto&quot;</span><span class="p">,</span> <span class="n">cache_folder</span><span class="o">=</span><span class="kc">None</span><span class="p">)</span>
+  <span class="o">.</span><span class="n">dimension</span>                <span class="c1"># property; loads model if needed, returns int</span>
+  <span class="o">.</span><span class="n">encode</span><span class="p">(</span><span class="n">texts</span><span class="p">:</span> <span class="nb">list</span><span class="p">[</span><span class="nb">str</span><span class="p">])</span> <span class="o">-&gt;</span> <span class="nb">list</span><span class="p">[</span><span class="nb">list</span><span class="p">[</span><span class="nb">float</span><span class="p">]]</span>
+  <span class="o">.</span><span class="n">encode_one</span><span class="p">(</span><span class="n">text</span><span class="p">:</span> <span class="nb">str</span><span class="p">)</span>    <span class="o">-&gt;</span> <span class="nb">list</span><span class="p">[</span><span class="nb">float</span><span class="p">]</span>
+  <span class="o">.</span><span class="n">download</span><span class="p">()</span>               <span class="o">-&gt;</span> <span class="n">Path</span>   <span class="c1"># force-pull into cache</span>
+</code></pre></div>
+
+<h3 id="default-model">Default model<a class="headerlink" href="#default-model" title="Permanent link">&para;</a></h3>
+<p><code>BAAI/bge-small-en-v1.5</code> — 384-dim, English, strong quality, fast on CPU.</p>
+<h2 id="sparseembedder-bm25-style-fastembed"><code>SparseEmbedder</code> — BM25-style (fastembed)<a class="headerlink" href="#sparseembedder-bm25-style-fastembed" title="Permanent link">&para;</a></h2>
+<p><code>my_daemon.embeddings.SparseEmbedder</code> wraps <code>fastembed.SparseTextEmbedding</code>.
+Default model: <code>Qdrant/bm42-all-minilm-l6-v2-attentions</code> — BM42, an
+attention-weighted variant of BM25 that ships with Qdrant&rsquo;s fastembed
+library.</p>
+<p>Same offline-first cache pattern as the dense embedder (toggles
+<code>HF_HUB_OFFLINE</code> for the duration of construction so a cache miss can&rsquo;t
+accidentally pull at runtime).</p>
+<h3 id="public-surface_1">Public surface<a class="headerlink" href="#public-surface_1" title="Permanent link">&para;</a></h3>
+<div class="codehilite"><pre><span></span><code><span class="n">SparseEmbedder</span><span class="p">(</span><span class="n">model_name</span><span class="p">,</span> <span class="n">cache_folder</span><span class="o">=</span><span class="kc">None</span><span class="p">)</span>
+  <span class="o">.</span><span class="n">encode</span><span class="p">(</span><span class="n">texts</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">list</span><span class="p">[</span><span class="nb">tuple</span><span class="p">[</span><span class="nb">list</span><span class="p">[</span><span class="nb">int</span><span class="p">],</span> <span class="nb">list</span><span class="p">[</span><span class="nb">float</span><span class="p">]]]</span>   <span class="c1"># (indices, values)</span>
+  <span class="o">.</span><span class="n">encode_one</span><span class="p">(</span><span class="n">text</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">tuple</span><span class="p">[</span><span class="nb">list</span><span class="p">[</span><span class="nb">int</span><span class="p">],</span> <span class="nb">list</span><span class="p">[</span><span class="nb">float</span><span class="p">]]</span>
+  <span class="o">.</span><span class="n">download</span><span class="p">()</span> <span class="o">-&gt;</span> <span class="n">Path</span>
+</code></pre></div>
+
+<p>The <code>(indices, values)</code> tuple gets wrapped in a Qdrant <code>SparseVector</code> at
+upsert / search time inside <code>stores/vector.py</code>.</p>
+<h2 id="when-sparseembedder-is-built">When <code>SparseEmbedder</code> is built<a class="headerlink" href="#when-sparseembedder-is-built" title="Permanent link">&para;</a></h2>
+<p>The CLI builds the sparse embedder only when <code>embeddings.hybrid: true</code>. The
+ingest pipeline, query pipeline, and chat UI all propagate the optional
+sparse embedder explicitly — passing <code>None</code> falls back to dense-only behavior
+at every layer.</p>
+<h2 id="why-offline-first">Why offline-first<a class="headerlink" href="#why-offline-first" title="Permanent link">&para;</a></h2>
+<p>The vault is the user&rsquo;s life. The daemon should still work on a plane. After
+the first run that populates <code>./data/models/</code>, the embedder never opens a
+socket.</p>
+<h2 id="daemon-models-download"><code>daemon models download</code><a class="headerlink" href="#daemon-models-download" title="Permanent link">&para;</a></h2>
+<p>Forces both models into the cache without doing a full ingest. Useful before
+the first flight, or to verify that the cache directory has the right
+permissions.</p>
+              
+            </div>
+          </div><footer>
+    <div class="rst-footer-buttons" role="navigation" aria-label="Footer Navigation">
+        <a href="../vault/" class="btn btn-neutral float-left" title="Vault"><span class="icon icon-circle-arrow-left"></span> Previous</a>
+        <a href="../stores/" class="btn btn-neutral float-right" title="Stores">Next <span class="icon icon-circle-arrow-right"></span></a>
+    </div>
+
+  <hr/>
+
+  <div role="contentinfo">
+    <!-- Copyright etc -->
+  </div>
+
+  Built with <a href="https://www.mkdocs.org/">MkDocs</a> using a <a href="https://github.com/readthedocs/sphinx_rtd_theme">theme</a> provided by <a href="https://readthedocs.org">Read the Docs</a>.
+</footer>
+          
+        </div>
+      </div>
+
+    </section>
+
+  </div>
+
+  <div class="rst-versions" role="note" aria-label="Versions">
+  <span class="rst-current-version" data-toggle="rst-current-version">
+    
+        <span>
+          <a href="https://github.com/evangress/my-daemon" class="fa fa-code-fork" style="color: #fcfcfc"> evangress/my-daemon</a>
+        </span>
+    
+    
+      <span><a href="../vault/" style="color: #fcfcfc">&laquo; Previous</a></span>
+    
+    
+      <span><a href="../stores/" style="color: #fcfcfc">Next &raquo;</a></span>
+    
+  </span>
+</div>
+    <script src="../../js/jquery-3.6.0.min.js"></script>
+    <script>var base_url = "../..";</script>
+    <script src="../../js/theme_extra.js"></script>
+    <script src="../../js/theme.js"></script>
+      <script src="../../search/main.js"></script>
+    <script>
+        jQuery(function () {
+            SphinxRtdTheme.Navigation.enable(true);
+        });
+    </script>
+
+</body>
+</html>
