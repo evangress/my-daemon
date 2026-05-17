@@ -25,15 +25,92 @@ The initial scaffold phase is done. For reference, the linked MY-DAEMON-SCAFFOLD
 
 [MY-DAEMON-SCAFFOLD.md](MY-DAEMON-SCAFFOLD.md)
 
-## Next Steps
+## Milestone Plan — Adaptive Memory Loop
 
-1. [ ] Add a light setup ui for setting the settings and an os environment variable for the anthropic_api_key. The setup ui can have a button to compose the docker container
-2. [x] Adaptive edge weighting from feedback signals.
-3. [ ] Snapshot-based nightly consolidation job.
-4. [ ] Observer LLM that interprets graph structure.
-5. [ ] Multi-embedding spaces.
-6. [ ] Obsidian plugin / file watcher.
-7. [ ] A
+Four connected milestones that take the daemon from "answers questions" to
+"learns from how you answer back, then reflects on what it's learned." The
+loop is: **pick → reinforce → snapshot → analyze → narrate**.
+
+Full implementation plan with file-level detail lives at
+`~/.claude/plans/this-project-uses-qdrant-optimized-pizza.md`. The roadmap
+below is the scannable version.
+
+### M1 — Adaptive edge weighting (online) — **[x] shipped 2026-05-17**
+
+Capture which candidate the user actually picks; reinforce the graph path
+that surfaced it; make expansion weight-aware so reinforced edges rank
+their neighbors higher. See the Done section below for the full
+implementation summary.
+
+### M2 — Snapshot mechanism — [ ]
+
+**Goal:** one command produces a complete read-only frozen copy of vector +
+graph + feedback state. Foundation for any heavy nightly analysis that
+must not contaminate live state.
+
+Deliverables:
+- `daemon snapshot create | list | delete <id> | prune`
+- `./data/snapshots/<ts>/` bundle: Qdrant native snapshot, graph pickle copy,
+  sqlite `.backup()` of feedback.db, manifest copy, metadata.json
+- `stores/snapshot.py` with `SnapshotBundle`, `create_snapshot`,
+  `open_readonly` (read-only facade — writes raise), `prune_snapshots`
+- `SnapshotConfig` (dir, retention_days) in `config.py`
+
+### M3 — Structural-pattern analysis — [ ]
+
+**Goal:** a pure-Python pass over a snapshot that produces a structured
+report. No LLM yet. Lets us inspect what the graph has learned without
+booting the model.
+
+Deliverables:
+- `analysis/structural.py::compute_report` — Louvain communities, sampled
+  betweenness centrality (bridging notes), `nx.bridges` (load-bearing
+  links), orphans, dangling targets, edge-weight cohort (warmest regions)
+- `analysis/structural.py::simulate_evolution` — replay N days of
+  `candidate_selected` events against a deep copy of the snapshot graph,
+  diff against the snapshot — *hypothetical weight evolution* (live state
+  untouched)
+- `StructuralReport` + `WeightEvolutionReport` pydantic models in
+  `models.py`; outputs persist to `data/consolidation/<snapshot_id>/`
+- `daemon analyze <snapshot_id>` for standalone runs
+
+### M4 — Observer LLM agent — [ ]
+
+**Goal:** the LLM reads the structural + evolution reports and recent
+feedback, then writes a markdown letter into `<vault>/Agent/observer-<date>.md`
+— same writeback discipline as `daemon reflect`. This is where the
+structural patterns get *interpreted semantically*.
+
+Deliverables:
+- `_OBSERVER_SYSTEM` prompt + `observer_letter` in `llm/agents.py`
+  (second-person, no fabrication, prior letters fed in for continuity)
+- `pipeline/agent_observe.py` mirroring `agent_reflect.py`: snapshot →
+  analyze → write letter → maintain rolling index → decay unused edges
+- `daemon consolidate [--snapshot <id>] [--dry-run]` — one command that
+  bundles snapshot create + analyze + observe + decay
+- `agent.observer_enabled` (separate gate from `agent.enabled`),
+  `observer_lookback_days`, `observer_max_communities`, `observer_model`
+- New `agent_observer_runs` table in `AgentStateStore`
+
+### Out of scope (deliberately)
+
+- **Counterfactual query replay** (A/B'ing the LLM's answers against a
+  snapshot) — not picked during planning.
+- **Cron / Task Scheduler integration** for `daemon consolidate` — keep it
+  manual until the loop earns trust.
+- **Negative-signal decrements** — M1 only reinforces selected paths;
+  non-selection rides passively. Add explicit down-weights as v2 once we
+  see how the positive-only signal accumulates.
+
+## Other Planned Work
+
+Separate from the Adaptive Memory Loop arc:
+
+- [ ] Light setup UI for `ANTHROPIC_API_KEY` + a "compose docker" button.
+- [ ] Multi-embedding spaces.
+- [ ] Obsidian plugin / file watcher.
+- [ ] `daemon graph todos` — surface dangling wikilink targets as
+  "notes you keep meaning to write" (see AI Suggestions).
 
 ## Done
 
