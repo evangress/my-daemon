@@ -1,18 +1,56 @@
 site_name: My Daemon
+site_description: Personal knowledge and memory system over an Obsidian vault — vector seeds, graph expansion, LLM synthesis.
+site_author: Evan Gress
 site_url: https://my-daemon.ai/
 site_dir: ./docs-site
 docs_dir: ./docs-source
 repo_url: https://github.com/evangress/my-daemon
-repo_name: my-daemon
-edit_uri: 'blob/main/docs/'
+repo_name: evangress/my-daemon
+edit_uri: edit/master/docs-source/
+use_directory_urls: true
+strict: false
+
+# Built-in theme — no third-party deps. Swap to mkdocs-material later if you
+# install it; the nav and extensions below port over unchanged.
+theme:
+  name: readthedocs
+  highlightjs: true
+  hljs_languages:
+    - python
+    - yaml
+    - bash
+    - sql
+
+nav:
+  - Home: index.md
+  - Getting Started: getting-started.md
+  - Architecture: architecture.md
+  - CLI Reference: cli.md
+  - Configuration: configuration.md
+  - Background Agents: background-agents.md
+  - Modules:
+      - Vault: modules/vault.md
+      - Embeddings: modules/embeddings.md
+      - Stores: modules/stores.md
+      - Retrieval: modules/retrieval.md
+      - LLM: modules/llm.md
+      - Pipeline: modules/pipeline.md
+      - GUI: modules/gui.md
+  - Theme: theme.md
+  - Roadmap: roadmap.md
+  - Development: development.md
+
+# `extra` already bundles abbr, attr_list, def_list, fenced_code, footnotes,
+# md_in_html, and tables — so the redundant explicit entries are dropped.
 markdown_extensions:
+  - admonition
+  - codehilite:
+      guess_lang: false
   - extra
-  - fenced_code
-  - footnotes
-  - md_in_html
-  - tables
-  - codehilite
   - meta
   - sane_lists
-  - toc
+  - smarty
+  - toc:
+      permalink: true
+      toc_depth: 3
   - wikilinks

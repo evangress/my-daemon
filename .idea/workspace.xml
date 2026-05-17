@@ -4,10 +4,7 @@
     <option name="autoReloadType" value="ALL" />
   </component>
   <component name="ChangeListManager">
-    <list default="true" id="df100eb5-408b-4cff-9fc7-db33bfe773d5" name="Changes" comment="updated scaffold and dependancies">
-      <change beforePath="$PROJECT_DIR$/.gitignore" beforeDir="false" afterPath="$PROJECT_DIR$/.gitignore" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/mkdocs.yaml" beforeDir="false" afterPath="$PROJECT_DIR$/mkdocs.yaml" afterDir="false" />
-    </list>
+    <list default="true" id="df100eb5-408b-4cff-9fc7-db33bfe773d5" name="Changes" comment="added docs" />
     <option name="SHOW_DIALOG" value="false" />
     <option name="HIGHLIGHT_CONFLICTS" value="true" />
     <option name="HIGHLIGHT_NON_ACTIVE_CHANGELIST" value="false" />
@@ -69,7 +66,7 @@
       <option name="number" value="Default" />
       <option name="presentableId" value="Default" />
       <updated>1778937928112</updated>
-      <workItem from="1778937929112" duration="16699000" />
+      <workItem from="1778937929112" duration="16746000" />
     </task>
     <task id="LOCAL-00001" summary="workspace map">
       <option name="closed" value="true" />
@@ -95,7 +92,15 @@
       <option name="project" value="LOCAL" />
       <updated>1778963172462</updated>
     </task>
-    <option name="localTasksCounter" value="4" />
+    <task id="LOCAL-00004" summary="added docs">
+      <option name="closed" value="true" />
+      <created>1778969683937</created>
+      <option name="number" value="00004" />
+      <option name="presentableId" value="LOCAL-00004" />
+      <option name="project" value="LOCAL" />
+      <updated>1778969683937</updated>
+    </task>
+    <option name="localTasksCounter" value="5" />
     <servers />
   </component>
   <component name="TypeScriptGeneratedFilesManager">
@@ -104,7 +109,8 @@
   <component name="VcsManagerConfiguration">
     <MESSAGE value="workspace map" />
     <MESSAGE value="updated scaffold and dependancies" />
-    <option name="LAST_COMMIT_MESSAGE" value="updated scaffold and dependancies" />
+    <MESSAGE value="added docs" />
+    <option name="LAST_COMMIT_MESSAGE" value="added docs" />
   </component>
   <component name="XSLT-Support.FileAssociations.UIState">
     <expand />
