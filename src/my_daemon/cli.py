@@ -295,6 +295,23 @@ def chat(
     ),
 ) -> None:
     """Launch the warm-themed chat window for the daemon."""
+    # Cheap, fast preflight when running native: NiceGUI swallows a missing
+    # pywebview import in unhelpful ways. Catching it here means the silent
+    # .vbs launcher writes a clear cause to the log instead of dying mute.
+    if native:
+        try:
+            import webview  # noqa: F401  (pywebview installs as `webview`)
+        except ImportError as exc:
+            console.print(
+                "[red]Native mode requires pywebview, which is not installed in this venv.[/red]\n"
+                "Fix with one of:\n"
+                "  [bold]uv sync[/bold]                    (preferred — picks up the pinned version)\n"
+                "  [bold].venv\\Scripts\\pip install pywebview[/bold]  (Windows)\n"
+                "  [bold].venv/bin/pip install pywebview[/bold]      (Linux/macOS)\n"
+                "Or pass [bold]--no-native[/bold] to use the browser tab instead."
+            )
+            raise typer.Exit(code=2) from exc
+
     from my_daemon.gui import launch_chat
 
     launch_chat(host=host, port=port, native=native)
