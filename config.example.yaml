@@ -71,6 +71,24 @@ agent:
   # Don't touch a note that was saved within this many minutes (avoid collisions).
   write_grace_minutes: 30
 
+  # --- Observer (M4) -----------------------------------------------------
+  # The observer reads structural reports from M3 and writes a markdown
+  # letter into <vault>/Agent/observer-<date>.md. Gated separately from
+  # `enabled` so you can opt in after watching reflect/extract/link first.
+  observer_enabled: false
+  observer_lookback_days: 7
+  observer_max_communities: 8
+  # Opus 4.7 is the recommended model for the observer — interpreting
+  # structural patterns into prose is the highest-quality lift in this
+  # project. Set null to fall back to `llm.batch_model`.
+  observer_model: claude-opus-4-7
+  # How many prior letters to feed in for continuity, and how many to
+  # surface in the rolling `observer.md` index.
+  observer_prior_letters: 4
+  observer_index_window: 8
+  # Retention for snapshots auto-created by `daemon consolidate`.
+  observer_snapshot_retention_days: 14
+
 feedback:
   db_path: ./data/feedback.db
 

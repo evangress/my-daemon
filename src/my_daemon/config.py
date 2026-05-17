@@ -101,6 +101,24 @@ class AgentConfig(BaseModel):
     reflect_lookback_days: int = 7
     # Safety grace: don't touch a note saved within this many minutes.
     write_grace_minutes: int = 30
+    # --- Observer (M4) -------------------------------------------------------
+    # Separate gate from `enabled` so a user can run extract/link/reflect for
+    # weeks before opting into the heavier, prosier consolidation letter.
+    observer_enabled: bool = False
+    # Lookback for the weight-evolution replay inside `daemon consolidate`.
+    observer_lookback_days: int = 7
+    # Cap on how many Louvain communities the observer is allowed to discuss.
+    observer_max_communities: int = 8
+    # Observer model override. None → batch_model. The structural→prose lift
+    # is what this milestone exists for; Opus 4.7 is worth the cost here.
+    observer_model: str | None = "claude-opus-4-7"
+    # How many prior observer letters to feed back in for continuity.
+    observer_prior_letters: int = 4
+    # How many letters to surface in the rolling `observer.md` index.
+    observer_index_window: int = 8
+    # Retention for snapshots automatically created by `daemon consolidate`.
+    # Overrides `snapshot.retention_days` for the consolidation path only.
+    observer_snapshot_retention_days: int = 14
 
 
 class FeedbackConfig(BaseModel):

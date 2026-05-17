@@ -16,7 +16,12 @@ from dataclasses import dataclass, field
 from datetime import datetime
 
 from my_daemon.llm.client import LLMClient
-from my_daemon.models import FeedbackEvent, Note
+from my_daemon.models import (
+    FeedbackEvent,
+    Note,
+    StructuralReport,
+    WeightEvolutionReport,
+)
 
 
 @dataclass
@@ -318,4 +323,171 @@ def update_memory(
     return _call(
         client, system=_REFLECT_SYSTEM, user="\n".join(user_parts),
         model=_model_for(client, model), max_tokens=2000,
+    )
+
+
+# ----------------------------------------------------------------- observer (M4)
+
+
+_OBSERVER_SYSTEM = """You are the user's daemon, writing a short letter to them about what their second brain has been doing while they were away.
+
+You will be given:
+- A structural snapshot of the user's vault graph: communities the algorithm found, notes that bridge those communities, "load-bearing" links whose removal would disconnect parts of the graph, orphan notes (poorly connected), dangling wikilink targets (notes-they-keep-meaning-to-write), and the warmest edges (the ones that have been most reinforced by the user's recent picks).
+- A weight-evolution preview: which edges *would* shift if the recent feedback were replayed against the snapshot.
+- A short list of the user's most recent chats with the daemon.
+- The bodies of up to a handful of your own prior letters, for continuity.
+
+Write a single-page **second-person markdown letter** that interprets these patterns *semantically*. Treat the structural numbers as evidence, not subject matter — the user already saw the JSON. Your job is to translate the numbers into things like "your daemon-related notes have started pulling Obsidian-tooling notes into the same conversation" or "the journal entries about Austin keep being the bridge between projects and relationships — they are doing structural work in your second brain."
+
+Rules:
+- Do not invent. If a community's top tags don't suggest a clear theme, name the uncertainty ("a cluster I can't yet read") instead of pretending.
+- Address the user directly. Warm, but not saccharine. Not a corporate report.
+- Name *uncertainty* when evidence is thin: "this is from one week of selections, so take it as a hunch, not a verdict."
+- Continuity: when a prior letter said something that's still true (or no longer true), acknowledge it explicitly. Avoid restating it verbatim.
+- Length: aim for ~400–700 words. A letter, not a memo. Use light section headings if it helps the reader, but it's fine to be one or two flowing paragraphs.
+- The user *will* read this in Obsidian, alongside their own notes. Reference notes by their relative path (e.g. `Pullman Daemons.md`) when you want to point at one — but don't link them as `[[wikilinks]]`; the daemon never inserts wikilinks into its own output.
+- Sign off with a single line in italics that names which snapshot id and model wrote the letter.
+
+Return ONLY the markdown body (no frontmatter, no fences). The pipeline will prepend the YAML provenance header itself.
+"""
+
+
+def _render_communities(report: StructuralReport, *, max_count: int) -> str:
+    if not report.communities:
+        return "(no Louvain communities of size > 1 yet)"
+    lines: list[str] = []
+    for c in report.communities[:max_count]:
+        tag_str = ", ".join(f"#{t} ({n})" for t, n in c.top_tags[:3]) or "(no shared tags)"
+        member_str = ", ".join(c.members[:8])
+        if len(c.members) > 8:
+            member_str += f", … (+{len(c.members) - 8} more)"
+        lines.append(
+            f"- Community {c.community_id} (size {c.size}): {member_str}  — top tags: {tag_str}"
+        )
+    return "\n".join(lines)
+
+
+def _render_bridging(report: StructuralReport) -> str:
+    if not report.bridging_notes:
+        return "(no notes with notable betweenness yet)"
+    return "\n".join(
+        f"- {b.note_path}  (betweenness {b.betweenness:.4f})"
+        for b in report.bridging_notes
+    )
+
+
+def _render_bridges(report: StructuralReport) -> str:
+    if not report.bridge_edges:
+        return "(no load-bearing note↔note links)"
+    return "\n".join(
+        f"- {e.src} ↔ {e.dst}  ({e.kind}, weight {e.weight:.2f})"
+        for e in report.bridge_edges
+    )
+
+
+def _render_warm(report: StructuralReport) -> str:
+    if not report.warm_edges:
+        return "(no reinforced edges yet — everything is at baseline weight)"
+    return "\n".join(
+        f"- {e.src} → {e.dst}  ({e.kind}, weight {e.weight:.2f})"
+        for e in report.warm_edges
+    )
+
+
+def _render_dangling(report: StructuralReport) -> str:
+    if not report.dangling_targets:
+        return "(no dangling wikilink targets)"
+    return "\n".join(
+        f"- {d.target}  (referenced by {d.incoming_links} note(s))"
+        for d in report.dangling_targets
+    )
+
+
+def _render_evolution(evolution: WeightEvolutionReport | None) -> str:
+    if evolution is None:
+        return "(weight-evolution replay was skipped this run)"
+    if evolution.events_replayed == 0:
+        return f"(no selection events in the last {evolution.lookback_days} days)"
+    lines = [
+        f"Events replayed: {evolution.events_replayed} over {evolution.lookback_days} days.",
+        f"Events skipped (insufficient info): {evolution.events_skipped}.",
+        "Top edge shifts:",
+    ]
+    for d in evolution.top_edges[:8]:
+        lines.append(
+            f"  - {d.src} → {d.dst}  ({d.kind}): {d.before:.2f} → {d.after:.2f} "
+            f"(Δ {d.delta:+.2f})"
+        )
+    if evolution.top_notes:
+        lines.append("Top notes by aggregate shift:")
+        for n in evolution.top_notes[:6]:
+            lines.append(
+                f"  - {n.note_path}  (Δ {n.total_delta:.2f} across {n.edges_changed} edge(s))"
+            )
+    return "\n".join(lines)
+
+
+def _render_recent_chats(recent: list[FeedbackEvent], *, limit: int = 8) -> str:
+    if not recent:
+        return "(no recent chats)"
+    chunks: list[str] = []
+    for ev in recent[:limit]:
+        chunks.append(
+            f"- {ev.timestamp.date().isoformat()}  Q: {ev.query.strip()[:200]}\n"
+            f"    A: {(ev.answer or '').strip()[:300]}"
+        )
+    return "\n".join(chunks)
+
+
+def _render_prior_letters(letters: list[str]) -> str:
+    if not letters:
+        return "(no prior letters)"
+    parts: list[str] = []
+    for i, body in enumerate(letters, start=1):
+        snippet = body.strip()[:1800]
+        parts.append(f"--- prior letter {i} ---\n{snippet}\n--- end prior letter {i} ---")
+    return "\n\n".join(parts)
+
+
+def observer_letter(
+    client: LLMClient,
+    *,
+    structural: StructuralReport,
+    evolution: WeightEvolutionReport | None,
+    recent_feedback: list[FeedbackEvent],
+    prior_letters: list[str],
+    snapshot_id: str,
+    max_communities: int = 8,
+    model: str | None = None,
+    max_tokens: int = 2400,
+) -> str:
+    """Produce the markdown body of the observer letter for a snapshot.
+
+    The pipeline (``pipeline.agent_observe``) handles persistence, snapshot
+    creation, rolling index maintenance, and decay. This function only does
+    the LLM call and returns the prose.
+    """
+
+    user = "\n\n".join(
+        [
+            f"Snapshot id: **{snapshot_id}**",
+            f"Notes: {structural.note_count}, tags: {structural.tag_count}, "
+            f"edges: {structural.edge_count}, communities found: {structural.community_count}",
+            "--- communities ---\n" + _render_communities(structural, max_count=max_communities),
+            "--- bridging notes (sampled betweenness) ---\n" + _render_bridging(structural),
+            "--- load-bearing note↔note links ---\n" + _render_bridges(structural),
+            "--- warmest edges (recent reinforcement) ---\n" + _render_warm(structural),
+            "--- dangling wikilink targets ---\n" + _render_dangling(structural),
+            "--- hypothetical weight evolution ---\n" + _render_evolution(evolution),
+            "--- recent chats ---\n" + _render_recent_chats(recent_feedback),
+            "--- prior letters (for continuity) ---\n" + _render_prior_letters(prior_letters),
+            "Write the letter now. Markdown body only.",
+        ]
+    )
+    return _call(
+        client,
+        system=_OBSERVER_SYSTEM,
+        user=user,
+        model=_model_for(client, model),
+        max_tokens=max_tokens,
     )

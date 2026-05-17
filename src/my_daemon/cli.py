@@ -20,6 +20,7 @@ from my_daemon.llm import LLMClient
 from my_daemon.pipeline import QueryEngine, ingest_vault
 from my_daemon.pipeline.agent_extract import run_extract
 from my_daemon.pipeline.agent_link import run_link
+from my_daemon.pipeline.agent_observe import run_observe
 from my_daemon.pipeline.agent_reflect import run_reflect
 from my_daemon.retrieval.weights import apply_selection
 from my_daemon.stores import (
@@ -755,6 +756,86 @@ def snapshot_prune(
     for b in deleted:
         console.print(f"[yellow]pruned[/yellow] {b.id}")
     console.print(f"[green]Pruned {len(deleted)} snapshot(s).[/green]")
+
+
+@app.command()
+def consolidate(
+    snapshot_id: str | None = typer.Option(
+        None,
+        "--snapshot",
+        help="Reuse an existing snapshot bundle. Default: create a fresh one.",
+    ),
+    dry_run: bool = typer.Option(
+        False,
+        "--dry-run",
+        help="Run the LLM but skip every write to the vault and the live graph.",
+    ),
+    no_qdrant: bool = typer.Option(
+        False,
+        "--no-qdrant",
+        help="When creating a fresh snapshot, skip the Qdrant payload.",
+    ),
+    verbose: bool = typer.Option(False, "-v", "--verbose"),
+) -> None:
+    """Run the M4 consolidation loop: snapshot → analyze → observer letter → decay.
+
+    Writes ``<vault>/Agent/observer-<date>.md`` and refreshes the rolling
+    ``observer.md`` index. Gated by both ``agent.enabled`` AND
+    ``agent.observer_enabled`` — the LLM is the most expensive and most
+    opinion-laden of the writeback jobs, so it earns its own switch.
+    """
+    s = _load()
+    if not s.agent.enabled and not dry_run:
+        console.print(
+            "[yellow]agent.enabled is false in config.yaml — refusing to write. "
+            "Pass --dry-run to preview, or flip the flag once you're ready.[/yellow]"
+        )
+        raise typer.Exit(code=1)
+    if not s.agent.observer_enabled and not dry_run:
+        console.print(
+            "[yellow]agent.observer_enabled is false in config.yaml — refusing to write. "
+            "Flip the observer-specific flag (separate from agent.enabled) when you "
+            "want the daemon to start writing letters.[/yellow]"
+        )
+        raise typer.Exit(code=1)
+
+    feedback_store = _build_feedback_store(s)
+    state = _build_agent_state(s)
+    graph_store = _build_graph_store(s)
+    graph_store.load()
+    llm = LLMClient(s.llm, api_key=s.anthropic_api_key)
+
+    def _progress(line: str) -> None:
+        if verbose:
+            console.log(line)
+
+    try:
+        stats = run_observe(
+            s, state, feedback_store, graph_store, llm,
+            snapshot_id=snapshot_id,
+            dry_run=dry_run,
+            include_qdrant=not no_qdrant,
+            progress=_progress,
+        )
+    except FileNotFoundError as exc:
+        console.print(f"[red]{exc}[/red]")
+        raise typer.Exit(code=1) from exc
+
+    table = Table(title=f"daemon consolidate {'(dry-run)' if dry_run else ''}".strip())
+    table.add_column("metric")
+    table.add_column("value")
+    table.add_row("snapshot id", stats.snapshot_id)
+    table.add_row("model", stats.model_used)
+    table.add_row("communities", str(stats.communities_seen))
+    table.add_row("events replayed", str(stats.events_replayed))
+    table.add_row("edges decayed", str(stats.edges_decayed))
+    table.add_row("letter", str(stats.letter_path) if stats.letter_path else "(dry-run)")
+    table.add_row("run id", str(stats.run_id) if stats.run_id else "—")
+    console.print(table)
+    for note in stats.notes:
+        console.print(f"[yellow]note:[/yellow] {note}")
+    if stats.errors:
+        console.print(Panel("\n".join(stats.errors), title="Errors", border_style="red"))
 
 
 @app.command()

@@ -32,6 +32,19 @@ CREATE TABLE IF NOT EXISTS agent_reflect_runs (
     source_notes_hash TEXT NOT NULL,
     source_chat_count INTEGER NOT NULL DEFAULT 0
 );
+CREATE TABLE IF NOT EXISTS agent_observer_runs (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    snapshot_id TEXT NOT NULL,
+    letter_path TEXT,
+    written_at TEXT NOT NULL,
+    model TEXT NOT NULL,
+    events_replayed INTEGER NOT NULL DEFAULT 0,
+    communities_seen INTEGER NOT NULL DEFAULT 0,
+    edges_decayed INTEGER NOT NULL DEFAULT 0,
+    dry_run INTEGER NOT NULL DEFAULT 0
+);
+CREATE INDEX IF NOT EXISTS idx_observer_runs_written_at
+    ON agent_observer_runs(written_at);
 """
 
 
@@ -134,3 +147,46 @@ class AgentStateStore:
                 "SELECT * FROM agent_reflect_runs WHERE theme = ?", (theme,)
             ).fetchone()
             return dict(row) if row else None
+
+    # ---- observer runs ----------------------------------------------------
+
+    def record_observer_run(
+        self,
+        *,
+        snapshot_id: str,
+        letter_path: str | None,
+        model: str,
+        events_replayed: int = 0,
+        communities_seen: int = 0,
+        edges_decayed: int = 0,
+        dry_run: bool = False,
+    ) -> int:
+        with self._connect() as conn:
+            cur = conn.execute(
+                """
+                INSERT INTO agent_observer_runs (
+                    snapshot_id, letter_path, written_at, model,
+                    events_replayed, communities_seen, edges_decayed, dry_run
+                )
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                """,
+                (
+                    snapshot_id,
+                    letter_path,
+                    _now_iso(),
+                    model,
+                    events_replayed,
+                    communities_seen,
+                    edges_decayed,
+                    1 if dry_run else 0,
+                ),
+            )
+            return int(cur.lastrowid)
+
+    def recent_observer_runs(self, limit: int = 10) -> list[dict]:
+        with self._connect() as conn:
+            rows = conn.execute(
+                "SELECT * FROM agent_observer_runs ORDER BY id DESC LIMIT ?",
+                (limit,),
+            ).fetchall()
+            return [dict(r) for r in rows]

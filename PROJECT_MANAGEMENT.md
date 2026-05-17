@@ -58,23 +58,13 @@ report. No LLM yet. Lets us inspect what the graph has learned without
 booting the model. See the Done section below for the full
 implementation summary.
 
-### M4 — Observer LLM agent — [ ]
+### M4 — Observer LLM agent — **[x] shipped 2026-05-17**
 
 **Goal:** the LLM reads the structural + evolution reports and recent
 feedback, then writes a markdown letter into `<vault>/Agent/observer-<date>.md`
 — same writeback discipline as `daemon reflect`. This is where the
-structural patterns get *interpreted semantically*.
-
-Deliverables:
-- `_OBSERVER_SYSTEM` prompt + `observer_letter` in `llm/agents.py`
-  (second-person, no fabrication, prior letters fed in for continuity)
-- `pipeline/agent_observe.py` mirroring `agent_reflect.py`: snapshot →
-  analyze → write letter → maintain rolling index → decay unused edges
-- `daemon consolidate [--snapshot <id>] [--dry-run]` — one command that
-  bundles snapshot create + analyze + observe + decay
-- `agent.observer_enabled` (separate gate from `agent.enabled`),
-  `observer_lookback_days`, `observer_max_communities`, `observer_model`
-- New `agent_observer_runs` table in `AgentStateStore`
+structural patterns get *interpreted semantically*. See the Done section
+below for the full implementation summary.
 
 ### Out of scope (deliberately)
 
@@ -97,6 +87,8 @@ Separate from the Adaptive Memory Loop arc:
   "notes you keep meaning to write" (see AI Suggestions).
 
 ## Done
+
+- **Observer LLM agent (2026-05-17).** Closes the adaptive memory loop. `daemon consolidate [--snapshot <id>] [--dry-run] [-v]` runs the full M1→M4 pipeline as one command: create-or-reuse snapshot → `compute_report` + `simulate_evolution` (M3) → load prior observer letters for continuity → call the observer LLM → write `<vault>/Agent/observer-<YYYY-MM-DD>.md` via `write_atomic` (with a `vault_snapshot` of any prior same-day letter for recovery) → refresh the rolling `<vault>/Agent/observer.md` index → record `agent_observer_runs` row → `decay_unused_edges` on the live graph. Decay is the only place the live graph is mutated by consolidation, and only gentle-direction. New module `pipeline/agent_observe.py`; `_OBSERVER_SYSTEM` + `observer_letter` added to `llm/agents.py` (second-person letter, "do not invent" + uncertainty discipline, prior letters fed in for continuity); new `AgentConfig.observer_*` fields gating on a separate switch from the master `agent.enabled` (observer defaults to Opus 4.7 since this is the structural→prose lift worth paying for); new `agent_observer_runs` table in `AgentStateStore`. Seven observe tests cover letter+index write, dry-run (no vault writes, no live mutations, still records the attempt), live-graph decay, snapshot reuse, missing-snapshot error path, prior-letter continuity, and same-day re-run backup discipline. Full suite 66 pass / 1 pre-existing skip; ruff clean. Plan file: `~/.claude/plans/this-project-uses-qdrant-optimized-pizza.md`.
 
 - **Structural-pattern analysis (2026-05-17).** `daemon analyze <snapshot_id>` runs a pure-Python pass over a snapshot bundle and produces two reports without ever touching live state. `compute_report` (new module `analysis/structural.py`) extracts Louvain communities on the full undirected projection — tags are clustering glue, only note members are surfaced — plus sampled betweenness centrality for bridging notes, `nx.bridges` for load-bearing note↔note links, orphan notes (undirected degree ≤ 1, excluding dangling), dangling wikilink targets ranked by in-degree, and the warmest reinforced edges above a configurable threshold (default 1.5). `simulate_evolution` opens the snapshot read-only, deep-copies its graph into a shadow `GraphStore`, replays every `candidate_selected` event from the snapshotted feedback DB within a configurable lookback through `weights.apply_selection`, then diffs the post-replay shadow against the snapshot baseline — top edges by absolute Δweight and top notes by aggregated incident |Δ|. Reports persist as JSON at `data/consolidation/<snapshot_id>/structural.json` and `weight_evolution.json` for M4 to consume. New `ConsolidationConfig` (out_dir + caps + betweenness sample size + lookback) wired into `Settings` and both yaml files. `FeedbackStore.selections_since(cutoff)` added so the analyzer can pull events without raw SQL. Thirteen tests cover the report shape, orphan/dangling/warm/community detection, replay correctness, snapshot immutability after replay, lookback filtering, and JSON persistence; full suite 59 pass / 1 pre-existing skip; ruff clean. Plan file: `~/.claude/plans/this-project-uses-qdrant-optimized-pizza.md`.
 
