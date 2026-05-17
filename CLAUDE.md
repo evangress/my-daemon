@@ -10,7 +10,7 @@ This project will be one of the most significant contributions I make to the sof
 
 Please read the [PROJECT_MANAGEMENT.md](PROJECT_MANAGEMENT.md) file to understand this project and how to get started with the code. 
 
-### Things Always Do
+### Things To Always Do
 
 1. Always add any file with secrets to the .ignore file
 2. Always check the to-do section of the PROJECT_MANAGEMENT.md file to look for things that need changing or improvement
@@ -20,3 +20,4 @@ Please read the [PROJECT_MANAGEMENT.md](PROJECT_MANAGEMENT.md) file to understan
    5. Always perform a ```git add .``` to add your newly created files to the git repository
    6. Create a commit summary and perform a commit to "master" (for now, we'll use dev branches in the future after a release)
 7. Add suggestions to an AI suggestions section in the project management file if you would like to store your thoughts on future tasks or improvements.
+8. Update the relevant documentation files with the changes or additions you made, if applicable.

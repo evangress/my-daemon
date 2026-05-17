@@ -20,7 +20,17 @@ from my_daemon.pipeline.agent_extract import run_extract
 from my_daemon.pipeline.agent_link import run_link
 from my_daemon.pipeline.agent_reflect import run_reflect
 from my_daemon.retrieval.weights import apply_selection
-from my_daemon.stores import AgentStateStore, FeedbackStore, GraphStore, VectorStore
+from my_daemon.stores import (
+    AgentStateStore,
+    FeedbackStore,
+    GraphStore,
+    VectorStore,
+    create_snapshot,
+    delete_snapshot,
+    get_snapshot,
+    list_snapshots,
+    prune_snapshots,
+)
 
 app = typer.Typer(
     name="daemon",
@@ -32,6 +42,8 @@ graph_app = typer.Typer(name="graph", help="Graph inspection commands.")
 app.add_typer(graph_app)
 models_app = typer.Typer(name="models", help="Embedding model management.")
 app.add_typer(models_app)
+snapshot_app = typer.Typer(name="snapshot", help="Freeze + manage read-only state bundles.")
+app.add_typer(snapshot_app)
 
 console = Console()
 
@@ -523,6 +535,83 @@ def models_download() -> None:
         assert sparse is not None  # hybrid=True guarantees a builder result
         sparse_cache = sparse.download()
         console.print(f"[green]Sparse model '{s.embeddings.sparse_model}' ready in {sparse_cache}[/green]")
+
+
+@snapshot_app.command("create")
+def snapshot_create(
+    no_qdrant: bool = typer.Option(
+        False,
+        "--no-qdrant",
+        help="Skip the vector snapshot — useful when Qdrant is offline or for graph/feedback-only bundles.",
+    ),
+) -> None:
+    """Freeze vector + graph + feedback state into a new bundle under ./data/snapshots."""
+    s = _load()
+    warnings: list[str] = []
+    bundle = create_snapshot(
+        s,
+        include_qdrant=not no_qdrant,
+        on_warning=warnings.append,
+    )
+    console.print(f"[green]Created snapshot {bundle.id}[/green] → {bundle.dir}")
+    if bundle.qdrant_snapshot:
+        console.print(f"  qdrant: {bundle.qdrant_snapshot.name}")
+    elif no_qdrant:
+        console.print("  qdrant: skipped (--no-qdrant)")
+    for w in warnings:
+        console.print(f"[yellow]warning:[/yellow] {w}")
+
+
+@snapshot_app.command("list")
+def snapshot_list() -> None:
+    """List bundles in oldest→newest order."""
+    s = _load()
+    bundles = list_snapshots(s)
+    if not bundles:
+        console.print(f"[yellow]No snapshots in {s.snapshot.dir}.[/yellow]")
+        return
+    table = Table(title="Snapshots")
+    table.add_column("id")
+    table.add_column("created")
+    table.add_column("qdrant")
+    table.add_column("dir")
+    for b in bundles:
+        qdrant_cell = b.qdrant_snapshot.name if b.qdrant_snapshot else "—"
+        table.add_row(b.id, b.created_at.isoformat(timespec="seconds"), qdrant_cell, str(b.dir))
+    console.print(table)
+
+
+@snapshot_app.command("delete")
+def snapshot_delete(
+    snapshot_id: str = typer.Argument(..., help="The snapshot id (timestamp form, e.g. 2026-05-17T03-00-00Z)."),
+) -> None:
+    """Remove one bundle directory. The server-side Qdrant snapshot is left alone."""
+    s = _load()
+    bundle = get_snapshot(s, snapshot_id)
+    if bundle is None:
+        console.print(f"[red]No snapshot with id {snapshot_id} in {s.snapshot.dir}.[/red]")
+        raise typer.Exit(code=1)
+    delete_snapshot(bundle)
+    console.print(f"[green]Deleted snapshot {snapshot_id}[/green]")
+
+
+@snapshot_app.command("prune")
+def snapshot_prune(
+    retention_days: int | None = typer.Option(
+        None,
+        "--retention-days",
+        help="Override the configured retention window for this run.",
+    ),
+) -> None:
+    """Delete bundles older than the retention window (default from config)."""
+    s = _load()
+    deleted = prune_snapshots(s, retention_days=retention_days)
+    if not deleted:
+        console.print("[green]Nothing to prune.[/green]")
+        return
+    for b in deleted:
+        console.print(f"[yellow]pruned[/yellow] {b.id}")
+    console.print(f"[green]Pruned {len(deleted)} snapshot(s).[/green]")
 
 
 @app.command()

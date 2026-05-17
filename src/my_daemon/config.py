@@ -107,6 +107,19 @@ class FeedbackConfig(BaseModel):
     db_path: Path = Path("./data/feedback.db")
 
 
+class SnapshotConfig(BaseModel):
+    """Where snapshot bundles live and how long to keep them.
+
+    A snapshot bundle freezes the vector + graph + feedback state so heavy
+    analysis (M3) and the observer LLM (M4) can run against a stable copy
+    without contaminating live retrieval. Bundles are deliberately on the
+    local filesystem — no remote-storage indirection.
+    """
+
+    dir: Path = Path("./data/snapshots")
+    retention_days: int = 14
+
+
 class LoggingConfig(BaseModel):
     level: str = "INFO"
 
@@ -128,6 +141,7 @@ class Settings(BaseSettings):
     retrieval: RetrievalConfig = Field(default_factory=RetrievalConfig)
     llm: LLMConfig = Field(default_factory=LLMConfig)
     feedback: FeedbackConfig = Field(default_factory=FeedbackConfig)
+    snapshot: SnapshotConfig = Field(default_factory=SnapshotConfig)
     logging: LoggingConfig = Field(default_factory=LoggingConfig)
     agent: AgentConfig = Field(default_factory=AgentConfig)
 

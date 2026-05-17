@@ -4,9 +4,17 @@
     <option name="autoReloadType" value="ALL" />
   </component>
   <component name="ChangeListManager">
-    <list default="true" id="df100eb5-408b-4cff-9fc7-db33bfe773d5" name="Changes" comment="fixed ui launch issue">
+    <list default="true" id="df100eb5-408b-4cff-9fc7-db33bfe773d5" name="Changes" comment="updated defaults in the config yaml">
+      <change afterPath="$PROJECT_DIR$/MY-DAEMON-RESEARCH.md" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/MY-DAEMON-VISION.md" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/.idea/workspace.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/workspace.xml" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/CLAUDE.md" beforeDir="false" afterPath="$PROJECT_DIR$/CLAUDE.md" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/PROJECT_MANAGEMENT.md" beforeDir="false" afterPath="$PROJECT_DIR$/PROJECT_MANAGEMENT.md" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/config.example.yaml" beforeDir="false" afterPath="$PROJECT_DIR$/config.example.yaml" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/my_daemon/cli.py" beforeDir="false" afterPath="$PROJECT_DIR$/src/my_daemon/cli.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/my_daemon/config.py" beforeDir="false" afterPath="$PROJECT_DIR$/src/my_daemon/config.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/my_daemon/stores/__init__.py" beforeDir="false" afterPath="$PROJECT_DIR$/src/my_daemon/stores/__init__.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/my_daemon/stores/graph.py" beforeDir="false" afterPath="$PROJECT_DIR$/src/my_daemon/stores/graph.py" afterDir="false" />
     </list>
     <option name="SHOW_DIALOG" value="false" />
     <option name="HIGHLIGHT_CONFLICTS" value="true" />
@@ -37,22 +45,22 @@
     <option name="hideEmptyMiddlePackages" value="true" />
     <option name="showLibraryContents" value="true" />
   </component>
-  <component name="PropertiesComponent"><![CDATA[{
-  "keyToString": {
-    "ModuleVcsDetector.initialDetectionPerformed": "true",
-    "RunOnceActivity.ShowReadmeOnStart": "true",
-    "RunOnceActivity.TerminalTabsStorage.copyFrom.TerminalArrangementManager.252": "true",
-    "RunOnceActivity.git.unshallow": "true",
-    "RunOnceActivity.typescript.service.memoryLimit.init": "true",
-    "codeWithMe.voiceChat.enabledByDefault": "false",
-    "node.js.detected.package.eslint": "true",
-    "node.js.detected.package.tslint": "true",
-    "node.js.selected.package.eslint": "(autodetect)",
-    "node.js.selected.package.tslint": "(autodetect)",
-    "nodejs_package_manager_path": "npm",
-    "vue.rearranger.settings.migration": "true"
+  <component name="PropertiesComponent">{
+  &quot;keyToString&quot;: {
+    &quot;ModuleVcsDetector.initialDetectionPerformed&quot;: &quot;true&quot;,
+    &quot;RunOnceActivity.ShowReadmeOnStart&quot;: &quot;true&quot;,
+    &quot;RunOnceActivity.TerminalTabsStorage.copyFrom.TerminalArrangementManager.252&quot;: &quot;true&quot;,
+    &quot;RunOnceActivity.git.unshallow&quot;: &quot;true&quot;,
+    &quot;RunOnceActivity.typescript.service.memoryLimit.init&quot;: &quot;true&quot;,
+    &quot;codeWithMe.voiceChat.enabledByDefault&quot;: &quot;false&quot;,
+    &quot;node.js.detected.package.eslint&quot;: &quot;true&quot;,
+    &quot;node.js.detected.package.tslint&quot;: &quot;true&quot;,
+    &quot;node.js.selected.package.eslint&quot;: &quot;(autodetect)&quot;,
+    &quot;node.js.selected.package.tslint&quot;: &quot;(autodetect)&quot;,
+    &quot;nodejs_package_manager_path&quot;: &quot;npm&quot;,
+    &quot;vue.rearranger.settings.migration&quot;: &quot;true&quot;
   }
-}]]></component>
+}</component>
   <component name="SharedIndexes">
     <attachedChunks>
       <set>
@@ -69,7 +77,8 @@
       <option name="presentableId" value="Default" />
       <updated>1778937928112</updated>
       <workItem from="1778937929112" duration="16746000" />
-      <workItem from="1778980342782" duration="3333000" />
+      <workItem from="1778980342782" duration="4880000" />
+      <workItem from="1779015807369" duration="2013000" />
     </task>
     <task id="LOCAL-00001" summary="workspace map">
       <option name="closed" value="true" />
@@ -135,7 +144,15 @@
       <option name="project" value="LOCAL" />
       <updated>1778983451480</updated>
     </task>
-    <option name="localTasksCounter" value="9" />
+    <task id="LOCAL-00009" summary="updated defaults in the config yaml">
+      <option name="closed" value="true" />
+      <created>1778984976020</created>
+      <option name="number" value="00009" />
+      <option name="presentableId" value="LOCAL-00009" />
+      <option name="project" value="LOCAL" />
+      <updated>1778984976020</updated>
+    </task>
+    <option name="localTasksCounter" value="10" />
     <servers />
   </component>
   <component name="TypeScriptGeneratedFilesManager">
@@ -149,7 +166,8 @@
     <MESSAGE value="enhanced gui function" />
     <MESSAGE value="trying to fix gui launch" />
     <MESSAGE value="fixed ui launch issue" />
-    <option name="LAST_COMMIT_MESSAGE" value="fixed ui launch issue" />
+    <MESSAGE value="updated defaults in the config yaml" />
+    <option name="LAST_COMMIT_MESSAGE" value="updated defaults in the config yaml" />
   </component>
   <component name="XSLT-Support.FileAssociations.UIState">
     <expand />

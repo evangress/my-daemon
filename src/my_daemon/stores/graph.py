@@ -27,8 +27,9 @@ class GraphStore:
     expansion can pull all chunks of a neighbor without a separate index.
     """
 
-    def __init__(self, path: Path) -> None:
+    def __init__(self, path: Path, *, read_only: bool = False) -> None:
         self.path = path
+        self.read_only = read_only
         self.graph: nx.MultiDiGraph = nx.MultiDiGraph()
 
     def load(self) -> None:
@@ -39,6 +40,8 @@ class GraphStore:
             self.graph = nx.MultiDiGraph()
 
     def save(self) -> None:
+        if self.read_only:
+            raise RuntimeError("GraphStore is read-only (opened from a snapshot bundle)")
         self.path.parent.mkdir(parents=True, exist_ok=True)
         with self.path.open("wb") as fh:
             pickle.dump(self.graph, fh)

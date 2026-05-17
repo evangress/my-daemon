@@ -74,5 +74,14 @@ agent:
 feedback:
   db_path: ./data/feedback.db
 
+snapshot:
+  # Bundles produced by `daemon snapshot create` land here. Each bundle freezes
+  # the vector + graph + feedback state so the M3 analyzer and M4 observer LLM
+  # can read a stable copy without contaminating live retrieval.
+  dir: ./data/snapshots
+  # `daemon snapshot prune` deletes bundles older than this; uncalled snapshots
+  # never expire on their own.
+  retention_days: 14
+
 logging:
   level: INFO

@@ -10,11 +10,9 @@ My Daemon is designed to process markdown files primarily and will initially be 
 
 The Obsidian application is the human's interface to their knowledge and stored information. The My Daemon application creates a separate data layer that pulls from and interacts with the markdown files inside the Obsidian vault. 
 
-My Daemon should return a minimum of 3 results in RAG and let the user choose the one that they believe is most relevant to their request. The results should be sorted by weight, with the highest weight appearing first in the list. The user's choice should be stored as added weight to the connection between the query and the result. 
+My Daemon is a graph-augmented vector store with hybrid retrieval, adaptive edge weighting from implicit feedback, classical graph algorithms surfacing structural patterns, an LLM interpreting those patterns semantically, and a snapshot-isolated overnight consolidation phase where the observer can analyze and simulate without contaminating live state. The system should take inspiration from human brain mechanics and build in improvements and scale where human brains are limited. For more details, read the [MY-DAEMON-VISION.md](MY-DAEMON-VISION.md) document.
 
-The user should be able to ask the AI for another set of 3 results, assuming they are not satisfied with presented items.
-
-All user chat history will be stored and connected with RAG reseults that are confirmed by the user to be correct. 
+All user chat history will be stored and connected with RAG results that are confirmed by the user to be correct. 
 
 The app needs to have a nice, flexible, gui that can run on a desktop application on Windows or Ubuntu or in a web browser.
 
@@ -24,6 +22,10 @@ The app needs to have a nice, flexible, gui that can run on a desktop applicatio
 The initial scaffold phase is done. For reference, the linked MY-DAEMON-SCAFFOLD.md file contains information regarding how the app was originally designed.
 
 [MY-DAEMON-SCAFFOLD.md](MY-DAEMON-SCAFFOLD.md)
+
+## Design Concepts - Research
+
+I have asked Claude to create human cognition and technology/software mappings for reference. When thinking about how to improve or strengthen the capabilities of this application, please read and reference the [MY-DAEMON-RESEARCH.md](MY-DAEMON-RESEARCH.md) document.
 
 ## Milestone Plan — Adaptive Memory Loop
 
@@ -42,19 +44,12 @@ that surfaced it; make expansion weight-aware so reinforced edges rank
 their neighbors higher. See the Done section below for the full
 implementation summary.
 
-### M2 — Snapshot mechanism — [ ]
+### M2 — Snapshot mechanism — **[x] shipped 2026-05-17**
 
 **Goal:** one command produces a complete read-only frozen copy of vector +
 graph + feedback state. Foundation for any heavy nightly analysis that
-must not contaminate live state.
-
-Deliverables:
-- `daemon snapshot create | list | delete <id> | prune`
-- `./data/snapshots/<ts>/` bundle: Qdrant native snapshot, graph pickle copy,
-  sqlite `.backup()` of feedback.db, manifest copy, metadata.json
-- `stores/snapshot.py` with `SnapshotBundle`, `create_snapshot`,
-  `open_readonly` (read-only facade — writes raise), `prune_snapshots`
-- `SnapshotConfig` (dir, retention_days) in `config.py`
+must not contaminate live state. See the Done section below for the full
+implementation summary.
 
 ### M3 — Structural-pattern analysis — [ ]
 
@@ -113,6 +108,8 @@ Separate from the Adaptive Memory Loop arc:
   "notes you keep meaning to write" (see AI Suggestions).
 
 ## Done
+
+- **Snapshot mechanism (2026-05-17).** `daemon snapshot create | list | delete <id> | prune` produces a self-contained, read-only frozen copy of the daemon's state under `./data/snapshots/<ts>/`. Each bundle is the Qdrant native snapshot (downloaded from the docker-compose volume mount when available, otherwise pulled over the HTTP API; `--no-qdrant` skips it for graph+feedback-only bundles), a `shutil.copy2` of `graph.gpickle`, a SQLite `.backup()` of `feedback.db` (online-safe, never a raw file copy), the manifest, and a `metadata.json` with bundle version + provenance. New module `stores/snapshot.py` exposes `SnapshotBundle`, `create_snapshot`, `open_readonly` (returns a handle whose `GraphStore` and `FeedbackStore` both raise on any write — including `attach_signal` and `log` — so the M3 analyzer literally cannot contaminate live state), `list_snapshots`, `delete_snapshot`, `prune_snapshots`. `SnapshotConfig` (dir + retention_days, default 14) added to `config.py` and both yaml files. `GraphStore` gained an opt-in `read_only=True` mode whose `.save()` raises. Verified end-to-end with nine snapshot tests; full suite stays green. Plan file: `~/.claude/plans/this-project-uses-qdrant-optimized-pizza.md`.
 
 - **Adaptive edge weighting (2026-05-17).** Implicit-feedback loop now closes: every retrieved candidate is clickable in the chat UI (and via `daemon select <feedback_id> <rank>` on the CLI), which attaches a `candidate_selected` signal to the feedback row and reinforces every edge on the shortest graph path from the seed note to the picked candidate's note. Graph expansion switched from plain BFS to a Dijkstra over `1/edge.weight` (hop budget still applied), so reinforced edges feel "shorter" and pull their neighbors in with higher decayed scores. New module `retrieval/weights.py` exposes `apply_selection` (online, called from CLI/GUI) and `decay_unused_edges` (offline, called from the consolidation pipeline in Milestone 4). Feedback table gained `selected_rank / selected_chunk_id / selected_note_path` columns via an additive migration; the canonical `build_retrieval_summary` helper is now shared between CLI and GUI so a click in either place produces the same shape. Plan file: `~/.claude/plans/this-project-uses-qdrant-optimized-pizza.md`.
 
