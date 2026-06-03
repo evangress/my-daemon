@@ -86,6 +86,18 @@ Separate from the Adaptive Memory Loop arc:
 - [ ] `daemon graph todos` — surface dangling wikilink targets as
   "notes you keep meaning to write" (see AI Suggestions).
 
+## Hermes Integration
+
+Plan to make My Daemon the **memory and dream layer for the Hermes agent**
+(Nous Research `hermes-agent`, MIT) lives in [PLAN-HERMES.md](PLAN-HERMES.md).
+Investigation of Hermes's source found a native **memory-provider plugin**
+interface (`prefetch` / `system_prompt_block` / `sync_turn`) that delivers
+ambient recall + automatic dream injection + turn capture more natively than
+MCP — so the plan recommends a provider-primary hybrid (memory-provider plugin
+first, MCP server kept as optional portability for other clients). Both faces
+share one core adapter over the existing `QueryEngine` / `apply_selection` /
+`run_observe`. Awaiting Evan's confirmation on the primary surface (PLAN-HERMES §14 Q1).
+
 ## Done
 
 - **Observer LLM agent (2026-05-17).** Closes the adaptive memory loop. `daemon consolidate [--snapshot <id>] [--dry-run] [-v]` runs the full M1→M4 pipeline as one command: create-or-reuse snapshot → `compute_report` + `simulate_evolution` (M3) → load prior observer letters for continuity → call the observer LLM → write `<vault>/Agent/observer-<YYYY-MM-DD>.md` via `write_atomic` (with a `vault_snapshot` of any prior same-day letter for recovery) → refresh the rolling `<vault>/Agent/observer.md` index → record `agent_observer_runs` row → `decay_unused_edges` on the live graph. Decay is the only place the live graph is mutated by consolidation, and only gentle-direction. New module `pipeline/agent_observe.py`; `_OBSERVER_SYSTEM` + `observer_letter` added to `llm/agents.py` (second-person letter, "do not invent" + uncertainty discipline, prior letters fed in for continuity); new `AgentConfig.observer_*` fields gating on a separate switch from the master `agent.enabled` (observer defaults to Opus 4.7 since this is the structural→prose lift worth paying for); new `agent_observer_runs` table in `AgentStateStore`. Seven observe tests cover letter+index write, dry-run (no vault writes, no live mutations, still records the attempt), live-graph decay, snapshot reuse, missing-snapshot error path, prior-letter continuity, and same-day re-run backup discipline. Full suite 66 pass / 1 pre-existing skip; ruff clean. Plan file: `~/.claude/plans/this-project-uses-qdrant-optimized-pizza.md`.
