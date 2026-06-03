@@ -18,7 +18,7 @@ in Hermes's actual integration interfaces, which I read from its repo
 | Question | Decision |
 |---|---|
 | What is Hermes? | An **open-source agent app** (Nous Research `hermes-agent`, MIT) |
-| Transport | **MCP server** — *but see §1: investigation found a more native path* |
+| Transport | ~~MCP server~~ → **Hermes memory-provider plugin (provider-primary hybrid)**, confirmed 2026-06-03 after the §1 investigation; MCP kept as optional portability |
 | Access level | **Read + write-back** |
 | Dream delivery | Dreams **injected + queryable** |
 
@@ -82,9 +82,9 @@ Build **one core service layer** and expose it through **two faces**:
    Keeps My Daemon usable by *any* MCP client (Claude Desktop, other agents) and
    by non-Hermes setups. Defer it unless/until a non-Hermes consumer is wanted.
 
-> **Open decision for Evan (see §15):** confirm provider-primary, or keep MCP as
-> the primary surface. Everything below is written so the shared core is built
-> once regardless; only the milestone ordering changes.
+> **Decision (2026-06-03): provider-primary hybrid confirmed.** Build the Hermes
+> memory-provider plugin first (H1–H3); keep the MCP server as optional
+> portability (H4). The shared core is built once regardless.
 
 ---
 
@@ -400,11 +400,9 @@ memory:
 
 ## 14. Open questions for Evan
 
-1. **Primary surface.** Confirm **provider-primary hybrid** (recommended:
-   ambient + automatic dream injection + turn capture), or keep **MCP-primary**
-   (deliberate, portable, but no ambient/auto-injection)? This sets the milestone
-   ordering above. *(The original Q&A picked MCP before we knew the provider
-   interface existed — hence re-asking.)*
+1. ~~**Primary surface.**~~ **Resolved 2026-06-03: provider-primary hybrid** —
+   provider plugin H1–H3, MCP server H4 (optional). Remaining questions below
+   are still open and gate the build when it starts.
 2. **Capture confirmation policy.** `remember`/`sync_turn` default to
    *unconfirmed* (capture-everything, promote later) or only confirmed captures?
    Sets whether unconfirmed memories are recallable or quarantined.

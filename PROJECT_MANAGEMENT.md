@@ -96,7 +96,9 @@ ambient recall + automatic dream injection + turn capture more natively than
 MCP — so the plan recommends a provider-primary hybrid (memory-provider plugin
 first, MCP server kept as optional portability for other clients). Both faces
 share one core adapter over the existing `QueryEngine` / `apply_selection` /
-`run_observe`. Awaiting Evan's confirmation on the primary surface (PLAN-HERMES §14 Q1).
+`run_observe`. **Direction confirmed 2026-06-03: provider-primary hybrid** —
+build the Hermes memory-provider plugin first (milestones H1–H3), keep the MCP
+server as optional portability (H4).
 
 ## Done
 
