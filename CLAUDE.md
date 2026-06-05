@@ -10,6 +10,10 @@ This project will be one of the most significant contributions I make to the sof
 
 Please read the [PROJECT_MANAGEMENT.md](PROJECT_MANAGEMENT.md) file to understand this project and how to get started with the code. 
 
+### Sub-project: the Librarian (`librarian/`)
+
+The [`librarian/`](librarian/) subtree is the **Obsidian Librarian** — a passive background agent that *shapes* the vault (cross-links, folder-sorts, cleans whitespace, writes abstracts) as a thin layer on top of `my_daemon`, which it imports as a library. It runs as a **separate process** but lives in this repo because it leans heavily on `my_daemon`'s internals. When working in that subtree, follow [`librarian/CLAUDE.md`](librarian/CLAUDE.md); the build plan is [`librarian/LIBRARIAN-PLAN.md`](librarian/LIBRARIAN-PLAN.md). (Folded in from the former standalone `my-daemon-librarian` repo on 2026-06-05.)
+
 ### Things To Always Do
 
 1. Always add any file with secrets to the .ignore file
