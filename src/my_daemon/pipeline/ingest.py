@@ -123,3 +123,53 @@ def ingest_vault(
     graph_store.save()
     _save_manifest(settings.graph.manifest_path, manifest)
     return stats
+
+
+def ingest_note(
+    settings: Settings,
+    embedder: Embedder,
+    vector_store: VectorStore,
+    graph_store: GraphStore,
+    note: Note,
+    *,
+    sparse_embedder: SparseEmbedder | None = None,
+    save: bool = True,
+) -> int:
+    """Incrementally (re)ingest a single already-parsed :class:`Note`.
+
+    Mirrors one iteration of :func:`ingest_vault`'s inner loop so a freshly
+    *captured* note (e.g. a Hermes conversation turn written via
+    ``integration.core.DaemonCore.remember``) becomes recallable in the same
+    session without a full re-scan. The manifest is updated so the next full
+    ingest treats the note as already-known. Returns the number of chunks
+    upserted.
+    """
+
+    chunks: list[Chunk] = chunk_note(
+        note,
+        max_tokens=settings.chunking.max_tokens,
+        overlap_tokens=settings.chunking.overlap_tokens,
+    )
+    manifest = _load_manifest(settings.graph.manifest_path)
+
+    if note.relative_path in manifest:
+        vector_store.delete_by_note(note.relative_path)
+        graph_store.remove_note(note.relative_path)
+
+    if chunks:
+        vector_store.ensure_collection()
+        vectors = embedder.encode([c.text for c in chunks])
+        sparse = sparse_embedder.encode([c.text for c in chunks]) if sparse_embedder is not None else None
+        vector_store.upsert(chunks, vectors, sparse_vectors=sparse)
+
+    graph_store.add_note(note, chunk_ids=[c.id for c in chunks])
+    if save:
+        graph_store.save()
+
+    manifest[note.relative_path] = {
+        "mtime": note.mtime.isoformat(),
+        "chunk_ids": [c.id for c in chunks],
+        "title": note.title,
+    }
+    _save_manifest(settings.graph.manifest_path, manifest)
+    return len(chunks)

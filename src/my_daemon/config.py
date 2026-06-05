@@ -122,6 +122,42 @@ class AgentConfig(BaseModel):
     observer_snapshot_retention_days: int = 14
 
 
+class HermesConfig(BaseModel):
+    """Hermes integration (PLAN-HERMES.md). Two faces over one core adapter.
+
+    Everything defaults *off*: the provider only activates when Hermes is
+    configured to load it AND ``provider_enabled`` is true, and no write ever
+    happens unless ``allow_write_back`` is flipped — same read-only-for-weeks
+    discipline as ``agent.enabled``.
+    """
+
+    # --- Memory-provider plugin (Path A, primary) -------------------------
+    provider_enabled: bool = False
+    # Captures land in a *normal* (ingest-visible) folder, not daemon-owned Agent/.
+    capture_folder: str = "Conversations/hermes"
+    capture_requires_confirmation: bool = True
+    # Below this combined user+assistant length a turn is too thin to capture.
+    capture_min_chars: int = 120
+    prefetch_budget_chars: int = 4000
+    dream_block_budget_chars: int = 3000
+    # One-paragraph "who you are / why this memory exists" framing injected at
+    # session start above last night's letter. Empty → a sensible built-in default.
+    identity: str = ""
+    # --- Shared retrieval defaults handed to the agent --------------------
+    # Recall is retrieval-only by default: Hermes has its own model and wants
+    # grounded, cited context, not an answer composed for it (PLAN-HERMES §4).
+    recall_synthesize_default: bool = False
+    recall_top_k: int = 8
+    allow_write_back: bool = False          # gates endorse + remember (both faces)
+    # --- MCP server (Path B, optional portability) ------------------------
+    mcp_enabled: bool = False
+    mcp_transport: Literal["stdio", "http"] = "stdio"
+    mcp_host: str = "127.0.0.1"
+    mcp_port: int = 8077
+    # HTTP bearer token is read from this env var only — never from yaml.
+    mcp_auth_token_env: str = "MY_DAEMON_MCP_TOKEN"
+
+
 class FeedbackConfig(BaseModel):
     db_path: Path = Path("./data/feedback.db")
 
@@ -187,6 +223,7 @@ class Settings(BaseSettings):
     consolidation: ConsolidationConfig = Field(default_factory=ConsolidationConfig)
     logging: LoggingConfig = Field(default_factory=LoggingConfig)
     agent: AgentConfig = Field(default_factory=AgentConfig)
+    hermes: HermesConfig = Field(default_factory=HermesConfig)
 
     anthropic_api_key: str | None = None
 

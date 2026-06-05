@@ -1,0 +1,31 @@
+# SPDX-License-Identifier: Apache-2.0
+# Hermes plugin manifest for the My Daemon memory provider.
+name: my-daemon
+version: 0.1.0
+kind: memory-provider
+entrypoint: __init__:register
+description: >
+  My Daemon as the memory & dream layer for Hermes — ambient cited recall before
+  every turn, automatic injection of the daemon's latest observer letter (the
+  "dream") at session start, turn-by-turn capture, and deliberate recall/endorse/
+  remember/dream tools. Local-only: Qdrant + SQLite + your Obsidian vault on disk.
+license: Apache-2.0
+homepage: https://github.com/evangress/my-daemon
+requires:
+  python: ">=3.11"
+  pip:
+    - my-daemon
+hooks:
+  - name
+  - is_available
+  - initialize
+  - system_prompt_block
+  - prefetch
+  - sync_turn
+  - get_tool_schemas
+  - handle_tool_call
+  - on_memory_write
+  - on_session_end
+  - get_config_schema
+  - save_config
+  - shutdown

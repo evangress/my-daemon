@@ -17,8 +17,18 @@ src/my_daemon/
 ├── retrieval/           # seed → expand → orchestrate
 ├── llm/                 # Anthropic client + synthesis prompt
 ├── gui/                 # NiceGUI chat window (`daemon chat`)
+├── integration/         # DaemonCore — the one adapter every front end shares
+├── hermes/              # Hermes memory-provider plugin (front-end agent)
 └── pipeline/            # ingest_vault, QueryEngine
 ```
+
+> **Hermes front end.** My Daemon can act as the **memory & dream layer** for the
+> [Hermes agent](https://github.com/NousResearch/hermes-agent) (MIT) — Hermes
+> *acts*; My Daemon *remembers and dreams*. Ambient cited recall before every
+> turn, automatic injection of the daemon's latest observer letter, and
+> turn-by-turn capture, all off by default. See
+> [`docs-source/integrations/hermes.md`](docs-source/integrations/hermes.md) and
+> [`PLAN-HERMES.md`](PLAN-HERMES.md); preflight with `daemon hermes doctor`.
 
 ## Quickstart
 

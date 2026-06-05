@@ -340,7 +340,7 @@ HTTP bearer token comes from the environment, never yaml (same rule as
 
 ## 12. Milestones (hybrid, provider-primary)
 
-### H1 — Core service layer + provider read path *(MVP)*
+### H1 — Core service layer + provider read path *(MVP)* — **[x] shipped 2026-06-05**
 `src/my_daemon/integration/core.py` (recall/recall_block/latest_dream/status/
 neighbors). `src/my_daemon/hermes/provider.py` implementing `name`,
 `is_available`, `initialize`, `prefetch`, `system_prompt_block`,
@@ -349,7 +349,7 @@ neighbors). `src/my_daemon/hermes/provider.py` implementing `name`,
 block; `system_prompt_block` returns the newest letter from a fixture `Agent/`;
 provider routes a `mydaemon_recall` tool call; `is_available` makes no network call.
 
-### H2 — Provider write-back
+### H2 — Provider write-back — **[x] shipped 2026-06-05**
 `core.endorse` (factor `daemon select` internals out of `cli.py`) and
 `core.remember`. Provider `sync_turn` (non-blocking capture + soft reinforcement),
 `on_memory_write`, `on_session_end`. Gate behind `allow_write_back`. **Tests:**
@@ -357,13 +357,22 @@ provider routes a `mydaemon_recall` tool call; `is_available` makes no network c
 soft endorse reinforces the seed→note path (Δweight>0); write hooks no-op when
 the flag is off; `sync_turn` returns immediately (thread, not blocking).
 
-### H3 — Dream continuity + deliberate tools
+### H3 — Dream continuity + deliberate tools — **[x] shipped 2026-06-05**
 Identity framing in `system_prompt_block`; `mydaemon_dream`/`mydaemon_endorse`/
 `mydaemon_remember` tools; document + script nightly `consolidate` cadence.
 **Tests:** dream block assembles (and degrades gracefully with no letters yet);
 explicit endorse path; capture confirmation policy.
 
-### H4 — MCP server *(optional portability)*
+> **H1–H3 implementation note (2026-06-05).** Provider exposes the full hook set
+> (incl. `on_memory_write` / `get_config_schema` / `save_config`); the Hermes
+> ABC is resolved lazily so `my_daemon` keeps zero new runtime deps. A
+> `daemon hermes doctor` preflight was added for setup. `consolidate` cadence
+> stays operator/scheduled and is documented in
+> `docs-source/integrations/hermes.md` (cron/systemd/Task Scheduler), not yet
+> shipped as a script — left to the operator per the "keep consolidate manual
+> until it earns trust" stance.
+
+### H4 — MCP server *(optional portability — deferred)*
 `src/my_daemon/mcp/server.py` (FastMCP) over the same `core`; `daemon mcp serve`;
 resources + write-tool gating; `daemon mcp doctor`. **Tests:** in-process MCP
 client asserts `recall` shape incl. `feedback_event_id`; `read_note` rejects path

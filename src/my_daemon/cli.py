@@ -49,6 +49,8 @@ models_app = typer.Typer(name="models", help="Embedding model management.")
 app.add_typer(models_app)
 snapshot_app = typer.Typer(name="snapshot", help="Freeze + manage read-only state bundles.")
 app.add_typer(snapshot_app)
+hermes_app = typer.Typer(name="hermes", help="Hermes memory-provider integration.")
+app.add_typer(hermes_app)
 
 console = Console()
 
@@ -837,6 +839,55 @@ def consolidate(
         console.print(f"[yellow]note:[/yellow] {note}")
     if stats.errors:
         console.print(Panel("\n".join(stats.errors), title="Errors", border_style="red"))
+
+
+@hermes_app.command("doctor")
+def hermes_doctor() -> None:
+    """Preflight the Hermes memory provider — config + readiness, no network.
+
+    Reports whether ``is_available()`` would let Hermes activate the provider,
+    and surfaces the capture/write-back settings and how many observer letters
+    (dreams) exist to inject. Makes no Qdrant or Anthropic call.
+    """
+    from my_daemon.hermes import HERMES_AVAILABLE
+    from my_daemon.hermes.provider import MyDaemonProvider
+
+    s = _load()
+    provider = MyDaemonProvider(settings=s)
+    available = provider.is_available()
+
+    agent_dir = s.vault.path / s.agent.folder_name
+    letters = (
+        sorted(p.name for p in agent_dir.glob("observer-*.md")) if agent_dir.is_dir() else []
+    )
+
+    table = Table(title="Hermes provider doctor")
+    table.add_column("check")
+    table.add_column("value")
+    table.add_row("hermes ABC importable", "yes (in a Hermes venv)" if HERMES_AVAILABLE else "no (standalone)")
+    table.add_row("provider_enabled", str(s.hermes.provider_enabled))
+    table.add_row("vault exists", "yes" if s.vault.path.expanduser().exists() else f"NO ({s.vault.path})")
+    table.add_row("is_available()", "[green]ready[/green]" if available else "[yellow]inactive[/yellow]")
+    table.add_row("allow_write_back", str(s.hermes.allow_write_back))
+    table.add_row("capture_folder", s.hermes.capture_folder)
+    table.add_row("capture_requires_confirmation", str(s.hermes.capture_requires_confirmation))
+    table.add_row("recall_top_k", str(s.hermes.recall_top_k))
+    table.add_row("observer letters (dreams)", str(len(letters)) + (f" — latest {letters[-1]}" if letters else ""))
+    console.print(table)
+
+    if not available:
+        if not s.hermes.provider_enabled:
+            console.print(
+                "[yellow]provider_enabled is false — flip hermes.provider_enabled in "
+                "config.yaml once you're ready to let Hermes use My Daemon.[/yellow]"
+            )
+        if not s.vault.path.expanduser().exists():
+            console.print(f"[red]Vault path does not exist: {s.vault.path}[/red]")
+    if not s.hermes.allow_write_back:
+        console.print(
+            "[dim]Read-only: endorse/remember/sync_turn capture are no-ops until "
+            "hermes.allow_write_back is true.[/dim]"
+        )
 
 
 @app.command()

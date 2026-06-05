@@ -28,6 +28,8 @@ nav:
   - CLI Reference: cli.md
   - Configuration: configuration.md
   - Background Agents: background-agents.md
+  - Integrations:
+      - Hermes: integrations/hermes.md
   - Modules:
       - Vault: modules/vault.md
       - Embeddings: modules/embeddings.md

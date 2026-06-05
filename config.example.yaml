@@ -89,6 +89,39 @@ agent:
   # Retention for snapshots auto-created by `daemon consolidate`.
   observer_snapshot_retention_days: 14
 
+hermes:
+  # My Daemon as the memory & dream layer for the Hermes agent (PLAN-HERMES.md).
+  # Everything defaults off — the provider only activates when Hermes loads it
+  # AND provider_enabled is true, and nothing is written unless allow_write_back.
+
+  # --- Memory-provider plugin (Path A, primary) ---
+  provider_enabled: false
+  # Conversation captures land here: a *normal* (ingest-visible) folder, NOT the
+  # daemon-owned Agent/, so captures become recallable in later sessions.
+  capture_folder: Conversations/hermes
+  capture_requires_confirmation: true
+  # Skip capturing turns shorter than this (combined user+assistant chars).
+  capture_min_chars: 120
+  prefetch_budget_chars: 4000
+  dream_block_budget_chars: 3000
+  # One-paragraph identity framing injected above last night's letter at session
+  # start. Leave blank for the built-in default.
+  identity: ""
+  # --- Shared retrieval defaults handed to the agent ---
+  # Recall is retrieval-only by default: Hermes has its own model and wants
+  # grounded, cited context, not an answer composed for it.
+  recall_synthesize_default: false
+  recall_top_k: 8
+  # Master write-back gate (endorse + remember). Read-only until you flip this.
+  allow_write_back: false
+  # --- MCP server (Path B, optional portability) ---
+  mcp_enabled: false
+  mcp_transport: stdio   # stdio | http
+  mcp_host: 127.0.0.1
+  mcp_port: 8077
+  # HTTP bearer token comes from this env var only — never from yaml.
+  mcp_auth_token_env: MY_DAEMON_MCP_TOKEN
+
 feedback:
   db_path: ./data/feedback.db
 
