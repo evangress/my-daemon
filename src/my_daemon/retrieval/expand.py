@@ -13,6 +13,7 @@ def expand_from_seeds(
     vector_store: VectorStore,
     depth: int = 2,
     decay: float = 0.5,
+    exclude_tag_prefixes: tuple[str, ...] = (),
 ) -> list[RetrievedChunk]:
     """For each seed, BFS the graph and pull chunks belonging to neighbor notes.
 
@@ -31,7 +32,10 @@ def expand_from_seeds(
         # weighted=True: Dijkstra over 1/weight so feedback-reinforced edges
         # produce a *smaller* distance and ride in with a higher decayed score.
         # Hop budget still enforced inside the call.
-        neighbors = graph_store.neighbors_within(seed.chunk.note_uuid, depth=depth, weighted=True)
+        neighbors = graph_store.neighbors_within(
+            seed.chunk.note_uuid, depth=depth, weighted=True,
+            exclude_tag_prefixes=exclude_tag_prefixes,
+        )
         for neighbor_uuid, distance in neighbors.items():
             if neighbor_uuid in seen_seed_uuids:
                 # already represented by the seed itself

@@ -28,6 +28,7 @@ from my_daemon.pipeline.migrate_uuids import (
     list_migration_runs,
     rollback_uuids,
 )
+from my_daemon.pipeline.theme_tags import apply_decision, propose_theme_tags
 from my_daemon.retrieval.weights import apply_selection
 from my_daemon.stores import (
     AgentStateStore,
@@ -47,6 +48,7 @@ from my_daemon.stores.db import MIGRATIONS as DB_MIGRATIONS
 from my_daemon.stores.db import SCHEMA_VERSION as DB_SCHEMA_VERSION
 from my_daemon.stores.db import migrate as db_migrate
 from my_daemon.stores.db import schema_version as db_schema_version
+from my_daemon.stores.themes import ThemeStore
 
 app = typer.Typer(
     name="daemon",
@@ -62,6 +64,8 @@ snapshot_app = typer.Typer(name="snapshot", help="Freeze + manage read-only stat
 app.add_typer(snapshot_app)
 hermes_app = typer.Typer(name="hermes", help="Hermes memory-provider integration.")
 app.add_typer(hermes_app)
+themes_app = typer.Typer(name="themes", help="Emergent themes and their tag proposals.")
+app.add_typer(themes_app)
 migrate_app = typer.Typer(name="migrate", help="Schema and identity migrations.")
 app.add_typer(migrate_app)
 
@@ -1062,6 +1066,97 @@ def hot_notes(
     for note_uuid, count, strength in rows:
         table.add_row(paths.get(note_uuid, note_uuid), str(count), f"{strength:.2f}")
     console.print(table)
+
+
+@themes_app.command("list")
+def themes_list() -> None:
+    """Show the themes the dream phase has found."""
+    s = _load()
+    store = ThemeStore(db_path=s.feedback.db_path)
+    all_themes = store.all()
+    if not all_themes:
+        console.print("[yellow]No themes yet — run `daemon consolidate`.[/yellow]")
+        return
+
+    table = Table(title="Themes")
+    table.add_column("id", justify="right")
+    table.add_column("label")
+    table.add_column("status")
+    table.add_column("queries", justify="right")
+    table.add_column("runs", justify="right")
+    for theme in all_themes:
+        style = {"accepted": "green", "dormant": "dim", "rejected": "red"}.get(theme.status, "")
+        table.add_row(
+            str(theme.id), theme.label, theme.status,
+            str(theme.query_count), str(theme.runs_seen), style=style,
+        )
+    console.print(table)
+
+
+@themes_app.command("accept")
+def themes_accept(
+    theme_id: int = typer.Argument(..., help="Theme id from `daemon themes list`."),
+    label: str | None = typer.Option(None, "--label", help="Rename it while accepting."),
+) -> None:
+    """Accept a theme. Its label is then yours — the observer never renames it."""
+    s = _load()
+    store = ThemeStore(db_path=s.feedback.db_path)
+    theme = store.get(theme_id)
+    if theme is None:
+        console.print(f"[red]No theme {theme_id}.[/red]")
+        raise typer.Exit(code=1)
+
+    store.set_status(theme_id, "accepted")
+    store.set_label(theme_id, label=label or theme.label, summary=theme.summary, locked=True)
+    count = propose_theme_tags(store)
+    console.print(
+        f"[green]Accepted[/green] '{label or theme.label}'. "
+        f"{count} tag proposal(s) queued — review with `daemon themes review`."
+    )
+
+
+@themes_app.command("reject")
+def themes_reject(theme_id: int = typer.Argument(...)) -> None:
+    """Reject a theme. It stays in the record, but proposes nothing."""
+    s = _load()
+    ThemeStore(db_path=s.feedback.db_path).set_status(theme_id, "rejected")
+    console.print(f"[green]Rejected theme {theme_id}.[/green]")
+
+
+@themes_app.command("review")
+def themes_review(
+    apply_all: bool = typer.Option(False, "--accept-all", help="Accept every pending proposal."),
+    reject_all: bool = typer.Option(False, "--reject-all", help="Reject every pending proposal."),
+) -> None:
+    """Review pending theme-tag proposals, one note at a time."""
+    s = _load()
+    store = ThemeStore(db_path=s.feedback.db_path)
+    registry = NoteRegistry(db_path=s.feedback.db_path)
+    pending = store.pending_proposals()
+    if not pending:
+        console.print("[green]Nothing pending.[/green]")
+        return
+
+    paths = registry.paths_for(p.note_uuid for p in pending)
+    for proposal in pending:
+        rel = paths.get(proposal.note_uuid, proposal.note_uuid)
+        if reject_all:
+            decision = "rejected"
+        elif apply_all:
+            decision = "accepted"
+        else:
+            console.print(f"\n[bold]{rel}[/bold]  ← [cyan]{proposal.tag}[/cyan]")
+            answer = Prompt.ask("  apply?", choices=["y", "n", "skip"], default="n")
+            if answer == "skip":
+                continue
+            decision = "accepted" if answer == "y" else "rejected"
+
+        result = apply_decision(
+            s, store, registry, proposal.id, decision,
+            grace_minutes=s.agent.write_grace_minutes,
+        )
+        mark = "[green]✓[/green]" if result.changed else "[dim]·[/dim]"
+        console.print(f"  {mark} {rel}: {result.reason}")
 
 
 @migrate_app.command("assign-uuids")

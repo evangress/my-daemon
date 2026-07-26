@@ -206,6 +206,94 @@ def set_frontmatter_key_textual(
     return WriteResult(path=note_path, changed=True, reason="ok")
 
 
+def add_frontmatter_list_values_textual(
+    note_path: Path,
+    key: str,
+    values: list[str],
+    *,
+    vault_root: Path,
+    agent_folder: str = "Agent",
+    allow_agent_folder: bool = False,
+    grace_minutes: int = 2,
+) -> WriteResult:
+    """Append values to a frontmatter list, preserving the style already there.
+
+    Flow style stays flow, block style stays block (at its own indentation), a
+    scalar becomes a flow list, and a missing key is created. Everything else
+    in the file is untouched — which is the whole point, since the alternative
+    (`frontmatter.dumps`) rewrites the entire document.
+    """
+
+    ok, reason = is_writable(
+        note_path,
+        vault_root=vault_root,
+        agent_folder=agent_folder,
+        grace_minutes=grace_minutes,
+        allow_agent_folder=allow_agent_folder,
+    )
+    if not ok:
+        return WriteResult(path=note_path, changed=False, reason=reason)
+
+    wanted = [v.strip().lstrip("#") for v in values if v and v.strip()]
+    if not wanted:
+        return WriteResult(path=note_path, changed=False, reason="no values")
+
+    bom, lines, nl = _read_for_edit(note_path)
+    bounds = _frontmatter_bounds(lines)
+
+    if bounds is None:
+        block = [f"---{nl}", f"{key}: [{', '.join(wanted)}]{nl}", f"---{nl}"]
+        _atomic_write_text(note_path, bom + "".join(block + lines))
+        return WriteResult(path=note_path, changed=True, reason="ok")
+
+    first, close = bounds
+    pattern = _key_pattern(key)
+    index = next((i for i in range(first, close) if pattern.match(lines[i])), None)
+
+    if index is None:
+        lines.insert(close, f"{key}: [{', '.join(wanted)}]{nl}")
+        _atomic_write_text(note_path, bom + "".join(lines))
+        return WriteResult(path=note_path, changed=True, reason="ok")
+
+    body = lines[index].rstrip("\r\n")
+    ending = lines[index][len(body) :] or nl
+    inline = body.split(":", 1)[1].strip()
+
+    if inline.startswith("[") and inline.endswith("]"):
+        existing = [v.strip() for v in inline[1:-1].split(",") if v.strip()]
+        additions = [v for v in wanted if v not in existing]
+        if not additions:
+            return WriteResult(path=note_path, changed=False, reason="no new values")
+        merged = ", ".join([*existing, *additions])
+        lines[index] = f"{key}: [{merged}]{ending}"
+    elif inline:
+        # A scalar value. Promote to a flow list rather than restructuring the
+        # file into block style.
+        existing = [inline.strip("'\"")]
+        additions = [v for v in wanted if v not in existing]
+        if not additions:
+            return WriteResult(path=note_path, changed=False, reason="no new values")
+        lines[index] = f"{key}: [{', '.join([*existing, *additions])}]{ending}"
+    else:
+        # Block style: `key:` followed by `- value` entries.
+        entry = re.compile(r"^(\s*)-\s*(.*?)\s*$")
+        last, indent, existing = index, "  ", []
+        for i in range(index + 1, close):
+            match = entry.match(lines[i].rstrip("\r\n"))
+            if not match:
+                break
+            indent, last = match.group(1), i
+            existing.append(match.group(2).strip("'\""))
+        additions = [v for v in wanted if v not in existing]
+        if not additions:
+            return WriteResult(path=note_path, changed=False, reason="no new values")
+        for offset, value in enumerate(additions):
+            lines.insert(last + 1 + offset, f"{indent}- {value}{nl}")
+
+    _atomic_write_text(note_path, bom + "".join(lines))
+    return WriteResult(path=note_path, changed=True, reason="ok")
+
+
 def remove_frontmatter_key_textual(
     note_path: Path,
     key: str,
@@ -434,30 +522,21 @@ def add_tags(
     agent_folder: str = "Agent",
     grace_minutes: int = 30,
 ) -> WriteResult:
-    """Extend the frontmatter ``tags`` list with ``tags``, preserving original ordering.
+    """Extend the frontmatter ``tags:`` list.
 
-    Creates the ``tags`` block if absent. Strips leading ``#`` from each tag.
-    Never writes inline ``#tag`` markers — frontmatter is the safer surface.
+    Delegates to :func:`add_frontmatter_list_values_textual`. It used to
+    round-trip the document through PyYAML, which collapsed CRLF, expanded
+    flow-style lists into block style, deleted comments, and dropped the
+    trailing newline — on every ``daemon link`` run.
     """
-    ok, reason = is_writable(
-        note_path, vault_root=vault_root, agent_folder=agent_folder, grace_minutes=grace_minutes
+
+    return add_frontmatter_list_values_textual(
+        note_path,
+        "tags",
+        tags,
+        vault_root=vault_root,
+        agent_folder=agent_folder,
+        grace_minutes=grace_minutes,
     )
-    if not ok:
-        return WriteResult(path=note_path, changed=False, reason=reason)
 
-    text = note_path.read_text(encoding="utf-8")
-    post = frontmatter.loads(text)
-    existing_raw = post.metadata.get("tags") or []
-    if isinstance(existing_raw, str):
-        existing_raw = [existing_raw]
-    existing = [str(t).lstrip("#") for t in existing_raw]
 
-    additions = [t.lstrip("#") for t in tags if t.lstrip("#") not in set(existing)]
-    if not additions:
-        return WriteResult(path=note_path, changed=False, reason="no new tags")
-
-    post.metadata["tags"] = existing + additions
-    snap = snapshot(note_path, vault_root=vault_root, agent_folder=agent_folder)
-    # add_tags always writes frontmatter (it's the whole point) — force serialization.
-    _atomic_write_text(note_path, _serialize(post, had_frontmatter=True))
-    return WriteResult(path=note_path, changed=True, reason=f"added tags: {additions}", snapshot=snap)

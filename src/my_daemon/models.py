@@ -9,6 +9,13 @@ from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field
 
+# Every daemon-authored theme tag carries this prefix. Two reasons: the user
+# can see at a glance which tags they wrote and which the daemon proposed, and
+# retrieval can refuse to walk them — otherwise theme tags create graph edges,
+# which change expansion, which change fingerprints, which mint new themes, and
+# the system converges on its own reflection.
+THEME_TAG_PREFIX = "theme/"
+
 
 class Note(BaseModel):
     """A raw markdown file from the vault."""

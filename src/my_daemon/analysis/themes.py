@@ -17,6 +17,7 @@ import math
 import re
 from dataclasses import dataclass, field
 
+from my_daemon.models import THEME_TAG_PREFIX
 from my_daemon.stores.activations import INTENTIONAL_SURFACES, ActivationLedger
 from my_daemon.stores.themes import ThemeStore
 
@@ -49,6 +50,18 @@ class ReconcileResult:
     # Only *new* clusters need an LLM label — steady state is zero a night.
     needs_naming: list[tuple[int, FingerprintCluster]] = field(default_factory=list)
     churn: float = 0.0
+
+
+def is_self_referential_tag(tag: str) -> bool:
+    """Is this a tag the daemon proposed from a theme?
+
+    Such tags create graph edges, which change expansion, which changes
+    fingerprints, which mints new themes — a loop where the system converges on
+    its own reflection. Clustering excludes activations that arrived through
+    one.
+    """
+
+    return tag.startswith(THEME_TAG_PREFIX)
 
 
 def cosine(a: dict[str, float], b: dict[str, float]) -> float:

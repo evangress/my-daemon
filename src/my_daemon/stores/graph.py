@@ -176,6 +176,7 @@ class GraphStore:
         depth: int,
         *,
         weighted: bool = False,
+        exclude_tag_prefixes: tuple[str, ...] = (),
     ) -> dict[str, float]:
         """Distances from a note to reachable neighbor notes, up to ``depth`` hops.
 
@@ -193,6 +194,17 @@ class GraphStore:
             return {}
 
         ug = self.graph.to_undirected(as_view=True)
+        if exclude_tag_prefixes:
+            # Walking a daemon-authored theme tag would let the system's own
+            # conclusions steer the retrieval that produced them.
+            blocked = {
+                n
+                for n, d in self.graph.nodes(data=True)
+                if d.get("type") == "tag"
+                and str(d.get("title", "")).startswith(exclude_tag_prefixes)
+            }
+            if blocked:
+                ug = ug.subgraph([n for n in ug.nodes if n not in blocked])
 
         # Hop budget first — bounds the reachable set independent of weight.
         hop_seen = {start: 0}

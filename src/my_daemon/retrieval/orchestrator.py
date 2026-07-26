@@ -10,7 +10,7 @@ from datetime import UTC, datetime
 
 from my_daemon.config import Settings
 from my_daemon.embeddings import Embedder, SparseEmbedder
-from my_daemon.models import RetrievalResult, RetrievedChunk
+from my_daemon.models import THEME_TAG_PREFIX, RetrievalResult, RetrievedChunk
 from my_daemon.retrieval.expand import expand_from_seeds
 from my_daemon.retrieval.seed import seed_search
 from my_daemon.retrieval.trace import RetrievalListener, RetrievalTrace, activations_from
@@ -64,6 +64,7 @@ class RetrievalOrchestrator:
             self.vector_store,
             depth=self.s.graph.expansion_depth,
             decay=self.s.graph.distance_decay,
+            exclude_tag_prefixes=(THEME_TAG_PREFIX,),
         )
 
         combined: dict[str, RetrievedChunk] = {}

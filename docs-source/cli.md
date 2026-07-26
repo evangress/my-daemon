@@ -205,6 +205,26 @@ daemon migrate rollback-uuids <run_id> [--mode key-removal|restore] [--force]
 Either mode also clears the affected registry rows, returning the system to
 path-only operation.
 
+### `daemon themes list | accept | reject | review`
+
+```
+daemon themes list
+daemon themes accept <id> [--label "Why projects stall"]
+daemon themes reject <id>
+daemon themes review [--accept-all | --reject-all]
+```
+
+Themes are clusters of your own questions that kept landing on the same notes,
+found and named during `daemon consolidate`. `list` shows them; `accept` blesses
+one (locking its label, so the observer never renames what you named) and queues
+tag proposals for the notes that define it; `review` walks those proposals one
+note at a time.
+
+Nothing is written to your notes until you accept a proposal. Accepted tags
+carry a `theme/` prefix so you can always tell which tags you wrote and which
+the daemon proposed — and so retrieval can refuse to walk them, which stops the
+daemon from converging on its own conclusions.
+
 ### `daemon models download`
 
 Forces a download of the embedding model(s) into `embeddings.cache_folder`
