@@ -11,8 +11,10 @@ from my_daemon.config import Settings
 from my_daemon.embeddings import Embedder, SparseEmbedder
 from my_daemon.llm import LLMClient
 from my_daemon.models import FeedbackEvent, RetrievalResult
+from my_daemon.pipeline.activation import ActivationRecorder
 from my_daemon.retrieval import RetrievalOrchestrator
 from my_daemon.stores import FeedbackStore, GraphStore, VectorStore
+from my_daemon.stores.activations import ActivationLedger
 
 
 @dataclass
@@ -78,17 +80,22 @@ class QueryEngine:
         feedback_store: FeedbackStore,
         llm_client: LLMClient,
         sparse_embedder: SparseEmbedder | None = None,
+        surface: str = "cli",
     ) -> None:
         self.s = settings
+        self.surface = surface
+        self.ledger = ActivationLedger(db_path=settings.feedback.db_path)
         self.orchestrator = RetrievalOrchestrator(
-            settings, embedder, vector_store, graph_store, sparse_embedder=sparse_embedder,
+            settings, embedder, vector_store, graph_store,
+            sparse_embedder=sparse_embedder,
+            listeners=[ActivationRecorder(self.ledger)],
         )
         self.feedback = feedback_store
         self.llm = llm_client
 
     def ask(self, query: str, synthesize: bool = True) -> QueryResponse:
         t0 = time.perf_counter()
-        result = self.orchestrator.retrieve(query)
+        result = self.orchestrator.retrieve(query, surface=self.surface)
         answer = self.llm.synthesize(query, result.ranked) if synthesize else ""
         latency_ms = int((time.perf_counter() - t0) * 1000)
 
@@ -101,4 +108,9 @@ class QueryEngine:
                 latency_ms=latency_ms,
             )
         )
+        if result.query_uid:
+            # One direction only: `queries` is the retrieval record, `feedback`
+            # is the answer + signal record. They are not the same event — a
+            # Hermes prefetch produces no answer at all.
+            self.ledger.link_feedback(result.query_uid, event_id)
         return QueryResponse(answer=answer, retrieval=result, feedback_event_id=event_id, latency_ms=latency_ms)

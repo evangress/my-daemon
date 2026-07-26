@@ -94,6 +94,7 @@ class DaemonCore:
         self.engine = QueryEngine(
             settings, embedder, vector_store, graph_store, feedback_store, llm_client,
             sparse_embedder=sparse_embedder,
+            surface="hermes_recall",
         )
         self._write_lock = threading.Lock()
 

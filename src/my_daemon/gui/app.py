@@ -16,6 +16,7 @@ import threading
 from collections.abc import Iterator
 from dataclasses import dataclass
 from datetime import UTC, datetime
+from functools import partial
 from logging.handlers import RotatingFileHandler
 from pathlib import Path
 
@@ -27,9 +28,11 @@ from my_daemon.llm import LLMClient
 from my_daemon.models import FeedbackEvent, RetrievalResult
 from my_daemon.paths import log_path as _shared_log_path
 from my_daemon.pipeline import build_retrieval_summary
+from my_daemon.pipeline.activation import ActivationRecorder
 from my_daemon.retrieval import RetrievalOrchestrator
 from my_daemon.retrieval.weights import apply_selection
 from my_daemon.stores import FeedbackStore, GraphStore, VectorStore
+from my_daemon.stores.activations import ActivationLedger
 
 log = logging.getLogger("my_daemon.chat")
 
@@ -108,8 +111,10 @@ def _build_context() -> _DaemonContext:
     graph_store.load()
     feedback_store = FeedbackStore(db_path=s.feedback.db_path)
     llm = LLMClient(s.llm, api_key=s.anthropic_api_key)
+    ledger = ActivationLedger(db_path=s.feedback.db_path)
     orchestrator = RetrievalOrchestrator(
         s, embedder, vector_store, graph_store, sparse_embedder=sparse_embedder,
+        listeners=[ActivationRecorder(ledger)],
     )
     return _DaemonContext(
         s, embedder, sparse_embedder, vector_store, graph_store, feedback_store, llm, orchestrator,
@@ -533,7 +538,9 @@ def _mount_ui(ctx: _DaemonContext) -> None:
 
         t0 = datetime.now(UTC)
         try:
-            result = await asyncio.to_thread(ctx.orchestrator.retrieve, query)
+            result = await asyncio.to_thread(
+                partial(ctx.orchestrator.retrieve, query, surface="gui")
+            )
 
             if not result.ranked:
                 daemon_label.content = (

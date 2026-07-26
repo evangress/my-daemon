@@ -1,0 +1,430 @@
+# SPDX-License-Identifier: Apache-2.0
+"""The activation ledger — the daemon's memory of its own retrievals.
+
+Every query records which notes fired, via which source, at what strength. That
+per-query pattern is a **fingerprint**: a sparse vector over note-UUID space.
+Two questions worded completely differently that light up the same notes are the
+same underlying concern, and cosine over fingerprints finds that where embedding
+the query text would not.
+
+Similarity runs as an inverted-index scan in SQLite rather than a second Qdrant
+collection. At single-user scale (100k queries is ~14 years at 20/day) the
+difference is below the perceptual threshold, the offline clustering phase wants
+the whole matrix in memory anyway, and — decisively — recording an activation
+must never fail because Qdrant is down. The ledger is how the system remembers
+itself. ``note_ordinals`` and ``queries.l2_norm`` are populated regardless so a
+vector backend stays a drop-in.
+"""
+
+from __future__ import annotations
+
+import hashlib
+import json
+import math
+import sqlite3
+import uuid as uuidlib
+from collections.abc import Iterable, Mapping, Sequence
+from dataclasses import dataclass
+from datetime import UTC, datetime
+from pathlib import Path
+from typing import Literal
+
+from my_daemon.stores.db import migrate, open_state_db
+
+_MIN_SCHEMA_VERSION = 4
+
+Source = Literal[
+    "vector_seed", "graph_expansion", "keyword", "recall_injected", "selected"
+]
+
+# How much each kind of evidence is worth. A user-confirmed pick outweighs a
+# search hit; an ambient recall injection counts for least.
+STRENGTH_BY_SOURCE: dict[str, float] = {
+    "vector_seed": 1.0,
+    "graph_expansion": 0.6,
+    "keyword": 0.5,
+    "selected": 1.5,
+    "recall_injected": 0.3,
+}
+
+# Surfaces that represent a question the user actually asked. Hermes `prefetch`
+# fires on *every* conversational turn, so including it would let ambient
+# lookups dominate the fingerprint space.
+INTENTIONAL_SURFACES: tuple[str, ...] = ("cli", "gui", "hermes_recall", "mcp")
+
+# Below this many queries a document-frequency *ratio* means nothing — with two
+# queries logged, a note in one of them scores 0.5 and every sane threshold
+# would prune it. Hub-pruning is an optimization for a corpus big enough to have
+# hubs; engaging it early would return nothing for the first weeks of use,
+# exactly when the user is deciding whether to trust the feature.
+_MIN_CORPUS_FOR_DF_PRUNING = 50
+
+
+@dataclass(frozen=True)
+class Activation:
+    note_uuid: str
+    source: Source
+    rank: int | None = None
+    raw_score: float | None = None
+    chunk_id: str | None = None
+    graph_distance: float | None = None
+    seed_note_uuid: str | None = None
+    strength: float | None = None  # computed if omitted
+
+
+@dataclass(frozen=True)
+class ActivationRow:
+    note_uuid: str
+    source: str
+    strength: float
+    rank: int | None
+    raw_score: float | None
+    graph_distance: float | None
+
+
+@dataclass(frozen=True)
+class FingerprintHit:
+    query_id: int
+    query_uid: str
+    text: str
+    ts: datetime
+    score: float
+    shared_notes: list[str]
+
+
+def strength_for(source: str, rank: int | None) -> float:
+    """Rank-based, deliberately — not score-based.
+
+    Raw retrieval scores are incomparable across the dense→hybrid-RRF
+    transition, across embedding-model changes, and across any historical
+    backfill. Rank survives all three. ``raw_score`` is stored anyway so a
+    future re-derivation stays possible.
+    """
+
+    positional = 1.0 / math.log2((rank or 1) + 1)
+    return STRENGTH_BY_SOURCE.get(source, 0.5) * positional
+
+
+class ActivationLedger:
+    def __init__(self, db_path: Path, *, read_only: bool = False) -> None:
+        self.db_path = db_path
+        self.read_only = read_only
+        if not read_only:
+            migrate(self.db_path)
+
+    def _connect(self) -> sqlite3.Connection:
+        return open_state_db(
+            self.db_path, read_only=self.read_only, min_version=_MIN_SCHEMA_VERSION
+        )
+
+    # ---- writes -----------------------------------------------------------
+
+    def record(
+        self,
+        *,
+        query_uid: str | None = None,
+        text: str,
+        surface: str,
+        ts: datetime | None = None,
+        activations: Sequence[Activation],
+        session_id: str | None = None,
+        seed_count: int = 0,
+        expanded_count: int = 0,
+        latency_ms: int | None = None,
+        origin: str = "live",
+    ) -> int:
+        """Insert the query and its activations in one transaction."""
+
+        query_uid = query_uid or str(uuidlib.uuid4())
+        ts = ts or datetime.now(UTC)
+        rows = [
+            (
+                a.note_uuid,
+                a.source,
+                a.strength if a.strength is not None else strength_for(a.source, a.rank),
+                a.raw_score,
+                a.rank,
+                a.chunk_id,
+                a.graph_distance,
+                a.seed_note_uuid,
+            )
+            for a in activations
+        ]
+
+        # Pre-IDF magnitude. The IDF-weighted, normalized vector is derived on
+        # read, because df moves as the ledger grows.
+        per_note: dict[str, float] = {}
+        for note_uuid, _src, strength, *_rest in rows:
+            per_note[note_uuid] = per_note.get(note_uuid, 0.0) + strength
+        l2 = math.sqrt(sum(v * v for v in per_note.values()))
+
+        with self._connect() as conn:
+            cur = conn.execute(
+                """
+                INSERT INTO queries (
+                    query_uid, ts, text, text_sha256, surface, session_id, origin,
+                    seed_count, expanded_count, activation_count, l2_norm, latency_ms
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                """,
+                (
+                    query_uid,
+                    ts.isoformat(),
+                    text,
+                    hashlib.sha256(text.encode("utf-8")).hexdigest(),
+                    surface,
+                    session_id,
+                    origin,
+                    seed_count,
+                    expanded_count,
+                    len(rows),
+                    l2,
+                    latency_ms,
+                ),
+            )
+            query_id = int(cur.lastrowid)
+            conn.executemany(
+                "INSERT OR REPLACE INTO query_activations "
+                "(query_id, note_uuid, source, strength, raw_score, rank, chunk_id, "
+                " graph_distance, seed_note_uuid) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                [(query_id, *r) for r in rows],
+            )
+            for note_uuid, strength in per_note.items():
+                conn.execute(
+                    """
+                    INSERT INTO note_activation_stats
+                        (note_uuid, query_count, last_activated_at, total_strength)
+                    VALUES (?, 1, ?, ?)
+                    ON CONFLICT(note_uuid) DO UPDATE SET
+                        query_count = query_count + 1,
+                        last_activated_at = excluded.last_activated_at,
+                        total_strength = total_strength + excluded.total_strength
+                    """,
+                    (note_uuid, ts.isoformat(), strength),
+                )
+        return query_id
+
+    def link_feedback(self, query_uid: str, feedback_id: int) -> None:
+        with self._connect() as conn:
+            conn.execute(
+                "UPDATE queries SET feedback_id = ? WHERE query_uid = ?",
+                (feedback_id, query_uid),
+            )
+
+    # ---- reads ------------------------------------------------------------
+
+    def get(self, query_uid: str) -> dict | None:
+        with self._connect() as conn:
+            row = conn.execute(
+                "SELECT * FROM queries WHERE query_uid = ?", (query_uid,)
+            ).fetchone()
+        return dict(row) if row else None
+
+    def activations_for(self, query_id: int) -> list[ActivationRow]:
+        with self._connect() as conn:
+            rows = conn.execute(
+                "SELECT note_uuid, source, strength, rank, raw_score, graph_distance "
+                "FROM query_activations WHERE query_id = ? ORDER BY strength DESC",
+                (query_id,),
+            ).fetchall()
+        return [
+            ActivationRow(
+                note_uuid=r["note_uuid"],
+                source=r["source"],
+                strength=r["strength"],
+                rank=r["rank"],
+                raw_score=r["raw_score"],
+                graph_distance=r["graph_distance"],
+            )
+            for r in rows
+        ]
+
+    def note_df(self, note_uuids: Iterable[str]) -> dict[str, int]:
+        """How many queries each note has ever fired for."""
+        wanted = list(dict.fromkeys(note_uuids))
+        if not wanted:
+            return {}
+        placeholders = ",".join("?" * len(wanted))
+        with self._connect() as conn:
+            rows = conn.execute(
+                f"SELECT note_uuid, query_count FROM note_activation_stats "
+                f"WHERE note_uuid IN ({placeholders})",
+                wanted,
+            ).fetchall()
+        found = {r["note_uuid"]: int(r["query_count"]) for r in rows}
+        return {u: found.get(u, 0) for u in wanted}
+
+    def total_queries(self) -> int:
+        with self._connect() as conn:
+            return int(conn.execute("SELECT COUNT(*) FROM queries").fetchone()[0])
+
+    def fingerprint(self, query_id: int) -> dict[str, float]:
+        """IDF-weighted, L2-normalized sparse vector over note-UUID space."""
+
+        rows = self.activations_for(query_id)
+        if not rows:
+            return {}
+        raw: dict[str, float] = {}
+        for r in rows:
+            raw[r.note_uuid] = raw.get(r.note_uuid, 0.0) + r.strength
+        return self._weight_and_normalize(raw)
+
+    def _weight_and_normalize(self, raw: Mapping[str, float]) -> dict[str, float]:
+        total = max(self.total_queries(), 1)
+        df = self.note_df(raw.keys())
+        weighted = {
+            u: v * math.log(1 + total / (1 + df.get(u, 0))) for u, v in raw.items()
+        }
+        magnitude = math.sqrt(sum(v * v for v in weighted.values()))
+        if magnitude == 0:
+            return {}
+        return {u: v / magnitude for u, v in weighted.items()}
+
+    def similar(
+        self,
+        probe: Mapping[str, float],
+        *,
+        top_k: int = 5,
+        since: datetime | None = None,
+        min_score: float = 0.15,
+        max_df_ratio: float = 0.25,
+        exclude_query_id: int | None = None,
+        surfaces: Sequence[str] | None = None,
+    ) -> list[FingerprintHit]:
+        """Inverted-index cosine over the ledger.
+
+        Cost is driven by skew, not size: rows scanned is the sum of df over the
+        probe's notes. Terms above ``max_df_ratio`` are dropped first — a note
+        present in a quarter of all queries carries no information and only
+        costs scan.
+        """
+
+        if not probe:
+            return []
+        total = max(self.total_queries(), 1)
+        if total < _MIN_CORPUS_FOR_DF_PRUNING:
+            terms = dict(probe)
+        else:
+            df = self.note_df(probe.keys())
+            terms = {
+                u: w for u, w in probe.items() if df.get(u, 0) / total <= max_df_ratio
+            }
+        if not terms:
+            return []
+
+        placeholders = ",".join("?" * len(terms))
+        sql = [
+            "SELECT qa.query_id, qa.note_uuid, qa.strength, q.l2_norm, q.query_uid, "
+            "       q.text, q.ts",
+            "FROM query_activations qa JOIN queries q ON q.id = qa.query_id",
+            f"WHERE qa.note_uuid IN ({placeholders})",
+        ]
+        params: list = list(terms.keys())
+        if since is not None:
+            sql.append("AND q.ts >= ?")
+            params.append(since.isoformat())
+        if exclude_query_id is not None:
+            sql.append("AND qa.query_id != ?")
+            params.append(exclude_query_id)
+        if surfaces:
+            sql.append(f"AND q.surface IN ({','.join('?' * len(surfaces))})")
+            params.extend(surfaces)
+
+        with self._connect() as conn:
+            rows = conn.execute(" ".join(sql), params).fetchall()
+
+        acc: dict[int, dict] = {}
+        for r in rows:
+            entry = acc.setdefault(
+                r["query_id"],
+                {
+                    "dot": 0.0,
+                    "shared": [],
+                    "norm": r["l2_norm"] or 1.0,
+                    "uid": r["query_uid"],
+                    "text": r["text"],
+                    "ts": r["ts"],
+                },
+            )
+            contribution = terms[r["note_uuid"]] * r["strength"]
+            entry["dot"] += contribution
+            entry["shared"].append((r["note_uuid"], contribution))
+
+        hits = []
+        for query_id, entry in acc.items():
+            score = entry["dot"] / (entry["norm"] or 1.0)
+            if score < min_score:
+                continue
+            shared = [u for u, _ in sorted(entry["shared"], key=lambda x: -x[1])]
+            hits.append(
+                FingerprintHit(
+                    query_id=query_id,
+                    query_uid=entry["uid"],
+                    text=entry["text"],
+                    ts=datetime.fromisoformat(entry["ts"]),
+                    score=score,
+                    shared_notes=shared,
+                )
+            )
+        hits.sort(key=lambda h: h.score, reverse=True)
+        return hits[:top_k]
+
+    def hot_notes(self, *, limit: int = 20, since: datetime | None = None):
+        """Which notes your attention actually lands on."""
+        if since is None:
+            with self._connect() as conn:
+                rows = conn.execute(
+                    "SELECT note_uuid, query_count, total_strength "
+                    "FROM note_activation_stats ORDER BY query_count DESC, "
+                    "total_strength DESC LIMIT ?",
+                    (limit,),
+                ).fetchall()
+            return [
+                (r["note_uuid"], int(r["query_count"]), float(r["total_strength"]))
+                for r in rows
+            ]
+        with self._connect() as conn:
+            rows = conn.execute(
+                "SELECT qa.note_uuid, COUNT(DISTINCT qa.query_id) AS c, "
+                "       SUM(qa.strength) AS s "
+                "FROM query_activations qa JOIN queries q ON q.id = qa.query_id "
+                "WHERE q.ts >= ? GROUP BY qa.note_uuid "
+                "ORDER BY c DESC, s DESC LIMIT ?",
+                (since.isoformat(), limit),
+            ).fetchall()
+        return [(r["note_uuid"], int(r["c"]), float(r["s"])) for r in rows]
+
+    def recent(self, *, limit: int = 20) -> list[dict]:
+        with self._connect() as conn:
+            rows = conn.execute(
+                "SELECT * FROM queries ORDER BY id DESC LIMIT ?", (limit,)
+            ).fetchall()
+        return [dict(r) for r in rows]
+
+    def compact(self, *, older_than: datetime) -> int:
+        """Collapse old detail rows into a stored fingerprint.
+
+        Compaction, not deletion: the fingerprint stays comparable forever at
+        reduced fidelity, and only the per-source forensics are lost. Matters
+        because Hermes prefetch can generate 10-50x the intentional query rate.
+        """
+
+        with self._connect() as conn:
+            ids = [
+                int(r["id"])
+                for r in conn.execute(
+                    "SELECT id FROM queries WHERE ts < ? AND fingerprint_json IS NULL",
+                    (older_than.isoformat(),),
+                ).fetchall()
+            ]
+        for query_id in ids:
+            fingerprint = self.fingerprint(query_id)
+            top = dict(sorted(fingerprint.items(), key=lambda x: -x[1])[:20])
+            with self._connect() as conn:
+                conn.execute(
+                    "UPDATE queries SET fingerprint_json = ? WHERE id = ?",
+                    (json.dumps(top), query_id),
+                )
+                conn.execute(
+                    "DELETE FROM query_activations WHERE query_id = ?", (query_id,)
+                )
+        return len(ids)

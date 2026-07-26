@@ -33,6 +33,7 @@ from my_daemon.stores import (
     AgentStateStore,
     FeedbackStore,
     GraphStore,
+    NoteRegistry,
     VectorStore,
     create_snapshot,
     delete_snapshot,
@@ -41,6 +42,7 @@ from my_daemon.stores import (
     open_readonly,
     prune_snapshots,
 )
+from my_daemon.stores.activations import ActivationLedger
 from my_daemon.stores.db import MIGRATIONS as DB_MIGRATIONS
 from my_daemon.stores.db import SCHEMA_VERSION as DB_SCHEMA_VERSION
 from my_daemon.stores.db import migrate as db_migrate
@@ -975,6 +977,75 @@ def migrate_status() -> None:
     table.add_column("name")
     for version, name in pending:
         table.add_row(str(version), name)
+    console.print(table)
+
+
+@app.command()
+def activations(
+    query_id: int | None = typer.Argument(None, help="Ledger query id. Omit to list recent queries."),
+) -> None:
+    """Show which notes fired for a query, and how strongly."""
+    s = _load()
+    ledger = ActivationLedger(db_path=s.feedback.db_path)
+    registry = NoteRegistry(db_path=s.feedback.db_path)
+
+    if query_id is None:
+        table = Table(title="Recent queries")
+        table.add_column("id", justify="right")
+        table.add_column("when")
+        table.add_column("surface")
+        table.add_column("notes", justify="right")
+        table.add_column("query")
+        for row in ledger.recent(limit=20):
+            table.add_row(
+                str(row["id"]), row["ts"][:19], row["surface"],
+                str(row["activation_count"]), row["text"][:60],
+            )
+        console.print(table)
+        return
+
+    rows = ledger.activations_for(query_id)
+    if not rows:
+        console.print(f"[yellow]No activations recorded for query {query_id}.[/yellow]")
+        return
+    paths = registry.paths_for(r.note_uuid for r in rows)
+    table = Table(title=f"Activations for query {query_id}")
+    table.add_column("note")
+    table.add_column("source")
+    table.add_column("strength", justify="right")
+    table.add_column("rank", justify="right")
+    for r in rows:
+        table.add_row(
+            paths.get(r.note_uuid, r.note_uuid), r.source,
+            f"{r.strength:.3f}", str(r.rank or ""),
+        )
+    console.print(table)
+
+
+@app.command("hot-notes")
+def hot_notes(
+    days: int | None = typer.Option(None, "--days", help="Restrict to the last N days."),
+    limit: int = typer.Option(20, "--limit"),
+) -> None:
+    """Which notes your attention actually lands on."""
+    from datetime import UTC, datetime, timedelta
+
+    s = _load()
+    ledger = ActivationLedger(db_path=s.feedback.db_path)
+    registry = NoteRegistry(db_path=s.feedback.db_path)
+    since = datetime.now(UTC) - timedelta(days=days) if days else None
+
+    rows = ledger.hot_notes(limit=limit, since=since)
+    if not rows:
+        console.print("[yellow]No activations recorded yet.[/yellow]")
+        return
+    paths = registry.paths_for(u for u, _c, _s in rows)
+    table = Table(title=f"Hot notes{f' (last {days}d)' if days else ''}")
+    table.add_column("note")
+    table.add_column("queries", justify="right")
+    table.add_column("total strength", justify="right")
+    for note_uuid, count, strength in rows:
+        table.add_row(paths.get(note_uuid, note_uuid), str(count), f"{strength:.2f}")
     console.print(table)
 
 

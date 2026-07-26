@@ -175,10 +175,63 @@ def _m003_feedback_identity(conn: sqlite3.Connection) -> None:
             conn.execute(f"ALTER TABLE feedback ADD COLUMN {col} {typ}")
 
 
+# ---------------------------------------------------------------------------
+# Migration 4 — the activation ledger. Which notes fired for which query, via
+# which source, how strongly. The substrate for query fingerprints.
+# ---------------------------------------------------------------------------
+
+_M004_SCHEMA = """
+CREATE TABLE IF NOT EXISTS queries (
+    id               INTEGER PRIMARY KEY AUTOINCREMENT,
+    query_uid        TEXT NOT NULL UNIQUE,
+    ts               TEXT NOT NULL,
+    text             TEXT NOT NULL,
+    text_sha256      TEXT NOT NULL,
+    surface          TEXT NOT NULL,
+    session_id       TEXT,
+    origin           TEXT NOT NULL DEFAULT 'live',
+    feedback_id      INTEGER REFERENCES feedback(id) ON DELETE SET NULL,
+    seed_count       INTEGER NOT NULL DEFAULT 0,
+    expanded_count   INTEGER NOT NULL DEFAULT 0,
+    activation_count INTEGER NOT NULL DEFAULT 0,
+    l2_norm          REAL    NOT NULL DEFAULT 0.0,
+    fingerprint_json TEXT,
+    latency_ms       INTEGER
+);
+CREATE INDEX IF NOT EXISTS idx_queries_ts ON queries(ts);
+CREATE INDEX IF NOT EXISTS idx_queries_sha ON queries(text_sha256);
+CREATE INDEX IF NOT EXISTS idx_queries_surface_ts ON queries(surface, ts);
+CREATE TABLE IF NOT EXISTS query_activations (
+    query_id       INTEGER NOT NULL REFERENCES queries(id) ON DELETE CASCADE,
+    note_uuid      TEXT    NOT NULL,
+    source         TEXT    NOT NULL,
+    strength       REAL    NOT NULL,
+    raw_score      REAL,
+    rank           INTEGER,
+    chunk_id       TEXT,
+    graph_distance REAL,
+    seed_note_uuid TEXT,
+    PRIMARY KEY (query_id, note_uuid, source)
+) WITHOUT ROWID;
+CREATE INDEX IF NOT EXISTS idx_qa_note_query ON query_activations(note_uuid, query_id);
+CREATE TABLE IF NOT EXISTS note_activation_stats (
+    note_uuid         TEXT PRIMARY KEY,
+    query_count       INTEGER NOT NULL DEFAULT 0,
+    last_activated_at TEXT,
+    total_strength    REAL NOT NULL DEFAULT 0.0
+);
+"""
+
+
+def _m004_activation_ledger(conn: sqlite3.Connection) -> None:
+    exec_script(conn, _M004_SCHEMA)
+
+
 MIGRATIONS: list[tuple[int, str, Migration]] = [
     (1, "baseline_feedback_and_agent_state", _m001_baseline),
     (2, "note_registry_and_ordinals", _m002_registry),
     (3, "feedback_note_identity", _m003_feedback_identity),
+    (4, "activation_ledger", _m004_activation_ledger),
 ]
 
 SCHEMA_VERSION = MIGRATIONS[-1][0]

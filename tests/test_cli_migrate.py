@@ -141,3 +141,34 @@ def test_rollback_of_an_unknown_run_exits_nonzero(vault_settings):
     result = runner.invoke(app, ["migrate", "rollback-uuids", "nope"])
 
     assert result.exit_code != 0
+
+
+# ---------------------------------------------------------------------------
+# The ledger inspection commands
+# ---------------------------------------------------------------------------
+
+
+def test_activations_lists_recent_queries(settings_with_db: Path, monkeypatch):
+    from datetime import UTC, datetime
+
+    from my_daemon.stores.activations import Activation, ActivationLedger
+
+    ledger = ActivationLedger(db_path=settings_with_db)
+    ledger.record(
+        text="what did I think about forgetting",
+        surface="cli",
+        ts=datetime.now(UTC),
+        activations=[Activation(note_uuid="a" * 8, source="vector_seed", rank=1)],
+    )
+
+    result = runner.invoke(app, ["activations"])
+
+    assert result.exit_code == 0, result.output
+    assert "forgetting" in result.output
+
+
+def test_hot_notes_reports_nothing_gracefully_on_an_empty_ledger(settings_with_db: Path):
+    result = runner.invoke(app, ["hot-notes"])
+
+    assert result.exit_code == 0, result.output
+    assert "No activations" in result.output

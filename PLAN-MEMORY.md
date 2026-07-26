@@ -749,12 +749,17 @@ Each leaves the system working, tested, and shippable.
   Plus the `note_path` scroll in graph expansion, which ran for every seed of
   every query against **no index**, is now indexed.
 
-- [ ] **M-mem-4 — The ledger and the seam.** *Reversible.* Migration 3,
-  `RetrievalListener`, `ActivationRecorder`, `wiring.py`,
-  `DaemonCore.retrieve_only`/`log_answer`, GUI de-duplication, historical
-  backfill.
-  **Win:** `daemon activations <id>` and `daemon notes hot --days 30` — see
-  which notes your attention actually lands on.
+- [x] **M-mem-4 — The ledger and the seam — shipped 2026-07-26.**
+  Migration 4 (`queries`, `query_activations`, `note_activation_stats`),
+  `stores/activations.py` (`ActivationLedger`, IDF-weighted fingerprints,
+  inverted-index cosine, compaction), `retrieval/trace.py`
+  (`RetrievalListener`, `activations_from`), `pipeline/activation.py`
+  (`ActivationRecorder`), orchestrator `listeners=` seam with `surface`
+  plumbing, `daemon activations` and `daemon hot-notes`.
+  **Win:** you can see which notes your attention actually lands on.
+  *Deferred from this milestone:* the `wiring.py` factory,
+  `DaemonCore.retrieve_only`/`log_answer` GUI de-duplication, and the
+  historical `retrieval_summary` backfill.
 
 - [ ] **M-mem-5 — Fingerprints and recall.** *Reversible, config-gated.* IDF,
   cosine, `similar()`. Injection into `LLMClient.synthesize`; a "You've been here

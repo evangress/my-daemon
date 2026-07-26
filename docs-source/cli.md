@@ -82,6 +82,18 @@ before the expander touches it.
 
 ## Inspection
 
+### `daemon activations [query_id]`
+
+With no argument, lists recent queries from the activation ledger. With a query
+id, shows which notes fired for it, via which source (`vector_seed` /
+`graph_expansion`), and at what strength.
+
+### `daemon hot-notes [--days N] [--limit N]`
+
+Which notes your attention actually lands on, ranked by how many queries have
+activated them.
+
+
 ### `daemon status`
 
 Prints the vault path, vector chunk count, graph note/tag/edge counts, and

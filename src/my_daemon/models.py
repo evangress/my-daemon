@@ -106,6 +106,9 @@ class RetrievalResult(BaseModel):
     seeds: list[RetrievedChunk] = Field(default_factory=list)
     expanded: list[RetrievedChunk] = Field(default_factory=list)
     ranked: list[RetrievedChunk] = Field(default_factory=list)
+    # Set by the activation recorder, so whoever synthesizes an answer can
+    # back-link its feedback row to this retrieval.
+    query_uid: str | None = None
 
 
 FeedbackSignal = Literal[
