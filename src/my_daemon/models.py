@@ -116,9 +116,29 @@ class RetrievedChunk(BaseModel):
 
     chunk: Chunk
     vector_score: float | None = None
-    graph_distance: int | None = None
+    # Weighted (Dijkstra-over-1/weight) distance, so it is *fractional* the
+    # moment any edge on the way has been reinforced by feedback. It was typed
+    # `int` while the graph only ever had uniform weights; the first
+    # `daemon select` turned every query near that note into a ValidationError.
+    graph_distance: float | None = None
     seed_chunk_id: str | None = None
     combined_score: float = 0.0
+
+
+def is_seed_distance(graph_distance: float | None) -> bool:
+    """Is this distance the one a *seed* carries?
+
+    Seeds are stamped ``graph_distance=0`` by :mod:`my_daemon.retrieval.seed`;
+    ``None`` means no distance was ever recorded (a hand-built chunk, or a
+    pre-expansion historical row). Everything else came out of graph expansion.
+
+    The boundary is exact, not approximate: an expanded chunk's distance is a
+    sum of ``1 / weight`` edge costs, and weights are capped at
+    ``weights.DEFAULT_CEILING``, so the smallest distance expansion can ever
+    produce is ``1 / ceiling`` — comfortably above zero. No epsilon needed.
+    """
+
+    return graph_distance is None or graph_distance == 0
 
 
 class RetrievalResult(BaseModel):

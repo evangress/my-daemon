@@ -18,6 +18,7 @@ from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
 
+from my_daemon.models import is_seed_distance
 from my_daemon.stores.activations import Activation, ActivationLedger
 from my_daemon.stores.db import open_state_db
 from my_daemon.stores.registry import NoteRegistry
@@ -117,8 +118,10 @@ def backfill_activations(
             if record is None:
                 report.activations_dropped += 1
                 continue
+            # Historical rows may carry an int hop count, a float weighted
+            # distance, or nothing at all — one predicate covers all three.
             distance = candidate.get("graph_distance")
-            source = "vector_seed" if distance in (0, None) else "graph_expansion"
+            source = "vector_seed" if is_seed_distance(distance) else "graph_expansion"
             if (record.uuid, source) in seen:
                 continue
             seen.add((record.uuid, source))

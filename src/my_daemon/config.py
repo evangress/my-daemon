@@ -17,7 +17,7 @@ from typing import Literal
 
 import yaml
 from dotenv import load_dotenv
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -49,8 +49,48 @@ class EmbeddingsConfig(BaseModel):
 
 
 class QdrantConfig(BaseModel):
+    """Where the chunk vectors live.
+
+    Two mutually exclusive modes:
+
+    * **embedded** — set ``path`` (a directory, or the literal ``:memory:``).
+      qdrant-client runs the engine in-process against that folder, so a
+      default install needs no Docker at all. Single-process only: exactly one
+      client may hold the folder at a time.
+    * **server** — leave ``path`` unset and point ``url`` at a running Qdrant
+      (``docker-compose up -d qdrant``). Required for concurrent access, and
+      the better choice for large vaults.
+
+    ``url`` keeps its historical default so a config that says nothing at all
+    behaves exactly as it did before embedded mode existed; the default only
+    applies when ``path`` was not set explicitly.
+    """
+
     url: str = "http://localhost:6333"
+    path: Path | str | None = None
     collection: str = "chunks"
+
+    @model_validator(mode="after")
+    def _one_mode_only(self) -> QdrantConfig:
+        # `model_fields_set` (not the value) is what makes this fair: a user who
+        # sets only `path` should not trip over `url`'s default.
+        if "url" in self.model_fields_set and "path" in self.model_fields_set:
+            raise ValueError(
+                "vector_store.qdrant: set either 'url' (server mode) or 'path' "
+                "(embedded mode), not both. Embedded mode runs Qdrant in-process "
+                "and needs no Docker; comment out 'url' to use it, or remove "
+                "'path' to keep talking to a server."
+            )
+        return self
+
+    @property
+    def is_embedded(self) -> bool:
+        return self.path is not None
+
+    @property
+    def location(self) -> str:
+        """Human-readable target of whichever mode is active."""
+        return str(self.path) if self.path is not None else self.url
 
 
 class VectorStoreConfig(BaseModel):

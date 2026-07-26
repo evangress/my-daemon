@@ -378,10 +378,13 @@ class DaemonCore:
         selected_note = picked.get("note_uuid")
 
         with self._write_lock:
-            result = apply_selection(
-                self.graph, seed_note_uuid=seed_note, selected_note_uuid=selected_note,
-            )
-            self.graph.save()
+            # transaction() = lock file → reload → mutate → save, so a nightly
+            # consolidate in another process can't have its decay silently
+            # overwritten by this click (and vice versa).
+            with self.graph.transaction():
+                result = apply_selection(
+                    self.graph, seed_note_uuid=seed_note, selected_note_uuid=selected_note,
+                )
             self.feedback.attach_signal(
                 feedback_event_id,
                 "candidate_selected",
@@ -559,9 +562,8 @@ def build_core(settings: Settings, *, load_graph: bool = True) -> DaemonCore:
         if settings.embeddings.hybrid
         else None
     )
-    vector_store = VectorStore(
-        url=settings.vector_store.qdrant.url,
-        collection=settings.vector_store.qdrant.collection,
+    vector_store = VectorStore.from_config(
+        settings.vector_store.qdrant,
         dim=embedder.dimension,
         hybrid=settings.embeddings.hybrid,
     )

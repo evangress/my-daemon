@@ -60,6 +60,21 @@ embeddings:
 
 ### `vector_store`
 
+Qdrant runs in one of two modes, and the config picks which.
+
+**Embedded (default — no Docker).** Qdrant runs in-process against a local
+folder:
+
+```yaml
+vector_store:
+  backend: qdrant
+  qdrant:
+    path: ./data/qdrant-local
+    collection: chunks
+```
+
+**Server.** Point at a running Qdrant (`docker compose up -d qdrant`):
+
 ```yaml
 vector_store:
   backend: qdrant
@@ -71,8 +86,28 @@ vector_store:
 | Key | Default | Notes |
 |---|---|---|
 | `backend` | `qdrant` | Only backend supported. |
-| `qdrant.url` | `http://localhost:6333` | HTTP endpoint. The Docker compose service binds here. |
+| `qdrant.path` | unset | Set it to use **embedded** mode: a directory (persisted across restarts), or the literal `:memory:` for a throwaway store. |
+| `qdrant.url` | `http://localhost:6333` | **Server** mode endpoint. The Docker compose service binds here. Only used when `path` is unset. |
 | `qdrant.collection` | `chunks` | Collection name. |
+
+Setting **both** `path` and `url` is a validation error — the daemon will not
+guess which store your vectors should land in.
+
+**Which to use.** Embedded needs no Docker and is the right default for a
+personal vault, but it is *single-process*: exactly one daemon may hold the
+folder at a time (a second one fails with a clear "already open in another
+process" error rather than corrupting anything), and it filters payloads in
+Python instead of using real indexes. Move to the server when you want the GUI,
+CLI and Hermes open at once, or when the vault is large enough that filtered
+search latency shows.
+
+Retrieval behaves identically in both modes, including hybrid dense+sparse RRF
+fusion — the embedded engine emulates the same Query API server-side path.
+
+The two on-disk layouts are **not** interchangeable: switching modes means
+re-running `daemon ingest --full`. `./data/qdrant/` is the docker server's
+storage mount; embedded mode deliberately uses a different folder so they can
+coexist.
 
 ### `graph`
 

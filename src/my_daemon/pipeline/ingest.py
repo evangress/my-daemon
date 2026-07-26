@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import logging
 from dataclasses import dataclass, field
 from pathlib import Path
 
@@ -19,6 +20,9 @@ from my_daemon.models import Chunk, Note, NoteRecord
 from my_daemon.stores import GraphStore, NoteRegistry, VectorStore
 from my_daemon.vault import VaultReader, chunk_note
 from my_daemon.vault.identity import effective_uuid
+from my_daemon.vault.writer import write_atomic
+
+log = logging.getLogger(__name__)
 
 
 @dataclass
@@ -75,16 +79,43 @@ def _register(registry: NoteRegistry, note_uuid: str, note: Note, chunk_count: i
 
 
 def _load_manifest(path: Path) -> dict:
+    """The ingest bookkeeping, or ``{}`` if it is missing *or* unreadable.
+
+    A truncated manifest used to raise ``JSONDecodeError`` and take every
+    subsequent ``daemon ingest`` down with it. But unlike the graph, the
+    manifest is purely derivable: it is an optimisation that lets unchanged
+    notes be skipped. Treating a corrupt one as absent costs a single full
+    re-scan — which rewrites it correctly — so it is a warning, not a crash.
+    """
+
     if not path.is_file():
         return {}
-    with path.open("r", encoding="utf-8") as fh:
-        return json.load(fh)
+    try:
+        with path.open("r", encoding="utf-8") as fh:
+            loaded = json.load(fh)
+    except (ValueError, UnicodeDecodeError) as exc:
+        log.warning(
+            "ingest manifest is unreadable (%s: %r) — rebuilding it with a full re-scan",
+            path,
+            exc,
+        )
+        return {}
+    if not isinstance(loaded, dict):
+        log.warning(
+            "ingest manifest is not an object (%s: got %s) — rebuilding it with a full re-scan",
+            path,
+            type(loaded).__name__,
+        )
+        return {}
+    return loaded
 
 
 def _save_manifest(path: Path, manifest: dict) -> None:
-    path.parent.mkdir(parents=True, exist_ok=True)
-    with path.open("w", encoding="utf-8") as fh:
-        json.dump(manifest, fh, indent=2, sort_keys=True)
+    """Write the manifest atomically, via the same temp-file/replace dance the
+    vault writer uses. Dumping into the live file left a truncated manifest
+    behind on any interruption."""
+
+    write_atomic(path, json.dumps(manifest, indent=2, sort_keys=True))
 
 
 def ingest_vault(

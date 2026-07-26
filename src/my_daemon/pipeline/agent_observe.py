@@ -371,8 +371,8 @@ def run_observe(
 
     # --- decay (skipped on dry-run) ---------------------------------------
     if not dry_run:
-        decay_report = decay_unused_edges(graph_store, now=moment)
-        graph_store.save()
+        with graph_store.transaction():
+            decay_report = decay_unused_edges(graph_store, now=moment)
         stats.edges_decayed = decay_report.edges_decayed
         if progress:
             progress(

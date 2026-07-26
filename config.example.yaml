@@ -22,7 +22,24 @@ embeddings:
 vector_store:
   backend: qdrant
   qdrant:
-    url: http://localhost:6333
+    # Embedded mode (the default): qdrant runs *inside* the daemon process
+    # against this folder. No Docker, no server to start — just a directory
+    # that persists across restarts. Back it up with the rest of ./data/.
+    # (Deliberately *not* ./data/qdrant — that folder is the docker server's
+    # storage mount, and the two on-disk layouts are not interchangeable.)
+    path: ./data/qdrant-local
+    # Embedded mode is single-process: exactly one daemon may hold the folder
+    # at a time, so the CLI and the GUI can't both be open against it. Switch
+    # to the server below if you hit either wall:
+    #   * concurrent access (GUI + CLI + Hermes at once, or a shared machine)
+    #   * a large vault — the server has real payload indexes and a much
+    #     faster filtered search; embedded filters in Python.
+    # To switch: comment out `path` above, uncomment `url` below, and run
+    # `docker-compose up -d qdrant`. Setting both is a config error, on
+    # purpose — silently preferring one would hide which store your vectors
+    # actually landed in. Your existing index does not move between modes;
+    # re-run `daemon ingest --full` after switching.
+    # url: http://localhost:6333
     collection: chunks
 
 graph:

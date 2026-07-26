@@ -11,7 +11,7 @@ from datetime import UTC, datetime
 from my_daemon.config import Settings
 from my_daemon.embeddings import Embedder, SparseEmbedder
 from my_daemon.llm import LLMClient
-from my_daemon.models import FeedbackEvent, RetrievalResult
+from my_daemon.models import FeedbackEvent, RetrievalResult, is_seed_distance
 from my_daemon.pipeline.activation import ActivationRecorder
 from my_daemon.pipeline.recall import RecalledMemory, recall_related
 from my_daemon.retrieval import RetrievalOrchestrator
@@ -49,9 +49,10 @@ def build_retrieval_summary(result: RetrievalResult) -> dict:
     ranked: list[dict] = []
     for rc in result.ranked:
         seed_chunk_id = rc.seed_chunk_id or rc.chunk.id
-        # graph_distance==0 means the chunk *is* the seed; otherwise it was
-        # pulled in via expansion and the seed lookup gives us the start node.
-        if rc.graph_distance == 0:
+        # A seed distance means the chunk *is* the seed; otherwise it was
+        # pulled in via expansion (at a possibly fractional distance) and the
+        # seed lookup gives us the start node.
+        if is_seed_distance(rc.graph_distance):
             seed_note = rc.chunk.note_path
             seed_uuid = rc.chunk.note_uuid
         else:

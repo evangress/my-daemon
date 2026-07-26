@@ -63,9 +63,8 @@ def build_stores(
         if settings.embeddings.hybrid
         else None
     )
-    vector_store = VectorStore(
-        url=settings.vector_store.qdrant.url,
-        collection=settings.vector_store.qdrant.collection,
+    vector_store = VectorStore.from_config(
+        settings.vector_store.qdrant,
         dim=embedder.dimension,
         hybrid=settings.embeddings.hybrid,
     )

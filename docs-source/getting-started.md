@@ -3,8 +3,11 @@
 ## Prerequisites
 
 - **Python 3.11 – 3.14**. The project pins to this band in `pyproject.toml`.
-- **Docker** (for Qdrant). The included `docker-compose.yaml` runs Qdrant 1.11
-  locally on ports 6333 (HTTP) and 6334 (gRPC).
+- **Docker — optional.** The default config runs Qdrant *embedded*, in-process
+  against `./data/qdrant-local/`, so nothing extra needs installing. Docker is
+  only for the server mode described in
+  [Qdrant: embedded or server](#qdrant-embedded-or-server) below; the included
+  `docker-compose.yaml` runs Qdrant 1.11 on ports 6333 (HTTP) and 6334 (gRPC).
 - An **Anthropic API key** for LLM synthesis. Free-tier keys work for v0.1
   workloads; budget Sonnet 4.6 at the default settings.
 
@@ -14,10 +17,9 @@
 
 1. Install [Python 3.11+](https://www.python.org/downloads/) — tick **Add
    Python to PATH** during install.
-2. Install [Docker Desktop](https://www.docker.com/products/docker-desktop/).
-3. Double-click **`setup.bat`** at the project root. It creates `.venv`,
+2. Double-click **`setup.bat`** at the project root. It creates `.venv`,
    installs dependencies, and seeds `config.yaml` + `.env`.
-4. Run `daemon setup` (or double-click `launch-setup.bat`) to pick your vault
+3. Run `daemon setup` (or double-click `launch-setup.bat`) to pick your vault
    folder, paste your API key, and optionally schedule the daily reflection
    job.
 
@@ -34,14 +36,33 @@ cp .env.example .env
 Edit `config.yaml` to point `vault.path` at your Obsidian vault, and add your
 `ANTHROPIC_API_KEY` to `.env`.
 
-### Start Qdrant
+### Qdrant: embedded or server
+
+Nothing to start. `config.example.yaml` ships with **embedded** Qdrant — the
+vector engine runs inside the daemon process and persists to
+`./data/qdrant-local/`:
+
+```yaml
+vector_store:
+  qdrant:
+    path: ./data/qdrant-local
+    collection: chunks
+```
+
+Embedded mode is single-process: one daemon may hold that folder at a time, so
+you can't run the CLI and the GUI against it simultaneously. Switch to the
+**server** when you want concurrent access or your vault has grown large enough
+that filtered-search latency shows. To switch, comment out `path`, uncomment
+`url` in `config.yaml`:
 
 ```bash
 docker compose up -d
 ```
 
-This boots a local Qdrant on `http://localhost:6333` with storage persisted to
-`./data/qdrant/`.
+That boots Qdrant on `http://localhost:6333` with storage persisted to
+`./data/qdrant/`. The two layouts are not interchangeable — re-run
+`daemon ingest --full` after switching either way. Retrieval quality is
+identical in both modes (hybrid dense+sparse RRF included).
 
 ## First Ingest
 
@@ -106,7 +127,8 @@ the same output live.
 ├── config.yaml           # all knobs
 ├── .env                  # ANTHROPIC_API_KEY (gitignored)
 ├── data/                 # gitignored — everything the daemon owns
-│   ├── qdrant/             # vector store persistence
+│   ├── qdrant-local/       # embedded vector store (default mode)
+│   ├── qdrant/             # docker server's storage mount (server mode only)
 │   ├── models/             # embedding model cache (offline after first pull)
 │   ├── graph.gpickle       # NetworkX pickle
 │   ├── manifest.json       # ingest state

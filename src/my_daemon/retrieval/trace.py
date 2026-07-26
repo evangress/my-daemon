@@ -18,7 +18,7 @@ from dataclasses import dataclass, field
 from datetime import datetime
 from typing import Protocol, runtime_checkable
 
-from my_daemon.models import RetrievalResult
+from my_daemon.models import RetrievalResult, is_seed_distance
 from my_daemon.stores.activations import Activation
 
 
@@ -61,7 +61,7 @@ def activations_from(result: RetrievalResult) -> list[Activation]:
         note_uuid = rc.chunk.note_uuid
         if not note_uuid:
             continue
-        source = "vector_seed" if rc.graph_distance in (0, None) else "graph_expansion"
+        source = "vector_seed" if is_seed_distance(rc.graph_distance) else "graph_expansion"
         key = (note_uuid, source)
         if key in seen:
             continue  # keep the best-ranked appearance of each (note, source)

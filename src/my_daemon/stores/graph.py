@@ -1,16 +1,181 @@
 # SPDX-License-Identifier: Apache-2.0
-"""NetworkX MultiDiGraph wrapper with pickle persistence."""
+"""NetworkX MultiDiGraph wrapper with pickle persistence.
+
+The graph holds the only state the daemon cannot re-derive from the vault:
+every edge weight M1 has learned. Persistence is therefore deliberately
+paranoid about two failure modes that ordinary daily use actually hits.
+
+*Interrupted writes.* ``pickle.dump`` straight into the live file means a
+Ctrl-C, a crash, or a full disk leaves a truncated pickle behind, and every
+later command dies on ``UnpicklingError``. Saves go to a temp file in the same
+directory and land via ``os.replace`` — the same discipline ``vault.writer``
+already applies to the user's markdown. A reader sees either the whole
+previous graph or the whole new one, never half of either. When the file *is*
+corrupt anyway (a disk fault, an older build's half-write), :meth:`GraphStore.load`
+says so by name instead of raising a raw pickle traceback.
+
+*Concurrent processes.* The realistic configuration is a GUI open all day —
+which saves the graph on every endorse click — alongside a nightly cron agent
+that loads and saves the same file. A lock file next to the graph serialises
+the writers: :meth:`GraphStore.save` takes it, and :meth:`GraphStore.transaction`
+holds it across a whole load→mutate→save cycle, which is what a read-modify-write
+such as the reinforcement path needs to avoid a lost update.
+
+Reads are deliberately *not* locked. Atomic replace already makes them safe,
+and the no-contention path (one ``os.open`` and one ``os.unlink``) stays cheap
+because of it. This guards a single-user tool against its own concurrent
+processes; it is not a transaction manager.
+"""
 
 from __future__ import annotations
 
+import contextlib
+import json
+import os
 import pickle
+import socket
+import tempfile
+import threading
+import time
+import uuid
 from collections import Counter, deque
+from collections.abc import Iterator
 from pathlib import Path
 
 import networkx as nx
 
 from my_daemon.models import GraphStats, Note
 from my_daemon.vault.identity import effective_uuid
+
+#: How long a writer waits for the lock before giving up. Generous enough for
+#: an endorse click to survive a passing agent save, short enough that a human
+#: is not left staring at a hung command.
+DEFAULT_LOCK_TIMEOUT = 30.0
+
+#: When we cannot prove the holder is dead (another host, or an OS that will
+#: not tell us), treat a lock older than this as abandoned.
+DEFAULT_LOCK_STALE_AFTER = 300.0
+
+_LOCK_POLL_INTERVAL = 0.05
+
+
+class GraphCorruptError(RuntimeError):
+    """The graph file exists but could not be read back as a graph."""
+
+
+class GraphLockTimeout(TimeoutError):
+    """Another process held the graph lock for longer than we were willing to wait."""
+
+
+def _pid_alive(pid: int) -> bool | None:
+    """``True``/``False`` when we can tell, ``None`` when we cannot.
+
+    ``None`` matters: on an unknown answer the caller must fall back to the age
+    heuristic rather than assume either way — assuming "dead" would break a
+    live process's lock, assuming "alive" would wedge the daemon forever.
+    """
+
+    if not isinstance(pid, int) or pid <= 0:
+        return None
+
+    if os.name == "nt":
+        # `os.kill(pid, 0)` on Windows does not probe — CPython routes it to
+        # TerminateProcess. Ask the API directly instead.
+        try:
+            import ctypes
+
+            kernel32 = ctypes.windll.kernel32  # type: ignore[attr-defined]
+            handle = kernel32.OpenProcess(0x1000, False, pid)  # QUERY_LIMITED_INFORMATION
+            if not handle:
+                return False if kernel32.GetLastError() == 87 else None  # 87 = no such pid
+            try:
+                code = ctypes.c_ulong()
+                if not kernel32.GetExitCodeProcess(handle, ctypes.byref(code)):
+                    return None
+                return code.value == 259  # STILL_ACTIVE
+            finally:
+                kernel32.CloseHandle(handle)
+        except Exception:  # noqa: BLE001 — an unknown answer is a valid answer here
+            return None
+
+    try:
+        os.kill(pid, 0)
+    except ProcessLookupError:
+        return False
+    except PermissionError:
+        return True  # exists, just not ours to signal
+    except OSError:
+        return None
+    return True
+
+
+def _read_lock_info(lock_path: Path) -> dict | None:
+    """The lock's contents; ``None`` if it is gone, ``{}`` if it says nothing useful."""
+
+    try:
+        raw = lock_path.read_text(encoding="utf-8")
+    except FileNotFoundError:
+        return None
+    except OSError:
+        # Present but unreadable. Still a held lock — let the age check decide,
+        # rather than reporting it as released and spinning on it.
+        return {}
+    try:
+        info = json.loads(raw)
+    except ValueError:
+        # A lock whose holder died between creating and writing it. Unparseable
+        # is still a held lock; the age check below decides its fate.
+        return {}
+    return info if isinstance(info, dict) else {}
+
+
+def _lock_age(lock_path: Path, info: dict) -> float:
+    acquired = info.get("acquired_at")
+    if isinstance(acquired, int | float):
+        return max(0.0, time.time() - float(acquired))
+    try:
+        return max(0.0, time.time() - lock_path.stat().st_mtime)
+    except OSError:
+        return 0.0
+
+
+def _describe_holder(info: dict) -> str:
+    pid, host = info.get("pid"), info.get("host")
+    if pid is None:
+        return "another process"
+    return f"pid {pid} on {host}" if host else f"pid {pid}"
+
+
+def _break_if_stale(lock_path: Path, *, stale_after: float) -> bool:
+    """Remove an abandoned lock. Returns ``True`` if the lock is now gone.
+
+    Two independent grounds for abandonment, in order of confidence:
+    the holder's pid is provably dead on this host, or — when liveness is
+    unknowable (another host, an OS that will not say) — the lock is older
+    than ``stale_after``. A *live* holder is never broken on age alone; the
+    caller's timeout will fire instead, with a message naming who is holding it.
+    """
+
+    info = _read_lock_info(lock_path)
+    if info is None:
+        return True  # released while we were looking
+
+    alive: bool | None = None
+    if info.get("host") == socket.gethostname():
+        alive = _pid_alive(info.get("pid"))  # type: ignore[arg-type]
+
+    if alive is True:
+        return False
+    if alive is None and _lock_age(lock_path, info) <= stale_after:
+        return False
+
+    # Re-read before unlinking: if the holder released and someone else took
+    # the lock in the meantime, it is no longer ours to break.
+    if _read_lock_info(lock_path) != info:
+        return False
+    with contextlib.suppress(OSError):
+        lock_path.unlink()
+    return True
 
 
 def _tag_node(tag: str) -> str:
@@ -39,24 +204,175 @@ class GraphStore:
     expansion can pull all chunks of a neighbor without a separate index.
     """
 
-    def __init__(self, path: Path, *, read_only: bool = False) -> None:
+    def __init__(
+        self,
+        path: Path,
+        *,
+        read_only: bool = False,
+        lock_timeout: float = DEFAULT_LOCK_TIMEOUT,
+        lock_stale_after: float = DEFAULT_LOCK_STALE_AFTER,
+    ) -> None:
         self.path = path
         self.read_only = read_only
+        self.lock_timeout = lock_timeout
+        self.lock_stale_after = lock_stale_after
         self.graph: nx.MultiDiGraph = nx.MultiDiGraph()
+        # Guards this instance's lock bookkeeping, and makes `lock()` behave
+        # for threads inside one process the way the lock file does for
+        # processes. Reentrant so `save()` nests inside `transaction()`.
+        self._lock_guard = threading.RLock()
+        self._lock_depth = 0
+        self._lock_token: str | None = None
+
+    @property
+    def lock_path(self) -> Path:
+        """The lock file, alongside the graph so it shares its lifetime and permissions."""
+
+        return self.path.with_name(self.path.name + ".lock")
+
+    @contextlib.contextmanager
+    def lock(self) -> Iterator[None]:
+        """Hold the inter-process write lock for the duration of the block.
+
+        Reentrant per instance, so ``save()`` nests inside a caller's own
+        ``lock()`` without deadlocking. Raises :class:`GraphLockTimeout` — with
+        the holder named — rather than waiting forever, and breaks a lock whose
+        holder is provably dead so a crash cannot wedge the daemon.
+        """
+
+        if not self._lock_guard.acquire(timeout=self.lock_timeout):
+            raise GraphLockTimeout(
+                f"timed out after {self.lock_timeout:g}s waiting for another thread "
+                f"to finish writing {self.path}"
+            )
+        try:
+            if self._lock_depth == 0:
+                self._lock_token = self._acquire_lock_file()
+            self._lock_depth += 1
+            try:
+                yield
+            finally:
+                self._lock_depth -= 1
+                if self._lock_depth == 0:
+                    self._release_lock_file()
+        finally:
+            self._lock_guard.release()
+
+    @contextlib.contextmanager
+    def transaction(self) -> Iterator[GraphStore]:
+        """Lock, reload from disk, hand back the store, then save.
+
+        The seam for a read-modify-write. Taking the lock *before* loading is
+        the whole point: without it two processes can both load, both mutate,
+        and the second save silently discards the first's edits. The body is
+        not saved if it raises.
+        """
+
+        with self.lock():
+            self.load()
+            yield self
+            self.save()
+
+    def _acquire_lock_file(self) -> str:
+        self.path.parent.mkdir(parents=True, exist_ok=True)
+        token = uuid.uuid4().hex
+        payload = json.dumps(
+            {
+                "pid": os.getpid(),
+                "host": socket.gethostname(),
+                "token": token,
+                "acquired_at": time.time(),
+            }
+        )
+        deadline = time.monotonic() + self.lock_timeout
+        while True:
+            try:
+                fd = os.open(self.lock_path, os.O_CREAT | os.O_EXCL | os.O_WRONLY, 0o644)
+            except FileExistsError:
+                pass
+            else:
+                with os.fdopen(fd, "w", encoding="utf-8") as fh:
+                    fh.write(payload)
+                return token
+
+            # Deadline first, unconditionally: the loop must terminate even if
+            # some pathology (an unreadable lock file, an unlink we are not
+            # permitted to make) keeps reporting the lock as breakable.
+            if time.monotonic() >= deadline:
+                holder = _describe_holder(_read_lock_info(self.lock_path) or {})
+                raise GraphLockTimeout(
+                    f"timed out after {self.lock_timeout:g}s waiting for {self.lock_path} "
+                    f"— held by {holder}. If that process is gone, delete the lock file."
+                )
+            if not _break_if_stale(self.lock_path, stale_after=self.lock_stale_after):
+                time.sleep(_LOCK_POLL_INTERVAL)
+
+    def _release_lock_file(self) -> None:
+        token, self._lock_token = self._lock_token, None
+        info = _read_lock_info(self.lock_path)
+        if info is None or info.get("token") != token:
+            return  # broken as stale and re-taken by someone else — not ours to remove
+        with contextlib.suppress(OSError):
+            self.lock_path.unlink()
 
     def load(self) -> None:
-        if self.path.is_file():
-            with self.path.open("rb") as fh:
-                self.graph = pickle.load(fh)
-        else:
+        """Read the graph from disk. Unlocked — ``save`` replaces atomically.
+
+        Raises :class:`GraphCorruptError` for a file that exists but will not
+        unpickle, so the caller can print a recovery instruction instead of a
+        traceback. The graph is rebuildable from the vault; only the learned
+        edge weights are lost, which is a rebuild, not a reinstall.
+        """
+
+        if not self.path.is_file():
             self.graph = nx.MultiDiGraph()
+            return
+        # The pickle is written by this process's own `save()` into the user's
+        # local data dir — not a transport format and never read from a
+        # third party, so `pickle.load` is not an untrusted-input hazard here.
+        with self.path.open("rb") as fh:
+            try:
+                loaded = pickle.load(fh)
+            except Exception as exc:  # noqa: BLE001 — anything here means "not a graph"
+                raise GraphCorruptError(
+                    f"graph file is corrupt — run `daemon ingest --full` to rebuild "
+                    f"({self.path}: {exc!r})"
+                ) from exc
+        if not isinstance(loaded, nx.Graph):
+            raise GraphCorruptError(
+                f"graph file is corrupt — run `daemon ingest --full` to rebuild "
+                f"({self.path}: unpickled a {type(loaded).__name__}, expected a graph)"
+            )
+        self.graph = loaded
 
     def save(self) -> None:
+        """Persist the graph atomically, under the inter-process write lock."""
+
         if self.read_only:
             raise RuntimeError("GraphStore is read-only (opened from a snapshot bundle)")
+        with self.lock():
+            self._write_atomic()
+
+    def _write_atomic(self) -> None:
+        """Pickle into a sibling temp file, fsync, then ``os.replace`` onto the target.
+
+        Same directory so the replace stays on one filesystem and is therefore
+        actually atomic; ``fsync`` before the rename because this file is the
+        daemon's memory and a power cut should cost at most the last save.
+        """
+
         self.path.parent.mkdir(parents=True, exist_ok=True)
-        with self.path.open("wb") as fh:
-            pickle.dump(self.graph, fh)
+        tmp_fd, tmp_name = tempfile.mkstemp(prefix=".graph-", suffix=".tmp", dir=str(self.path.parent))
+        try:
+            with os.fdopen(tmp_fd, "wb") as fh:
+                pickle.dump(self.graph, fh)
+                fh.flush()
+                os.fsync(fh.fileno())
+            os.replace(tmp_name, self.path)
+        except Exception:
+            with contextlib.suppress(FileNotFoundError):
+                os.unlink(tmp_name)
+            raise
 
     def add_note(self, note: Note, chunk_ids: list[str]) -> None:
         node = _note_node(effective_uuid(note))

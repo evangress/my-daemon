@@ -223,6 +223,14 @@ def _snapshot_qdrant(
 
     from qdrant_client import QdrantClient
 
+    if settings.vector_store.qdrant.is_embedded:
+        # QdrantLocal.create_snapshot raises NotImplementedError; say something
+        # actionable instead. Vectors are rebuildable, so a partial bundle is fine.
+        raise RuntimeError(
+            "embedded Qdrant (vector_store.qdrant.path) does not support snapshots; "
+            "graph/feedback/manifest are bundled and vectors can be rebuilt with "
+            "`daemon ingest --full`"
+        )
     collection = settings.vector_store.qdrant.collection
     url = settings.vector_store.qdrant.url
     client = QdrantClient(url=url, check_compatibility=False)
@@ -321,6 +329,12 @@ def _restore_vector_into_side_collection(
 
     from qdrant_client import QdrantClient
 
+    if settings.vector_store.qdrant.is_embedded:
+        raise RuntimeError(
+            "embedded Qdrant (vector_store.qdrant.path) cannot recover snapshots; "
+            "this bundle's vector snapshot needs a Qdrant server "
+            "(`docker compose up -d qdrant` + vector_store.qdrant.url)"
+        )
     base_collection = bundle.qdrant_collection or settings.vector_store.qdrant.collection
     safe_id = bundle.id.replace(":", "-").replace(".", "-")
     side_collection = f"{base_collection}_snap_{safe_id}"

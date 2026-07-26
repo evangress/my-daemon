@@ -5,12 +5,15 @@ from __future__ import annotations
 
 import contextlib
 import uuid
+from pathlib import Path
 from typing import TYPE_CHECKING
 
 from my_daemon.models import Chunk
 
 if TYPE_CHECKING:
     from qdrant_client import QdrantClient
+
+    from my_daemon.config import QdrantConfig
 
 
 _CHUNK_TEXT_PREVIEW_LIMIT = 4000  # full text stays in the graph store; payload is for display
@@ -19,27 +22,125 @@ _CHUNK_TEXT_PREVIEW_LIMIT = 4000  # full text stays in the graph store; payload 
 DENSE_NAME = "dense"
 SPARSE_NAME = "sparse"
 
+# The literal qdrant-client accepts for a non-persistent embedded store.
+MEMORY_LOCATION = ":memory:"
+
+
+class LocalStoreLockedError(RuntimeError):
+    """Embedded Qdrant is single-process and the storage folder is already held.
+
+    Raised instead of qdrant-client's bare ``RuntimeError`` so the operator gets
+    the *cause* and the two ways out (stop the other process, or move to a
+    server) rather than a traceback out of a vendored lock helper.
+    """
+
 
 def _stable_point_id(chunk_id: str) -> str:
     return str(uuid.uuid5(uuid.NAMESPACE_URL, f"my-daemon/chunk/{chunk_id}"))
 
 
 class VectorStore:
-    def __init__(self, url: str, collection: str, dim: int, hybrid: bool = True) -> None:
+    """Qdrant-backed chunk store, in either server or embedded mode.
+
+    Pass ``url`` for a running Qdrant server, or ``path`` to run the engine
+    in-process against a local folder (embedded mode — no Docker). Exactly one
+    of the two, and the choice is made here because ``_client_`` is the single
+    place a client is ever constructed.
+    """
+
+    def __init__(
+        self,
+        url: str | None,
+        collection: str,
+        dim: int,
+        hybrid: bool = True,
+        path: str | Path | None = None,
+    ) -> None:
+        if (url is None) == (path is None):
+            raise ValueError(
+                "VectorStore needs exactly one of url= (server mode) or "
+                "path= (embedded mode); "
+                f"got url={url!r}, path={path!r}"
+            )
         self.url = url
+        self.path = path
         self.collection = collection
         self.dim = dim
         self.hybrid = hybrid
         self._client: QdrantClient | None = None
 
+    @classmethod
+    def from_config(cls, config: QdrantConfig, dim: int, hybrid: bool = True) -> VectorStore:
+        """Build from the ``vector_store.qdrant`` config block.
+
+        The mode branch lives in exactly one place — here — so no call site has
+        to know that embedded and server modes exist.
+        """
+        return cls(
+            url=None if config.is_embedded else config.url,
+            collection=config.collection,
+            dim=dim,
+            hybrid=hybrid,
+            path=config.path,
+        )
+
+    @property
+    def is_embedded(self) -> bool:
+        return self.path is not None
+
+    @property
+    def location(self) -> str:
+        """Human-readable target, for error messages and status output."""
+        return str(self.path) if self.path is not None else str(self.url)
+
     def _client_(self) -> QdrantClient:
         if self._client is None:
             from qdrant_client import QdrantClient
-            # check_compatibility=False: the docker-compose pins qdrant server 1.11 but
-            # the pip client floats forward; the version-mismatch warning is noisy and
-            # the operations we use (query_points/upsert/delete) work across both.
-            self._client = QdrantClient(url=self.url, check_compatibility=False)
+
+            if self.path is not None:
+                self._client = self._open_local(QdrantClient)
+            else:
+                # check_compatibility=False: the docker-compose pins qdrant server 1.11 but
+                # the pip client floats forward; the version-mismatch warning is noisy and
+                # the operations we use (query_points/upsert/delete) work across both.
+                self._client = QdrantClient(url=self.url, check_compatibility=False)
         return self._client
+
+    def _open_local(self, client_cls: type[QdrantClient]) -> QdrantClient:
+        """Open the in-process engine, translating the lock failure.
+
+        Embedded Qdrant takes an exclusive flock on the storage folder. Two
+        daemons (say, the CLI and the GUI) pointed at the same ``path`` is a
+        configuration mistake, not a crash — say so.
+        """
+        location = str(self.path)
+        if location != MEMORY_LOCATION:
+            Path(location).mkdir(parents=True, exist_ok=True)
+        try:
+            return client_cls(path=location)
+        except RuntimeError as exc:
+            # qdrant-client signals this with a plain RuntimeError and no
+            # dedicated type; match on either half of its wording, and re-raise
+            # untouched if it turns out to be some other RuntimeError.
+            text = str(exc)
+            if "already accessed" not in text and "another instance" not in text:
+                raise
+            raise LocalStoreLockedError(
+                f"Embedded Qdrant storage at {location} is already open in another "
+                "process (embedded mode allows exactly one). Stop the other "
+                "my-daemon process, or switch vector_store.qdrant to a server "
+                "'url' (docker-compose up -d qdrant) if you need concurrent access."
+            ) from exc
+
+    def close(self) -> None:
+        """Release the client — and, in embedded mode, the storage lock.
+
+        Idempotent, and safe to call on a store that was never used.
+        """
+        if self._client is not None:
+            with contextlib.suppress(Exception):
+                self._client.close()
+            self._client = None
 
     def _collection_is_legacy(self) -> bool:
         """A pre-hybrid collection was created with a single unnamed vector slot.
@@ -101,7 +202,14 @@ class VectorStore:
         seed of every query* — it was unindexed before the cutover and that was
         pure latency. ``note_path`` is indexed too so display-side lookups
         (and the rename path) stay cheap.
+
+        Embedded mode has no payload indexes at all (it filters in Python and
+        warns if you ask), so we skip rather than emit a UserWarning on every
+        ``ensure_collection`` for something that is a no-op there.
         """
+
+        if self.is_embedded:
+            return
 
         from qdrant_client.http.models import PayloadSchemaType
 

@@ -106,12 +106,7 @@ def _build_sparse_embedder(s: Settings) -> SparseEmbedder | None:
 
 
 def _build_vector_store(s: Settings, dim: int) -> VectorStore:
-    return VectorStore(
-        url=s.vector_store.qdrant.url,
-        collection=s.vector_store.qdrant.collection,
-        dim=dim,
-        hybrid=s.embeddings.hybrid,
-    )
+    return VectorStore.from_config(s.vector_store.qdrant, dim=dim, hybrid=s.embeddings.hybrid)
 
 
 def _build_graph_store(s: Settings) -> GraphStore:
@@ -202,13 +197,15 @@ def ingest(
         console.print(Panel("\n".join(stats.errors), title="Errors", border_style="red"))
 
 
-@app.command()
-def query(
-    text: str = typer.Argument(..., help="The question to ask your daemon."),
-    no_synthesize: bool = typer.Option(False, "--no-llm", help="Skip LLM synthesis; show ranked context only."),
-    verbose: bool = typer.Option(False, "-v", "--verbose"),
-) -> None:
-    """Ask the daemon a question."""
+def _run_query(text: str, *, no_synthesize: bool = False, verbose: bool = False) -> None:
+    """The body of `daemon query`, as a plain function.
+
+    Typer commands are not ordinary callables: their unfilled parameters hold
+    ``OptionInfo`` sentinels, which are truthy. `ask` used to call `query()`
+    directly and every flag silently inverted — synthesis off, verbose on. Both
+    commands go through here now, so a real default is the only kind there is.
+    """
+
     s = _load()
     stores = build_stores(s)
     engine = QueryEngine(
@@ -255,9 +252,23 @@ def query(
 
 
 @app.command()
-def ask(text: str = typer.Argument(...)) -> None:
+def query(
+    text: str = typer.Argument(..., help="The question to ask your daemon."),
+    no_synthesize: bool = typer.Option(False, "--no-llm", help="Skip LLM synthesis; show ranked context only."),
+    verbose: bool = typer.Option(False, "-v", "--verbose"),
+) -> None:
+    """Ask the daemon a question."""
+    _run_query(text, no_synthesize=no_synthesize, verbose=verbose)
+
+
+@app.command()
+def ask(
+    text: str = typer.Argument(..., help="The question to ask your daemon."),
+    no_synthesize: bool = typer.Option(False, "--no-llm", help="Skip LLM synthesis; show ranked context only."),
+    verbose: bool = typer.Option(False, "-v", "--verbose"),
+) -> None:
     """Alias for query."""
-    query(text=text)
+    _run_query(text, no_synthesize=no_synthesize, verbose=verbose)
 
 
 @app.command()
@@ -297,14 +308,12 @@ def select(
     selected_note = picked.get("note_uuid")
 
     graph_store = _build_graph_store(s)
-    graph_store.load()
-    result = apply_selection(
-        graph_store,
-        seed_note_uuid=seed_note,
-        selected_note_uuid=selected_note,
-        selected_note_path=picked.get("note_path"),
-    )
-    graph_store.save()
+    with graph_store.transaction():
+        result = apply_selection(
+            graph_store,
+            seed_note_uuid=seed_note,
+            selected_note_uuid=selected_note,
+        )
 
     feedback_store.attach_signal(
         feedback_id,
