@@ -368,6 +368,40 @@ class ActivationLedger:
         hits.sort(key=lambda h: h.score, reverse=True)
         return hits[:top_k]
 
+    def query_fingerprints(
+        self,
+        *,
+        limit: int = 4000,
+        since: datetime | None = None,
+        surfaces: Sequence[str] | None = None,
+    ) -> list[tuple[int, str, dict[str, float]]]:
+        """(query_id, text, fingerprint) for the offline clustering phase.
+
+        Weighting and normalization happen here in one pass so the caller gets
+        directly comparable vectors.
+        """
+
+        sql = ["SELECT id, text FROM queries WHERE 1=1"]
+        params: list = []
+        if since is not None:
+            sql.append("AND ts >= ?")
+            params.append(since.isoformat())
+        if surfaces:
+            sql.append(f"AND surface IN ({','.join('?' * len(surfaces))})")
+            params.extend(surfaces)
+        sql.append("ORDER BY id DESC LIMIT ?")
+        params.append(limit)
+
+        with self._connect() as conn:
+            rows = conn.execute(" ".join(sql), params).fetchall()
+
+        out = []
+        for row in rows:
+            fingerprint = self.fingerprint(int(row["id"]))
+            if fingerprint:
+                out.append((int(row["id"]), row["text"], fingerprint))
+        return out
+
     def hot_notes(self, *, limit: int = 20, since: datetime | None = None):
         """Which notes your attention actually lands on."""
         if since is None:

@@ -227,11 +227,69 @@ def _m004_activation_ledger(conn: sqlite3.Connection) -> None:
     exec_script(conn, _M004_SCHEMA)
 
 
+# ---------------------------------------------------------------------------
+# Migration 5 — emergent themes. Clusters of query fingerprints, named by the
+# observer during consolidation, and the tag proposals they generate.
+# ---------------------------------------------------------------------------
+
+_M005_SCHEMA = """
+CREATE TABLE IF NOT EXISTS themes (
+    id             INTEGER PRIMARY KEY AUTOINCREMENT,
+    slug           TEXT NOT NULL UNIQUE,
+    label          TEXT NOT NULL,
+    summary        TEXT NOT NULL DEFAULT '',
+    centroid_json  TEXT NOT NULL,
+    query_count    INTEGER NOT NULL DEFAULT 0,
+    first_seen_at  TEXT NOT NULL,
+    last_seen_at   TEXT NOT NULL,
+    runs_seen      INTEGER NOT NULL DEFAULT 1,
+    runs_missing   INTEGER NOT NULL DEFAULT 0,
+    snapshot_id    TEXT,
+    model          TEXT,
+    status         TEXT NOT NULL DEFAULT 'proposed',
+    merged_into    INTEGER REFERENCES themes(id),
+    label_locked   INTEGER NOT NULL DEFAULT 0
+);
+CREATE INDEX IF NOT EXISTS idx_themes_status ON themes(status);
+CREATE TABLE IF NOT EXISTS theme_notes (
+    theme_id  INTEGER NOT NULL REFERENCES themes(id) ON DELETE CASCADE,
+    note_uuid TEXT NOT NULL,
+    weight    REAL NOT NULL,
+    PRIMARY KEY (theme_id, note_uuid)
+);
+CREATE TABLE IF NOT EXISTS theme_tag_proposals (
+    id           INTEGER PRIMARY KEY AUTOINCREMENT,
+    theme_id     INTEGER NOT NULL REFERENCES themes(id) ON DELETE CASCADE,
+    note_uuid    TEXT NOT NULL,
+    tag          TEXT NOT NULL,
+    proposed_at  TEXT NOT NULL,
+    decided_at   TEXT,
+    decision     TEXT,
+    write_result TEXT,
+    UNIQUE (theme_id, note_uuid, tag)
+);
+CREATE INDEX IF NOT EXISTS idx_tag_proposals_pending
+    ON theme_tag_proposals(decided_at) WHERE decided_at IS NULL;
+"""
+
+
+def _m005_themes(conn: sqlite3.Connection) -> None:
+    exec_script(conn, _M005_SCHEMA)
+    # `queries` gains its theme assignment here rather than in migration 4,
+    # because the FK target does not exist until now.
+    existing = {row[1] for row in conn.execute("PRAGMA table_info(queries)")}
+    for col, typ in {"theme_id": "INTEGER", "theme_score": "REAL"}.items():
+        if col not in existing:
+            conn.execute(f"ALTER TABLE queries ADD COLUMN {col} {typ}")
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_queries_theme ON queries(theme_id)")
+
+
 MIGRATIONS: list[tuple[int, str, Migration]] = [
     (1, "baseline_feedback_and_agent_state", _m001_baseline),
     (2, "note_registry_and_ordinals", _m002_registry),
     (3, "feedback_note_identity", _m003_feedback_identity),
     (4, "activation_ledger", _m004_activation_ledger),
+    (5, "themes_and_tag_proposals", _m005_themes),
 ]
 
 SCHEMA_VERSION = MIGRATIONS[-1][0]

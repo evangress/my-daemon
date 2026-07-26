@@ -767,9 +767,11 @@ Each leaves the system working, tested, and shippable.
   **Win: the headline feature.** A differently-worded question surfaces "you
   asked something like this on 12 March, and it landed on the same three notes."
 
-- [ ] **M-mem-7 — Themes.** *Reversible.* Migration 5, `cluster_fingerprints`
-  inside `run_observe`, centroid matching, LLM naming for new clusters only,
-  churn metric, themes section in the observer letter.
+- [x] **M-mem-7 — Themes — shipped 2026-07-26.** Migration 5,
+  `stores/themes.py`, `analysis/themes.py` (HDBSCAN over fingerprint cosine,
+  leave-one-out membership filtering, greedy centroid matching, EMA-blended
+  centroids, dormancy, churn), `name_theme` in `llm/agents.py`, wired into
+  `run_observe`. `scipy`/`scikit-learn` now declared explicitly.
   **Win:** the dream phase names what you've been circling.
 
 - [ ] **M-mem-8 — Tag proposals.** *Reversible per-note.* `daemon themes review`

@@ -198,6 +198,16 @@ class SnapshotConfig(BaseModel):
 
 
 class ConsolidationConfig(BaseModel):
+    # --- Emergent themes (M-mem-7) --------------------------------------
+    cluster_themes: bool = True
+    min_cluster_size: int = 3
+    # Cosine above which a new cluster is judged the *same* theme as an
+    # existing one and inherits its id and label. Label stability matters more
+    # than partition stability.
+    theme_match_threshold: float = 0.60
+    # Only new clusters are named, so this bounds the nightly LLM spend.
+    max_new_themes_per_run: int = 5
+    theme_query_limit: int = 4000
     """Where M3 structural + weight-evolution reports persist.
 
     One subdirectory per snapshot id: ``<out_dir>/<snapshot_id>/structural.json``

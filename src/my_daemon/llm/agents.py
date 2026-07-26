@@ -492,3 +492,55 @@ def observer_letter(
         model=_model_for(client, model),
         max_tokens=max_tokens,
     )
+
+
+_THEME_NAMER_SYSTEM = """You name recurring themes in someone's personal knowledge vault.
+
+You are shown a handful of note titles that a cluster of the user's own questions kept landing on, plus a few of those questions verbatim. Name what connects them.
+
+Rules:
+- The label is 2-5 words, in the user's register, naming the *concern* — not the mechanism. "Why projects stall" beats "Cluster of project notes".
+- The summary is one sentence saying what the user seems to be circling.
+- Do not invent detail beyond what the titles and questions support. If they don't cohere, say so in the summary and give a deliberately plain label.
+- Never use the words "cluster", "theme", "embedding", or "vector" in the label.
+
+Return exactly two lines:
+LABEL: <the label>
+SUMMARY: <the sentence>
+"""
+
+
+def name_theme(
+    client,  # noqa: ANN001
+    *,
+    note_titles: list[str],
+    representative_queries: list[str],
+    model: str | None = None,
+) -> tuple[str, str]:
+    """Name one emergent theme. Titles only — never chunk bodies.
+
+    Called for *new* clusters only, so steady state is zero or one call a
+    night, on the cheap model.
+    """
+
+    titles = "\n".join(f"- {t}" for t in note_titles[:12]) or "(none)"
+    questions = "\n".join(f"- {q}" for q in representative_queries[:3]) or "(none)"
+    user = (
+        f"Notes this cluster keeps landing on:\n{titles}\n\n"
+        f"Questions from the cluster:\n{questions}"
+    )
+    text = _call(
+        client,
+        system=_THEME_NAMER_SYSTEM,
+        user=user,
+        model=_model_for(client, model),
+        max_tokens=200,
+    )
+
+    label, summary = "", ""
+    for line in (text or "").splitlines():
+        if line.upper().startswith("LABEL:"):
+            label = line.split(":", 1)[1].strip()
+        elif line.upper().startswith("SUMMARY:"):
+            summary = line.split(":", 1)[1].strip()
+    return label or "unnamed", summary

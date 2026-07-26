@@ -57,6 +57,9 @@ class ObserveStats:
     letter_path: Path | None = None
     model_used: str = ""
     communities_seen: int = 0
+    themes_seen: int = 0
+    themes_new: int = 0
+    theme_churn: float = 0.0
     events_replayed: int = 0
     edges_decayed: int = 0
     dry_run: bool = False
@@ -331,6 +334,14 @@ def run_observe(
         dry_run=dry_run,
     )
 
+    theme_result = _cluster_themes(
+        settings, llm, bundle.id, dry_run=dry_run, progress=progress, stats=stats
+    )
+    if theme_result is not None:
+        stats.themes_seen = len(theme_result.matched) + len(theme_result.created)
+        stats.themes_new = len(theme_result.created)
+        stats.theme_churn = theme_result.churn
+
     # --- write (skipped on dry-run) ---------------------------------------
     letter_written_path: Path | None = None
     if not dry_run:
@@ -380,3 +391,73 @@ def run_observe(
         dry_run=dry_run,
     )
     return stats
+
+
+def _cluster_themes(
+    settings: Settings,
+    llm,  # noqa: ANN001
+    snapshot_id: str,
+    *,
+    dry_run: bool,
+    progress,  # noqa: ANN001
+    stats: ObserveStats,
+):
+    """Cluster query fingerprints into named themes, inside the dream phase.
+
+    Deliberately non-fatal: a consolidation run that cannot cluster should
+    still write its letter.
+    """
+
+    cons = settings.consolidation
+    if not getattr(cons, "cluster_themes", True):
+        return None
+
+    from my_daemon.analysis.themes import cluster_fingerprints, reconcile_themes
+    from my_daemon.llm.agents import name_theme
+    from my_daemon.stores.activations import ActivationLedger
+    from my_daemon.stores.registry import NoteRegistry
+    from my_daemon.stores.themes import ThemeStore
+
+    try:
+        ledger = ActivationLedger(db_path=settings.feedback.db_path)
+        clusters = cluster_fingerprints(
+            ledger, min_cluster_size=cons.min_cluster_size, limit=cons.theme_query_limit
+        )
+        if progress:
+            progress(f"themes: {len(clusters)} cluster(s) found")
+        if dry_run:
+            return None
+
+        store = ThemeStore(db_path=settings.feedback.db_path)
+        result = reconcile_themes(
+            store, clusters, snapshot_id=snapshot_id,
+            match_threshold=cons.theme_match_threshold,
+        )
+
+        registry = NoteRegistry(db_path=settings.feedback.db_path)
+        # Only *new* clusters are named. A returning one keeps its id, label and
+        # summary — no LLM call, and no churn in what the user sees.
+        for theme_id, cluster in result.needs_naming[: cons.max_new_themes_per_run]:
+            records = [registry.get(u) for u in cluster.centroid]
+            titles = [r.title or r.rel_path for r in records if r]
+            label, summary = name_theme(
+                llm,
+                note_titles=titles,
+                representative_queries=cluster.representative_queries,
+                model=settings.agent.observer_model,
+            )
+            store.set_label(theme_id, label=label, summary=summary)
+
+        if len(result.needs_naming) > cons.max_new_themes_per_run:
+            stats.notes.append(
+                f"{len(result.needs_naming) - cons.max_new_themes_per_run} new theme(s) "
+                "left unnamed this run (max_new_themes_per_run)"
+            )
+        if result.churn > 0.5:
+            stats.notes.append(
+                f"theme churn {result.churn:.2f} — themes are not settled yet"
+            )
+        return result
+    except Exception as exc:  # noqa: BLE001
+        stats.errors.append(f"theme clustering failed: {exc!r}")
+        return None
