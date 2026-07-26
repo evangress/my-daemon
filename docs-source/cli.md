@@ -473,6 +473,81 @@ sends them to Claude with the prior memory as context, and rewrites the
 file atomically with a snapshot beforehand. Also appends a one-block-per-run
 summary to `<vault>/Agent/memory-rolling.md`.
 
+## Running unattended
+
+### `daemon run`
+
+```
+daemon run [--once]
+```
+
+The foreground supervisor — the command that turns the daemon from a tool you
+invoke into a process that keeps up with you. In order:
+
+1. **Preflight.** A doctor-lite check of the two things that make an unattended
+   run pointless: the vault exists, and the vector store opens. Either failure
+   refuses with its remediation hint and exits 1. (A missing API key or a cold
+   model cache do *not* refuse — the supervisor recovers from those on its own,
+   and a daemon that won't start over a warning is a daemon nobody enables.)
+2. **One incremental ingest**, exactly as `daemon ingest` would.
+3. **Watch.** Every `.md` change under `vault.path` — respecting
+   `vault.exclude_dirs`, and always ignoring `<vault>/<agent.folder_name>/` so
+   the daemon's own writeback can't trigger a re-ingest storm — restarts a
+   `run.debounce_seconds` quiet timer. One ingest per burst.
+4. **Consolidate nightly** at `run.consolidate_at`, when both `agent.enabled`
+   and `agent.observer_enabled` are open. When they aren't, the reason is
+   logged once, not every night.
+5. **Heartbeat** every `run.heartbeat_minutes`, so an idle daemon still proves
+   it is alive.
+
+Nothing forks or detaches — that is `daemon schedule`'s job, and both systemd
+(`Type=simple`) and Task Scheduler want a foreground process. `SIGINT`/`SIGTERM`
+finish the work in flight, close the vector store, release the graph lock, and
+exit 0.
+
+`--once` does the preflight and the initial ingest, then exits. That is the
+cron-friendly shape: no watcher, no scheduler, no long-lived lock.
+
+**In embedded vector-store mode** (`vector_store.qdrant.path`, the default),
+`daemon run` holds the storage folder exclusively for its whole life. The
+startup banner says so. Every other my-daemon process — `daemon query`,
+`daemon chat`, the GUI, Hermes — will refuse to open it until `run` stops. If
+you want to query while the supervisor runs, switch to server mode
+(`vector_store.qdrant.url` + `docker compose up -d qdrant`).
+
+### `daemon schedule show`
+
+Print the scheduler unit for this platform, substituted with the real
+interpreter-adjacent `daemon` path and the resolved `--config`. Writes nothing.
+
+### `daemon schedule install`
+
+```
+daemon schedule install [--dry-run]
+```
+
+**Linux** — writes a `systemd --user` service to
+`$XDG_CONFIG_HOME/systemd/user/my-daemon.service` (default
+`~/.config/systemd/user/`) and prints the commands that activate it:
+
+```bash
+systemctl --user daemon-reload
+systemctl --user enable --now my-daemon.service
+journalctl --user -u my-daemon.service -f    # follow the log
+loginctl enable-linger $USER                 # keep it running after you log out
+```
+
+**Windows** — there is no file to write, so `install` prints the exact
+`schtasks /Create /SC ONLOGON` line to paste into a Command Prompt. It uses the
+same quoting shape as the `daemon setup` window's reflect task; a test pins the
+two together so they cannot drift.
+
+`--dry-run` prints and writes nothing. Neither `systemctl` nor `schtasks` is
+ever run for you: enabling a unit that will outlive your shell — and hold your
+vault's embedded vector store — is a decision to make with your eyes open.
+
+Other platforms exit 1 with the `daemon run` command line to wire up by hand.
+
 ## Environment variable overrides
 
 Any config key can be overridden by an env var with the `MY_DAEMON_` prefix

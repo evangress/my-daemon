@@ -1741,6 +1741,7 @@ dependencies = [
     { name = "scipy" },
     { name = "sentence-transformers" },
     { name = "typer" },
+    { name = "watchfiles" },
 ]
 
 [package.optional-dependencies]
@@ -1777,6 +1778,7 @@ requires-dist = [
     { name = "scipy", specifier = ">=1.11" },
     { name = "sentence-transformers", specifier = ">=2.7" },
     { name = "typer", specifier = ">=0.12" },
+    { name = "watchfiles", specifier = ">=0.21" },
 ]
 provides-extras = ["dev"]
 

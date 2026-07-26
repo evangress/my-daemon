@@ -248,6 +248,34 @@ feedback:
 |---|---|---|
 | `db_path` | `./data/feedback.db` | SQLite file. Holds both the `feedback` table (every query) and the three `agent_*_runs` state tables. One file to back up. |
 
+### `run`
+
+The foreground supervisor, `daemon run`. See
+[Background Agents → Running as a service](background-agents.md#running-as-a-service).
+
+```yaml
+run:
+  debounce_seconds: 5
+  consolidate_at: "03:00"
+  heartbeat_minutes: 15
+```
+
+| Key | Default | Notes |
+|---|---|---|
+| `debounce_seconds` | `5` | Seconds of *quiet* before an incremental ingest fires. Not a rate limit — the timer restarts on every new change, so a sync client rewriting a hundred notes produces one ingest after it settles rather than one in the middle of it. `0` ingests on the next tick. |
+| `consolidate_at` | `"03:00"` | Local wall-clock time for the nightly consolidation, 24-hour `HH:MM`. `null` turns it off. Parsed at config-load time, so a typo fails when you start the daemon, not at 03:00 six weeks later. |
+| `heartbeat_minutes` | `15` | Cadence of the "still alive" log line. `0` silences it. |
+
+The nightly job still obeys both writeback gates: it runs only when
+`agent.enabled` **and** `agent.observer_enabled` are true. With either closed,
+the supervisor logs the reason once and then stops mentioning it.
+
+Scheduling is **DST-naive on purpose**: `consolidate_at` is the next local
+wall-clock occurrence of that time, and one calendar day is added once it has
+passed. Across a DST boundary two runs are therefore 23 or 25 hours apart. For
+a nightly pass over a personal vault, that beats depending on a timezone
+database and a cron parser.
+
 ### `logging`
 
 ```yaml

@@ -44,12 +44,12 @@ import shutil
 import subprocess
 import sys
 from dataclasses import dataclass
-from datetime import datetime, timezone
-from enum import Enum
+from datetime import UTC, datetime
+from enum import StrEnum
 from pathlib import Path
 
 
-class Status(str, Enum):
+class Status(StrEnum):
     COMPATIBLE = "compatible"
     INCOMPATIBLE = "incompatible"
     UNKNOWN = "unknown"
@@ -272,7 +272,7 @@ def _build_payload(results: list[PkgResult], exit_code: int) -> dict:
         counts[r.status.value] += 1
     return {
         "metadata": {
-            "generated_at": datetime.now(timezone.utc).isoformat(timespec="seconds"),
+            "generated_at": datetime.now(UTC).isoformat(timespec="seconds"),
             "project_license": PROJECT_LICENSE,
             "python_version": platform.python_version(),
             "pip_licenses_version": _pip_licenses_version(),

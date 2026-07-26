@@ -168,5 +168,25 @@ consolidation:
   # large graphs; 200 is a sensible default for personal vaults.
   betweenness_sample_k: 200
 
+run:
+  # `daemon run` — the foreground supervisor. Watches the vault, ingests after
+  # things go quiet, and runs `daemon consolidate` overnight. Install it as a
+  # background service with `daemon schedule install` (systemd --user on Linux,
+  # a schtasks command on Windows).
+
+  # Seconds of *quiet* before an incremental ingest fires. The timer restarts on
+  # every new change, so a sync client rewriting a hundred notes produces one
+  # ingest after it settles rather than one in the middle of it.
+  debounce_seconds: 5
+
+  # Local wall-clock time for the nightly consolidation, 24-hour "HH:MM".
+  # Set to null to turn it off. It still obeys both writeback gates above
+  # (agent.enabled AND agent.observer_enabled); with either closed the
+  # supervisor logs why once and stops mentioning it.
+  consolidate_at: "03:00"
+
+  # Cadence of the "still alive" log line, in minutes. 0 silences it.
+  heartbeat_minutes: 15
+
 logging:
   level: INFO

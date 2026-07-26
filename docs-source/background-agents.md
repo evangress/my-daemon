@@ -127,7 +127,122 @@ reflection LLM treats your edits as ground truth, so correcting a hallucination
 or sharpening a sentence will stick on the next run. Delete the file entirely
 to start a theme over.
 
+## Running as a service
+
+`daemon run` is the supervisor: one long-lived foreground process that watches
+the vault and runs the nightly consolidation, so you stop having to remember
+`daemon ingest` after every editing session.
+
+```bash
+daemon run              # watch + nightly consolidate, until Ctrl-C
+daemon run --once       # preflight + one incremental ingest, then exit
+```
+
+### What it does, in order
+
+| Stage | Behaviour |
+|---|---|
+| Preflight | Vault exists, vector store opens. Either failure refuses with the `daemon doctor` hint and exits 1. A missing API key or cold model cache do **not** refuse — those recover on their own. |
+| Initial ingest | One incremental pass, identical to `daemon ingest`. This one is allowed to kill the process: a supervisor that can't ingest even once is not something to leave running for a week. |
+| Watch | Every `.md` change under `vault.path` restarts a `run.debounce_seconds` quiet timer (default 5s). One ingest per burst — a sync client rewriting a hundred notes gets one ingest *after* it settles, not one in the middle. |
+| Nightly consolidate | At `run.consolidate_at` (default 03:00 local), gated on `agent.enabled` **and** `agent.observer_enabled`. |
+| Heartbeat | An "alive" line every `run.heartbeat_minutes` (default 15), with run counts and the next consolidation time. |
+| Shutdown | `SIGINT`/`SIGTERM` finish the work in flight, close the vector store, release the graph lock, exit 0. |
+
+Once the loop is up, a failed ingest or a failed consolidation is logged and
+the daemon keeps going — the opposite of the startup rule, and deliberately so.
+A dead *watcher* is the one exception: it stops the process rather than
+heartbeat "alive" while silently no longer watching anything, which is exactly
+what `Restart=on-failure` in the generated unit is there to catch.
+
+### The Agent folder does not feed itself
+
+The watcher ignores `<vault>/<agent.folder_name>/` unconditionally — not merely
+because `Agent` is in the default `exclude_dirs`, but because it is the
+daemon's own writeback target. A nightly `consolidate` writing
+`Agent/observer-2026-07-26.md` must not, at 03:00, schedule an ingest to
+discover its own letter.
+
+### Embedded Qdrant is single-process — say it out loud
+
+With `vector_store.qdrant.path` set (the default), `daemon run` holds the
+storage folder exclusively for its entire life, and the startup banner says so:
+
+```text
+embedded vector store at ./data/qdrant-local — this process holds it
+exclusively. Every other my-daemon process (daemon query, daemon chat, the
+GUI, Hermes) will refuse to open it until `daemon run` stops.
+```
+
+That includes the GUI: it is a separate process and hits the same lock. There
+are only two honest options — stop `daemon run` when you want to query
+interactively, or move to server mode (`vector_store.qdrant.url` +
+`docker compose up -d qdrant`), which exists precisely for concurrent access.
+The daemon does not attempt to broker multi-process access to an embedded
+store; that is the engine's constraint, not something a supervisor can paper
+over.
+
+### Generated units
+
+```bash
+daemon schedule show                  # print the unit, write nothing
+daemon schedule install               # write it, print the activation commands
+daemon schedule install --dry-run     # print what install would write
+```
+
+Both shapes name the interpreter-adjacent `daemon` binary and the resolved
+config absolutely, so neither depends on a working directory.
+
+**Linux** — `~/.config/systemd/user/my-daemon.service`:
+
+```ini
+[Unit]
+Description=My Daemon — vault watcher and nightly consolidation
+After=default.target
+
+[Service]
+Type=simple
+ExecStart="/path/to/my-daemon/.venv/bin/daemon" --config "/path/to/my-daemon/config.yaml" run
+Restart=on-failure
+RestartSec=30
+
+[Install]
+WantedBy=default.target
+```
+
+then
+
+```bash
+systemctl --user daemon-reload
+systemctl --user enable --now my-daemon.service
+journalctl --user -u my-daemon.service -f    # follow the log
+loginctl enable-linger $USER                 # keep it running after you log out
+```
+
+There is deliberately **no companion `.timer`**: the supervisor owns its own
+schedule, and a timer would either double-fire the consolidation or try to
+restart a process that never stopped.
+
+**Windows** — nothing to write, so `install` prints the command:
+
+```text
+schtasks /Create /SC ONLOGON /TN "MyDaemonRun" /TR "\"C:\my-daemon\.venv\Scripts\daemon.exe\" --config \"C:\my-daemon\config.yaml\" run" /F
+```
+
+Same quoting shape as the `daemon setup` window's `MyDaemonReflect` task, and a
+test pins the two together so they cannot drift.
+
+Neither `systemctl` nor `schtasks` is ever run for you. Enabling a unit that
+will outlive your shell — and hold your vault's embedded vector store — is a
+decision to make with your eyes open.
+
 ## Scheduling
+
+`daemon run` covers the common case. The cron recipes below remain the right
+answer when you want the jobs to run *without* a resident process — on a
+machine you rarely log into, or alongside a GUI that needs the embedded store.
+`daemon run --once` is the cron-friendly shape of the supervisor: preflight
+plus one incremental ingest, no watcher, no long-lived lock.
 
 Every scheduler starts the job in a directory you did not choose — cron in
 `$HOME`, Windows Task Scheduler in `system32`. A daemon that resolved
@@ -159,6 +274,8 @@ If you register a task by hand, use the same shape.
 # crontab -e
  0 3 * * *  cd /path/to/my-daemon && .venv/bin/daemon reflect
 15 3 * * *  cd /path/to/my-daemon && .venv/bin/daemon extract
+# Keep the index current without a resident process:
+*/30 * * * *  cd /path/to/my-daemon && .venv/bin/daemon run --once
 ```
 
 The 15-minute gap exists because `reflect` reads recent notes; running

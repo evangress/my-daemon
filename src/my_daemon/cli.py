@@ -3,6 +3,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import contextlib
 import json
 import os
@@ -13,6 +14,7 @@ from pathlib import Path
 
 import typer
 from rich.console import Console
+from rich.markup import escape
 from rich.panel import Panel
 from rich.prompt import Prompt
 from rich.table import Table
@@ -76,6 +78,13 @@ from my_daemon.stores.graph import GraphLockTimeout
 from my_daemon.stores.snapshot import _backup_sqlite
 from my_daemon.stores.themes import ThemeStore
 from my_daemon.stores.vector import MEMORY_LOCATION, LocalStoreLockedError
+from my_daemon.supervisor import (
+    PreflightFailed,
+    ScheduleUnit,
+    Supervisor,
+    UnsupportedPlatform,
+    build_schedule_unit,
+)
 
 app = typer.Typer(
     name="daemon",
@@ -95,6 +104,10 @@ themes_app = typer.Typer(name="themes", help="Emergent themes and their tag prop
 app.add_typer(themes_app)
 migrate_app = typer.Typer(name="migrate", help="Schema and identity migrations.")
 app.add_typer(migrate_app)
+schedule_app = typer.Typer(
+    name="schedule", help="Generate the OS unit that runs `daemon run` unattended."
+)
+app.add_typer(schedule_app)
 
 console = Console()
 
@@ -547,6 +560,122 @@ def doctor() -> None:
         console.print(f"\n[yellow]{len(warnings)} warning(s)[/yellow], nothing fatal.")
     else:
         console.print("\n[green]All checks passed.[/green]")
+
+
+# ---------------------------------------------------------------------------
+# daemon run — the foreground supervisor
+# ---------------------------------------------------------------------------
+
+
+@app.command()
+def run(
+    once: bool = typer.Option(
+        False,
+        "--once",
+        help="Preflight, run one incremental ingest, then exit. The cron-friendly shape.",
+    ),
+) -> None:
+    """Watch the vault and keep the daemon's memory current, in the foreground.
+
+    Startup runs a doctor-lite preflight (vault, vector store) and refuses if
+    either fails, then does one incremental ingest. After that it watches the
+    vault for `.md` changes, ingests once the vault has been quiet for
+    `run.debounce_seconds`, and runs `daemon consolidate` nightly at
+    `run.consolidate_at` (when both writeback gates are open).
+
+    Nothing here daemonizes — that is `daemon schedule`'s job. SIGINT/SIGTERM
+    finish the work in flight, close the vector store and exit 0.
+    """
+    s = _load()
+    supervisor = Supervisor(s, emit=_supervisor_log)
+    try:
+        with _store_errors(s):
+            asyncio.run(supervisor.run(once=once))
+    except PreflightFailed as exc:
+        for failure in exc.failures:
+            console.print(f"{failure.name}: {failure.detail}", style="red", soft_wrap=True)
+            if failure.hint:
+                console.print(f"  {failure.hint}", style="yellow", soft_wrap=True)
+        console.print("[dim]Run `daemon doctor` for the full preflight.[/dim]")
+        raise typer.Exit(code=1) from exc
+
+
+def _supervisor_log(line: str) -> None:
+    """One timestamped line. Plain enough for `journalctl`, which prefixes its
+    own timestamp but not a local one, and never markup — these lines carry
+    filesystem paths that rich would try to read as tags."""
+    stamp = datetime.now().strftime("%H:%M:%S")
+    console.print(f"[dim]{stamp}[/dim] {escape(line)}", soft_wrap=True)
+
+
+# ---------------------------------------------------------------------------
+# daemon schedule — generated units for the supervisor
+# ---------------------------------------------------------------------------
+
+
+def _schedule_unit() -> ScheduleUnit:
+    s = _load()
+    try:
+        return build_schedule_unit(s)
+    except (UnsupportedPlatform, ValueError) as exc:
+        console.print(str(exc), style="red", soft_wrap=True)
+        raise typer.Exit(code=1) from exc
+
+
+def _print_unit(unit: ScheduleUnit) -> None:
+    if unit.executable_missing:
+        console.print(
+            f"[yellow]Warning: {unit.executable} does not exist. The unit below would "
+            "install cleanly and then fail at every boot. Install the package into this "
+            "environment (`uv sync` / `pip install -e .`) and re-run.[/yellow]",
+            soft_wrap=True,
+        )
+    console.print(unit.text, soft_wrap=True, markup=False, highlight=False)
+    console.print("\nThen:", style="bold")
+    for line in unit.instructions:
+        console.print(f"  {line}", soft_wrap=True, markup=False, highlight=False)
+
+
+@schedule_app.command("show")
+def schedule_show() -> None:
+    """Print the scheduler unit for this platform. Writes nothing."""
+    unit = _schedule_unit()
+    if unit.target is not None:
+        console.print(f"[dim]# would be written to {unit.target}[/dim]", soft_wrap=True)
+    _print_unit(unit)
+
+
+@schedule_app.command("install")
+def schedule_install(
+    dry_run: bool = typer.Option(
+        False, "--dry-run", help="Print the unit instead of writing it."
+    ),
+) -> None:
+    """Write the scheduler unit, and print the commands that activate it.
+
+    The activation commands are never run for you: enabling a unit that will
+    outlive this shell — and hold your vault's embedded vector store — is a
+    decision to make with your eyes open, not a side effect of a subcommand.
+    """
+    unit = _schedule_unit()
+
+    if unit.target is None:
+        # Windows has no file to write; the unit *is* a command.
+        console.print(
+            "[yellow]Nothing to write on this platform — register the task with:[/yellow]"
+        )
+        _print_unit(unit)
+        return
+
+    if dry_run:
+        console.print(f"[yellow]dry-run — would write {unit.target}[/yellow]", soft_wrap=True)
+        _print_unit(unit)
+        return
+
+    unit.target.parent.mkdir(parents=True, exist_ok=True)
+    unit.target.write_text(unit.text, encoding="utf-8")
+    console.print(f"[green]Wrote {unit.target}[/green]", soft_wrap=True)
+    _print_unit(unit)
 
 
 @graph_app.command("stats")

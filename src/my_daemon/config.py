@@ -24,6 +24,7 @@ Two rules make the daemon safe to run from a scheduler:
 from __future__ import annotations
 
 import os
+from datetime import datetime, time
 from pathlib import Path
 from typing import Literal, get_args
 
@@ -43,6 +44,7 @@ from my_daemon.paths import (
 __all__ = [
     "CONFIG_FILENAME",
     "ConfigNotFoundError",
+    "RunConfig",
     "Settings",
     "config_search_paths",
     "find_config",
@@ -318,6 +320,53 @@ class ConsolidationConfig(BaseModel):
     betweenness_sample_k: int = 200
 
 
+class RunConfig(BaseModel):
+    """`daemon run` — the foreground supervisor.
+
+    Three knobs, and each is a promise about latency:
+
+    * ``debounce_seconds`` — how long the vault must be *quiet* before an
+      incremental ingest runs. Not a rate limit: the timer restarts on every
+      new change, so a sync client rewriting a hundred files produces one
+      ingest after it finishes rather than one in the middle of it.
+    * ``consolidate_at`` — local wall-clock ``HH:MM`` for the nightly
+      consolidation. ``null`` turns it off. The job still obeys both writeback
+      gates (``agent.enabled`` and ``agent.observer_enabled``); with either
+      closed the supervisor logs the reason once and stops mentioning it.
+    * ``heartbeat_minutes`` — cadence of the "still alive" log line. ``0``
+      silences it.
+    """
+
+    debounce_seconds: float = 5.0
+    consolidate_at: str | None = "03:00"
+    heartbeat_minutes: float = 15.0
+
+    @property
+    def consolidate_time(self) -> time | None:
+        """``consolidate_at`` as a :class:`datetime.time`, or None when off."""
+        if self.consolidate_at is None or not self.consolidate_at.strip():
+            return None
+        try:
+            return datetime.strptime(self.consolidate_at.strip(), "%H:%M").time()
+        except ValueError as exc:
+            raise ValueError(
+                f"run.consolidate_at must be 24-hour 'HH:MM' (got {self.consolidate_at!r}); "
+                "set it to null to turn the nightly consolidation off."
+            ) from exc
+
+    @model_validator(mode="after")
+    def _validate(self) -> RunConfig:
+        # Parse at load time, not at 03:00 six weeks from now inside a
+        # background process whose log nobody is reading. The value is
+        # discarded; the parse is the point.
+        _ = self.consolidate_time
+        if self.debounce_seconds < 0:
+            raise ValueError("run.debounce_seconds must not be negative")
+        if self.heartbeat_minutes < 0:
+            raise ValueError("run.heartbeat_minutes must not be negative (0 disables it)")
+        return self
+
+
 class LoggingConfig(BaseModel):
     level: str = "INFO"
 
@@ -343,6 +392,7 @@ class Settings(BaseSettings):
     snapshot: SnapshotConfig = Field(default_factory=SnapshotConfig)
     backup: BackupConfig = Field(default_factory=BackupConfig)
     consolidation: ConsolidationConfig = Field(default_factory=ConsolidationConfig)
+    run: RunConfig = Field(default_factory=RunConfig)
     logging: LoggingConfig = Field(default_factory=LoggingConfig)
     agent: AgentConfig = Field(default_factory=AgentConfig)
     hermes: HermesConfig = Field(default_factory=HermesConfig)
