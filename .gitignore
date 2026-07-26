@@ -182,9 +182,11 @@ config.yaml
 launch-gui.bat
 launch-setup.bat
 
-# uv writes this when invoked; project uses pyproject.toml as the source of truth.
-uv.lock
 
 
 # Local state backups (daemon backup)
 backups/
+
+# IDE state and built docs stay local
+.idea/
+docs-site/
