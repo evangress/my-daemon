@@ -24,6 +24,47 @@ class Note(BaseModel):
     tags: list[str] = Field(default_factory=list)
     mtime: datetime
     word_count: int
+    # Stable identity, read from frontmatter. None means the note has not been
+    # stamped yet — ingest assigns a path-derived fallback so it can still
+    # participate, and records that the identity is not rename-stable.
+    uuid: str | None = None
+    uuid_source: str | None = None
+
+
+class NoteRecord(BaseModel):
+    """A row in the note registry — SQLite's view of a note's identity.
+
+    Derived state. Frontmatter is the source of truth; when they disagree the
+    frontmatter wins and this is corrected.
+    """
+
+    uuid: str
+    rel_path: str
+    title: str = ""
+    mtime: datetime | None = None
+    body_sha256: str | None = None
+    frontmatter_sha256: str | None = None
+    tags: list[str] = Field(default_factory=list)
+    word_count: int = 0
+    chunk_count: int = 0
+    # assigned | adopted:<key> | derived:<key> | derived_path | restored
+    uuid_source: str = "assigned"
+    # False means the identity lives only here, so it is NOT rename-stable.
+    in_frontmatter: bool = False
+    # active | ignored | unwritable | orphan_graph_only | missing
+    status: str = "active"
+    first_seen_at: datetime | None = None
+    last_seen_at: datetime | None = None
+    deleted_at: datetime | None = None
+
+
+class RegistryCoverage(BaseModel):
+    """How much of the vault carries a rename-stable identity."""
+
+    total: int = 0
+    in_frontmatter: int = 0
+    derived_path: int = 0
+    by_status: dict[str, int] = Field(default_factory=dict)
 
 
 class Chunk(BaseModel):

@@ -23,7 +23,12 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 
 class VaultConfig(BaseModel):
     path: Path = Path("~/Documents/Obsidian/MyVault").expanduser()
-    exclude_dirs: list[str] = Field(default_factory=lambda: [".obsidian", ".trash", "templates"])
+    # Must stay in sync with config.example.yaml — anything constructing
+    # Settings() programmatically would otherwise ingest the daemon's own
+    # generated prose and its backup copies as if they were the user's notes.
+    exclude_dirs: list[str] = Field(
+        default_factory=lambda: [".obsidian", ".trash", "templates", "Agent"]
+    )
 
 
 class ChunkingConfig(BaseModel):

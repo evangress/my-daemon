@@ -172,6 +172,54 @@ even in unstamped databases.
 
 See `daemon migrate db` / `daemon migrate status` in the [CLI reference](../cli.md).
 
+## `NoteRegistry` (SQLite — the identity spine)
+
+`stores/registry.py`, tables from migration 2. Answers three questions the rest
+of the system keeps asking: what is this uuid's current path, what lives at this
+path, and how much of the vault is still on a fragile identity.
+
+```sql
+CREATE TABLE notes (
+    uuid TEXT PRIMARY KEY,       -- canonical lowercase hyphenated
+    rel_path TEXT NOT NULL,
+    title TEXT, mtime TEXT, body_sha256 TEXT, frontmatter_sha256 TEXT,
+    tags_json TEXT, word_count INTEGER, chunk_count INTEGER,
+    uuid_source TEXT,            -- assigned | adopted:<key> | derived:<key>
+                                 -- | derived_path | restored
+    in_frontmatter INTEGER,      -- 0 => identity is NOT rename-stable
+    status TEXT,                 -- active | ignored | unwritable
+                                 -- | orphan_graph_only | missing
+    first_seen_at TEXT NOT NULL, last_seen_at TEXT NOT NULL, deleted_at TEXT
+);
+CREATE UNIQUE INDEX idx_notes_rel_path_live
+    ON notes(rel_path) WHERE deleted_at IS NULL;
+
+CREATE TABLE note_ordinals (            -- stable small ints for sparse vectors
+    note_uuid TEXT PRIMARY KEY, ordinal INTEGER NOT NULL UNIQUE,
+    allocated_at TEXT NOT NULL
+);
+```
+
+> **The registry is derived state. Frontmatter is the source of truth.** When
+> the two disagree the frontmatter wins and the registry is corrected. That
+> invariant is what makes vault sync across machines work, makes `daemon reset`
+> safe, and makes a hand-edited UUID recoverable rather than corrupting.
+
+Three details that carry weight:
+
+- **The partial unique index** enforces one live note per path, catching a
+  duplicate at *write* time rather than surfacing it as a confusing read later.
+- **Deletion is soft.** The activation ledger is history and must outlive the
+  note it refers to, so `soft_delete` tombstones and `live()` filters. Only the
+  migration rollback hard-deletes, via `forget()`.
+- **Ordinals are never reused.** A deleted note's ordinal stays permanently
+  bound to it, so historical query fingerprints referring to it keep their
+  meaning. Allocation runs under `BEGIN IMMEDIATE` with `UNIQUE(ordinal)` as
+  the race guard.
+
+`coverage()` powers the identity section of `daemon status` — notably the count
+of `derived_path` notes, whose identity does not survive a rename.
+
 ## `FeedbackStore` (SQLite — query log)
 
 `stores/feedback.py`. One table, defined by migration 1:

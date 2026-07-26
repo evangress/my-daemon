@@ -23,6 +23,11 @@ from my_daemon.pipeline.agent_extract import run_extract
 from my_daemon.pipeline.agent_link import run_link
 from my_daemon.pipeline.agent_observe import run_observe
 from my_daemon.pipeline.agent_reflect import run_reflect
+from my_daemon.pipeline.migrate_uuids import (
+    assign_uuids,
+    list_migration_runs,
+    rollback_uuids,
+)
 from my_daemon.retrieval.weights import apply_selection
 from my_daemon.stores import (
     AgentStateStore,
@@ -969,6 +974,95 @@ def migrate_status() -> None:
     for version, name in pending:
         table.add_row(str(version), name)
     console.print(table)
+
+
+@migrate_app.command("assign-uuids")
+def migrate_assign_uuids(
+    apply: bool = typer.Option(False, "--apply", help="Actually write. Dry-run otherwise."),
+    path_glob: str | None = typer.Option(None, "--path-glob", help="Scope to matching notes, e.g. 'Projects/**'."),
+    limit: int | None = typer.Option(None, "--limit", help="Stop after N notes."),
+    grace_minutes: int = typer.Option(2, "--grace-minutes", help="Skip notes modified this recently."),
+    no_backup: bool = typer.Option(False, "--no-backup", help="Skip the batch backup. Not recommended."),
+) -> None:
+    """Stamp a stable `uuid:` into every note's frontmatter."""
+    s = _load()
+    report = assign_uuids(
+        s,
+        apply=apply,
+        path_glob=path_glob,
+        limit=limit,
+        grace_minutes=grace_minutes,
+        backup=not no_backup,
+    )
+
+    table = Table(title="assign-uuids" + (" (DRY RUN)" if report.dry_run else ""))
+    table.add_column("note")
+    table.add_column("action")
+    table.add_column("uuid", overflow="fold")
+    for entry in report.entries[:50]:
+        style = "yellow" if entry.action == "fallback" else ""
+        table.add_row(entry.rel_path, entry.action, entry.uuid, style=style)
+    console.print(table)
+    if len(report.entries) > 50:
+        console.print(f"[dim]… and {len(report.entries) - 50} more[/dim]")
+
+    summary = (
+        f"scanned {report.scanned}  ·  "
+        + (f"would write {report.would_write}" if report.dry_run else f"written {report.written}")
+        + f"  ·  already stamped {report.adopted}"
+    )
+    console.print(summary)
+
+    if report.fallback:
+        console.print(
+            f"[yellow]{report.fallback} note(s) could not be written[/yellow] — they hold a "
+            "path-derived identity, which is NOT stable across renames."
+        )
+
+    if report.dry_run:
+        console.print("\n[cyan]Dry run.[/cyan] Re-run with --apply to write.")
+    else:
+        console.print(f"\nBackup: [dim]{report.backup_dir}[/dim]")
+        console.print(f"Roll back with: [cyan]daemon migrate rollback-uuids {report.run_id}[/cyan]")
+
+
+@migrate_app.command("list-runs")
+def migrate_list_runs() -> None:
+    """List `assign-uuids` runs available to roll back."""
+    s = _load()
+    runs = list_migration_runs(s)
+    if not runs:
+        console.print("[yellow]No migration runs found.[/yellow]")
+        return
+    for run_id in runs:
+        console.print(run_id)
+
+
+@migrate_app.command("rollback-uuids")
+def migrate_rollback_uuids(
+    run_id: str = typer.Argument(..., help="Run id from `daemon migrate list-runs`."),
+    mode: str = typer.Option("key-removal", "--mode", help="key-removal | restore"),
+    force: bool = typer.Option(False, "--force", help="restore mode: overwrite files edited since."),
+    grace_minutes: int = typer.Option(2, "--grace-minutes"),
+) -> None:
+    """Undo an `assign-uuids` run."""
+    s = _load()
+    try:
+        report = rollback_uuids(
+            s, run_id, mode=mode, force=force, grace_minutes=grace_minutes
+        )
+    except FileNotFoundError as exc:
+        console.print(f"[red]{exc}[/red]")
+        raise typer.Exit(code=1) from exc
+
+    console.print(f"[green]Reverted {len(report.reverted)} note(s)[/green] ({report.mode}).")
+    if report.refused:
+        console.print(
+            f"[yellow]Refused {len(report.refused)}[/yellow] — changed since the migration. "
+            "Use --force to overwrite (discards those edits)."
+        )
+        for rel in report.refused[:20]:
+            console.print(f"  {rel}")
 
 
 if __name__ == "__main__":

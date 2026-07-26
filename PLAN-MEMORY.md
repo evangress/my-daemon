@@ -718,11 +718,13 @@ Each leaves the system working, tested, and shippable.
   `busy_timeout` + `foreign_keys`. `daemon migrate db|status`.
   **Win:** concurrent GUI + CLI + consolidate stop throwing `database is locked`.
 
-- [ ] **M-mem-1a — UUID backfill.** *Reversible via rollback command.*
-  `set_frontmatter_key_textual`, `is_writable(allow_agent_folder=)`,
-  `daemon migrate assign-uuids`, migration 2.
-  **Win:** every note has a stable identity; `daemon status` reports coverage
-  and derived-id fallbacks.
+- [x] **M-mem-1a — UUID backfill — shipped 2026-07-26.**
+  `set_frontmatter_key_textual` / `remove_frontmatter_key_textual`,
+  `is_writable(allow_agent_folder=)`, `vault/identity.py`, `Note.uuid`,
+  migration 2 (`notes` + `note_ordinals`), `stores/registry.py`,
+  `daemon migrate assign-uuids | list-runs | rollback-uuids`.
+  **Win:** every note has a stable identity; the report and registry count
+  the notes left on a fragile path-derived one.
 
 - [x] **M-mem-1b — Differential graph update — shipped 2026-07-26.**
   `GraphStore.update_note()` replacing the `remove_note` + `add_note` pair in

@@ -121,8 +121,48 @@ def _m001_baseline(conn: sqlite3.Connection) -> None:
             conn.execute(f"ALTER TABLE feedback ADD COLUMN {col} {typ}")
 
 
+# ---------------------------------------------------------------------------
+# Migration 2 — the note registry. SQLite becomes the identity spine: Qdrant
+# owns semantics, networkx owns relations, this owns *who a note is*.
+# ---------------------------------------------------------------------------
+
+_M002_SCHEMA = """
+CREATE TABLE IF NOT EXISTS notes (
+    uuid                TEXT PRIMARY KEY,
+    rel_path            TEXT NOT NULL,
+    title               TEXT NOT NULL DEFAULT '',
+    mtime               TEXT,
+    body_sha256         TEXT,
+    frontmatter_sha256  TEXT,
+    tags_json           TEXT NOT NULL DEFAULT '[]',
+    word_count          INTEGER NOT NULL DEFAULT 0,
+    chunk_count         INTEGER NOT NULL DEFAULT 0,
+    uuid_source         TEXT NOT NULL DEFAULT 'assigned',
+    in_frontmatter      INTEGER NOT NULL DEFAULT 0,
+    status              TEXT NOT NULL DEFAULT 'active',
+    first_seen_at       TEXT NOT NULL,
+    last_seen_at        TEXT NOT NULL,
+    deleted_at          TEXT
+);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_notes_rel_path_live
+    ON notes(rel_path) WHERE deleted_at IS NULL;
+CREATE INDEX IF NOT EXISTS idx_notes_status ON notes(status);
+CREATE INDEX IF NOT EXISTS idx_notes_last_seen ON notes(last_seen_at);
+CREATE TABLE IF NOT EXISTS note_ordinals (
+    note_uuid     TEXT PRIMARY KEY,
+    ordinal       INTEGER NOT NULL UNIQUE,
+    allocated_at  TEXT NOT NULL
+);
+"""
+
+
+def _m002_registry(conn: sqlite3.Connection) -> None:
+    exec_script(conn, _M002_SCHEMA)
+
+
 MIGRATIONS: list[tuple[int, str, Migration]] = [
     (1, "baseline_feedback_and_agent_state", _m001_baseline),
+    (2, "note_registry_and_ordinals", _m002_registry),
 ]
 
 SCHEMA_VERSION = MIGRATIONS[-1][0]

@@ -4,6 +4,7 @@
 from my_daemon.stores.agent_state import AgentStateStore
 from my_daemon.stores.feedback import FeedbackStore
 from my_daemon.stores.graph import GraphStore
+from my_daemon.stores.registry import NoteRegistry
 from my_daemon.stores.snapshot import (
     SnapshotBundle,
     SnapshotHandle,
@@ -21,6 +22,7 @@ __all__ = [
     "GraphStore",
     "FeedbackStore",
     "AgentStateStore",
+    "NoteRegistry",
     "SnapshotBundle",
     "SnapshotHandle",
     "create_snapshot",

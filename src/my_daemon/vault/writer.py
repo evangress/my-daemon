@@ -214,11 +214,16 @@ def remove_frontmatter_key_textual(
     agent_folder: str = "Agent",
     allow_agent_folder: bool = False,
     grace_minutes: int = 2,
+    drop_empty_block: bool = False,
 ) -> WriteResult:
     """Delete a single ``key:`` line from the frontmatter. The rollback path.
 
     Surgical by design: it never restores a body, so it stays safe to run on a
     file the user has edited since the key was written.
+
+    ``drop_empty_block`` also removes the frontmatter fences when the deletion
+    empties them — what rollback needs, so a note that had no frontmatter
+    before the migration is left with none after it.
     """
 
     ok, reason = is_writable(
@@ -241,6 +246,12 @@ def remove_frontmatter_key_textual(
     for i in range(first, close):
         if pattern.match(lines[i]):
             del lines[i]
+            if drop_empty_block and close - first == 1:
+                # That was the only key — remove the fences too. Indices shifted
+                # by one when the key line went, so the closing fence is now at
+                # `first` and the opening is at 0.
+                del lines[first]
+                del lines[0]
             _atomic_write_text(note_path, bom + "".join(lines))
             return WriteResult(path=note_path, changed=True, reason="ok")
 

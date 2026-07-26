@@ -51,6 +51,29 @@ What it extracts:
   stripped from the tag-detection source.
 - **mtime** (UTC) and **word count**.
 
+## `vault.identity` — reading a note's UUID
+
+`parse_note` populates `Note.uuid` and `Note.uuid_source` by scanning
+frontmatter for `ADOPT_KEYS` in priority order: `uuid` (ours), then `uid`,
+`id`, `guid`, `note-id`, `permanent_id`.
+
+- A value that parses as a UUID is **adopted verbatim**, canonicalized to
+  lowercase-hyphenated form. Uppercase, braced, and `urn:uuid:` forms are all
+  accepted, because that is what people and plugins actually write.
+- A **foreign** key holding an opaque non-UUID string of 8+ characters (a
+  Zettelkasten timestamp, say) yields a **derived** `uuid5`. Deterministic, so a
+  re-run on a machine with no registry converges on the same answer.
+- A non-UUID value in **our own** `uuid:` key reads as *absent*, never derived.
+  Our key has a defined type, so garbage in it means a hand-edit or a sync
+  corruption; minting a new identity there would silently orphan that note's
+  entire history. Ingest restores the registry's value instead.
+- `derive_path_uuid(rel_path)` is the fallback for notes the daemon may not
+  write to. Deterministic across machines, but **not rename-stable** — the same
+  weakness as path-keying, now at least recorded per note rather than implicit.
+
+`NAMESPACE` is fixed forever. Changing it would silently re-identify every note
+that relies on derivation.
+
 ## `vault.chunker.chunk_note`
 
 `chunk_note(note, max_tokens=512, overlap_tokens=50) -> list[Chunk]`.

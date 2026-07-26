@@ -63,3 +63,81 @@ def test_migrate_status_lists_pending_migrations_by_name(settings_with_db: Path)
 
     assert result.exit_code == 0, result.output
     assert "baseline_feedback_and_agent_state" in result.output
+
+
+# ---------------------------------------------------------------------------
+# assign-uuids
+# ---------------------------------------------------------------------------
+
+
+@pytest.fixture
+def vault_settings(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
+    from my_daemon.config import Settings
+
+    vault = tmp_path / "vault"
+    vault.mkdir()
+    (vault / "A.md").write_text("# A\n", encoding="utf-8")
+
+    settings = Settings()
+    settings.vault.path = vault
+    settings.feedback.db_path = tmp_path / "data" / "state.db"
+    monkeypatch.setattr("my_daemon.cli._load", lambda: settings)
+    return settings, vault
+
+
+def _uuid_line(note: Path) -> str | None:
+    for line in note.read_text().splitlines():
+        if line.startswith("uuid:"):
+            return line
+    return None
+
+
+def test_assign_uuids_is_a_dry_run_by_default(vault_settings):
+    _settings, vault = vault_settings
+
+    result = runner.invoke(app, ["migrate", "assign-uuids", "--grace-minutes", "0"])
+
+    assert result.exit_code == 0, result.output
+    assert _uuid_line(vault / "A.md") is None
+    assert "dry run" in result.output.lower()
+
+
+def test_assign_uuids_apply_stamps_the_vault(vault_settings):
+    _settings, vault = vault_settings
+
+    result = runner.invoke(
+        app, ["migrate", "assign-uuids", "--apply", "--grace-minutes", "0"]
+    )
+
+    assert result.exit_code == 0, result.output
+    assert _uuid_line(vault / "A.md") is not None
+
+
+def test_list_runs_shows_an_applied_run(vault_settings):
+    runner.invoke(app, ["migrate", "assign-uuids", "--apply", "--grace-minutes", "0"])
+
+    result = runner.invoke(app, ["migrate", "list-runs"])
+
+    assert result.exit_code == 0, result.output
+    assert "20" in result.output  # the ISO-ish run id
+
+
+def test_rollback_removes_the_stamped_key(vault_settings):
+    _settings, vault = vault_settings
+    runner.invoke(app, ["migrate", "assign-uuids", "--apply", "--grace-minutes", "0"])
+    from my_daemon.pipeline.migrate_uuids import list_migration_runs
+
+    run_id = list_migration_runs(_settings)[0]
+
+    result = runner.invoke(
+        app, ["migrate", "rollback-uuids", run_id, "--grace-minutes", "0"]
+    )
+
+    assert result.exit_code == 0, result.output
+    assert _uuid_line(vault / "A.md") is None
+
+
+def test_rollback_of_an_unknown_run_exits_nonzero(vault_settings):
+    result = runner.invoke(app, ["migrate", "rollback-uuids", "nope"])
+
+    assert result.exit_code != 0

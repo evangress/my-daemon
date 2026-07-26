@@ -270,6 +270,39 @@ def test_removing_a_key_preserves_crlf(vault: Path):
     assert note.read_bytes() == original.encode()
 
 
+def test_removing_the_last_key_can_drop_the_block_it_created(vault: Path):
+    """Rollback must leave no trace on a note that had no frontmatter."""
+    original = "# Just a heading\n\nbody\n"
+    note = _write(vault / "n.md", original)
+    _set(note, vault)
+
+    remove_frontmatter_key_textual(
+        note, "uuid", vault_root=vault, grace_minutes=0, drop_empty_block=True
+    )
+
+    assert note.read_text() == original
+
+
+def test_an_emptied_block_is_kept_unless_asked_to_drop_it(vault: Path):
+    note = _write(vault / "n.md", "# Just a heading\n\nbody\n")
+    _set(note, vault)
+
+    remove_frontmatter_key_textual(note, "uuid", vault_root=vault, grace_minutes=0)
+
+    assert note.read_text().startswith("---\n---\n")
+
+
+def test_dropping_an_empty_block_leaves_a_populated_one_alone(vault: Path):
+    note = _write(vault / "n.md", "---\ntitle: Hi\n---\n\nbody\n")
+    _set(note, vault)
+
+    remove_frontmatter_key_textual(
+        note, "uuid", vault_root=vault, grace_minutes=0, drop_empty_block=True
+    )
+
+    assert note.read_text() == "---\ntitle: Hi\n---\n\nbody\n"
+
+
 def test_removing_an_absent_key_is_a_no_op(vault: Path):
     note = _write(vault / "n.md", "---\ntitle: Hi\n---\n\nbody\n")
     before = note.read_bytes()

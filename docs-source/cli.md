@@ -128,6 +128,71 @@ Shows the database's current schema version against the target, and lists any
 pending migrations by name. Works before the database has ever been created —
 a missing file reports version 0 and is not created by the check.
 
+### `daemon migrate assign-uuids`
+
+```
+daemon migrate assign-uuids                       # dry run — prints a table, writes nothing
+daemon migrate assign-uuids --apply
+    [--path-glob 'Projects/**']                   # scope the run
+    [--limit 200]
+    [--grace-minutes 2]
+    [--no-backup]
+```
+
+Stamps a stable `uuid:` into every note's frontmatter. That UUID becomes the
+shared key across SQLite (identity), Qdrant (semantics), and the graph
+(relations) — see [PLAN-MEMORY.md](https://github.com/evangress/my-daemon/blob/master/PLAN-MEMORY.md).
+
+**Exactly one line per file changes.** Comments, key order, quoting style,
+flow-style lists, dates, and line endings are all preserved byte-for-byte.
+
+Per note, in order:
+
+1. **Already carries our `uuid:`** → adopted, nothing written.
+2. **Carries a foreign id key** (`uid`, `id`, `guid`, `note-id`,
+   `permanent_id`) → if it holds a real UUID it is adopted verbatim; if it
+   holds an opaque id (a Zettelkasten timestamp, say) a UUID is *derived*
+   from it deterministically. Either way our `uuid:` is added and **their key
+   is never touched**.
+3. **Nothing usable** → a fresh `uuid4` is minted.
+4. **Collision** — the same UUID resolved for two different notes, which is
+   what Obsidian's "Make a copy" and sync conflicts produce — the second note
+   is re-minted and flagged in the report.
+5. **Unwritable** (`daemon: ignore`, inside the grace window, read-only) → the
+   note gets a deterministic *path-derived* identity so it still participates
+   in retrieval, recorded as `uuid_source='derived_path'`. **This identity is
+   not stable across renames.** The report and `daemon status` both count these
+   so the degradation stays visible.
+
+Scope follows `vault.exclude_dirs`, so by default the `Agent/` folder is skipped
+— stamping notes that ingest never sees would be pointless. The migration's own
+backup directory is always skipped regardless of config.
+
+Each `--apply` run writes a batch backup to
+`<vault>/Agent/backups/migrations/<run_id>/`, holding `manifest.jsonl` (one
+line per file, with before/after SHA-256) and byte-for-byte copies under
+`files/`.
+
+### `daemon migrate list-runs`
+
+Lists `assign-uuids` runs available to roll back.
+
+### `daemon migrate rollback-uuids`
+
+```
+daemon migrate rollback-uuids <run_id> [--mode key-removal|restore] [--force]
+```
+
+- **`key-removal`** (default) deletes the one `uuid:` line the migration added,
+  and the frontmatter fences too if that empties a block the migration created.
+  It never restores a body, so it stays safe on files you have edited since.
+- **`restore`** copies the original bytes back. It **refuses** any file whose
+  content changed after the migration unless `--force`, because restoring would
+  discard those edits.
+
+Either mode also clears the affected registry rows, returning the system to
+path-only operation.
+
 ### `daemon models download`
 
 Forces a download of the embedding model(s) into `embeddings.cache_folder`

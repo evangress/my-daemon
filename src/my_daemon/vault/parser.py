@@ -10,6 +10,7 @@ from pathlib import Path
 import frontmatter
 
 from my_daemon.models import Note
+from my_daemon.vault.identity import read_note_uuid
 
 WIKILINK_RE = re.compile(r"\[\[([^\]|]+)(?:\|[^\]]+)?\]\]")
 # Inline tag: # followed by a letter, then word/-/slash chars. Negative lookbehind
@@ -65,6 +66,7 @@ def parse_note(file_path: Path, vault_root: Path) -> Note:
 
     mtime = datetime.fromtimestamp(file_path.stat().st_mtime, tz=UTC)
     word_count = len(body.split())
+    note_uuid, uuid_source = read_note_uuid(fm)
 
     return Note(
         path=file_path,
@@ -76,4 +78,6 @@ def parse_note(file_path: Path, vault_root: Path) -> Note:
         tags=tags,
         mtime=mtime,
         word_count=word_count,
+        uuid=note_uuid,
+        uuid_source=uuid_source,
     )
