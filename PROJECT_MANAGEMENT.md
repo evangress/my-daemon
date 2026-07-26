@@ -102,11 +102,21 @@ code**. Neither depends on that plan; both should be fixed regardless.
   so the fix is visible when it lands. Also feeds the planned
   `daemon graph todos`, which would otherwise under-count.
 
-- [ ] **`_atomic_write_text` forces `newline="\n"`** (`vault/writer.py:103`).
-  On a CRLF vault — anything synced from Windows — any write rewrites every line
-  of the file, turning a one-line edit into a whole-file diff. Parameterize the
-  line ending and detect the file's dominant one. Blocking for any whole-vault
-  write.
+- [ ] **`add_tags`' frontmatter round-trip rewrites the whole file.**
+  *(Corrected 2026-07-26: originally logged against `_atomic_write_text`
+  forcing `newline="\n"`. That is not a bug — Python's `open()` performs no
+  translation on write for `newline="\n"`, and CRLF passes through intact. The
+  damage is entirely in the `frontmatter.loads`/`dumps` round-trip.)*
+  `vault/writer.py:add_tags` round-trips the whole document through PyYAML.
+  Verified on one small file, that single call: collapsed CRLF to LF on every
+  line, expanded flow-style `tags: [a, b]` into block style, **deleted a YAML
+  comment outright**, and dropped the trailing newline. On a Windows-synced
+  vault every `daemon link` run turns a one-tag edit into a whole-file diff,
+  and comments are lost permanently.
+  The textual single-key writer added in M-mem-1a
+  (`set_frontmatter_key_textual`) is the pattern to follow. `add_tags` needs
+  the same treatment for list-valued keys before M-mem-8 starts writing theme
+  tags through it.
 
 ## Other Planned Work
 
