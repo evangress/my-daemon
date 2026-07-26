@@ -81,18 +81,26 @@ below for the full implementation summary.
 Both found while planning the memory refocus (2026-07-26) and **verified in the
 code**. Neither depends on that plan; both should be fixed regardless.
 
-- [ ] **Re-ingesting a note destroys inbound edges and resets learned weights.**
-  `pipeline/ingest.py:101-103` calls `graph_store.remove_note()` →
+- [x] **Re-ingesting a note destroys inbound edges and resets learned weights.**
+  ~~`pipeline/ingest.py:101-103` calls `graph_store.remove_note()` →
   `nx.MultiDiGraph.remove_node`, which drops *all* incident edges in both
-  directions. `add_note` (`graph.py:50-74`) only recreates that note's
-  **outgoing** edges, hardcoded to `weight=1.0`. So editing note `A`
-  permanently deletes every `C → A` wikilink edge and resets every M1-learned
-  weight touching `A`, until `C` is re-ingested or `--full` runs. **The adaptive
-  memory loop has been leaking its learning on every save.** Fix: a differential
-  `GraphStore.update_note()` that keeps the node, replaces only its outgoing
-  `wikilink`/`tag` edges, and carries `weight` / `last_reinforced_at` forward
-  for edges that survive the diff. ~30 lines, independently testable, needs no
-  other work. Tracked as M-mem-1b in [PLAN-MEMORY.md](PLAN-MEMORY.md).
+  directions. `add_note` only recreates that note's **outgoing** edges,
+  hardcoded to `weight=1.0`.~~ **Fixed 2026-07-26 (M-mem-1b)** by
+  `GraphStore.update_note()` — differential re-ingest that leaves surviving
+  edges completely untouched. Both `ingest_vault` and `ingest_note` use it.
+
+- [ ] **Incremental and full ingest diverge when a linked note is deleted.**
+  Found while fixing the above. Delete `B.md` while `A.md` still links to it:
+  a **full rebuild** produces `note::B` — a dangling placeholder keyed by the
+  raw wikilink text, since `[[B]]` no longer resolves to a file — preserving
+  A's outgoing link. **Incremental** ingest calls `remove_note("B.md")`, which
+  drops the `A → B` edge outright, and never rebuilds it until `A` happens to
+  be re-ingested for some other reason. Same family as the bug above, but on
+  the deletion path. Fixing it means re-resolving the linkers' wikilinks when a
+  target disappears — deliberately out of scope for M-mem-1b. Current behavior
+  is pinned by `test_deleting_a_notes_target_currently_loses_the_inbound_edge`
+  so the fix is visible when it lands. Also feeds the planned
+  `daemon graph todos`, which would otherwise under-count.
 
 - [ ] **`_atomic_write_text` forces `newline="\n"`** (`vault/writer.py:103`).
   On a CRLF vault — anything synced from Windows — any write rewrites every line

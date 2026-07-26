@@ -81,7 +81,8 @@ mean to write" feature in the roadmap.
 GraphStore(path)
   .load()
   .save()
-  .add_note(note, chunk_ids)
+  .add_note(note, chunk_ids)          # first ingest of a note
+  .update_note(note, chunk_ids)       # every subsequent ingest — see below
   .remove_note(rel_path)
   .chunk_ids_for(rel_path) -> list[str]
   .neighbors_within(rel_path, depth=2) -> dict[str, int]
@@ -91,6 +92,31 @@ GraphStore(path)
 `neighbors_within` runs a BFS over the **undirected** projection of the
 multi-digraph so it traverses both wikilink directions and the note↔tag↔note
 path. Returns `{neighbor_relative_path: distance}` for note nodes only.
+
+### `update_note` — differential re-ingest
+
+A note **owns its outgoing wikilink and tag edges, and nothing else.**
+`update_note` refreshes the node's attributes, adds the edges the author
+introduced, drops the ones they deleted, and leaves every surviving edge
+completely untouched — so the `weight` and `last_reinforced_at` that
+`retrieval.weights` accumulated on it carry across the edit.
+
+!!! danger "Never re-ingest with `remove_note` + `add_note`"
+    This is what the pipeline used to do, and it silently destroyed data two
+    ways on **every note save**:
+
+    1. `remove_node` drops all incident edges in *both* directions, so editing
+       note `B` deleted every other note's wikilink *to* `B`. The edge did not
+       come back until the linking note happened to be re-ingested.
+    2. `add_note` recreates edges at `weight=1.0`, discarding everything the
+       adaptive-weighting loop had learned about them.
+
+    Both `ingest_vault` and `ingest_note` now call `update_note`. Regression
+    cover lives in `tests/test_graph_update.py` and
+    `tests/test_ingest_incremental.py`.
+
+A link the author deletes and later restores correctly starts over at
+`weight=1.0` — it genuinely left the set, so there is nothing to carry forward.
 
 ### Stats
 

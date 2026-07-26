@@ -713,7 +713,7 @@ recording it would pollute fingerprint space with queries you never meant. Add
 
 Each leaves the system working, tested, and shippable.
 
-- [ ] **M-mem-0 — Migration framework + DB hygiene.** *Reversible.*
+- [x] **M-mem-0 — Migration framework + DB hygiene — shipped 2026-07-26.**
   `stores/db.py` ladder, `_m001_baseline` idempotent against existing DBs, WAL +
   `busy_timeout` + `foreign_keys`. `daemon migrate db|status`.
   **Win:** concurrent GUI + CLI + consolidate stop throwing `database is locked`.
@@ -724,11 +724,15 @@ Each leaves the system working, tested, and shippable.
   **Win:** every note has a stable identity; `daemon status` reports coverage
   and derived-id fallbacks.
 
-- [ ] **M-mem-1b — Differential graph update.** *Reversible. Needs no UUID —
-  ship independently and early.* `GraphStore.update_note()` replacing the
-  `remove_note` + `add_note` pair. Fixes bug A (§0.3).
+- [x] **M-mem-1b — Differential graph update — shipped 2026-07-26.**
+  `GraphStore.update_note()` replacing the `remove_note` + `add_note` pair in
+  both `ingest_vault` and `ingest_note`. Fixes bug A (§0.3).
   **Win:** editing a note stops deleting inbound wikilinks and stops resetting
   learned weights. M1's adaptive weighting finally accumulates.
+  *Shipped ahead of M-mem-1a, as §0.3 called for — it needs no UUID.*
+  Turned up a related defect on the **deletion** path (incremental vs. full
+  rebuild diverge when a linked note is deleted); logged in
+  PROJECT_MANAGEMENT.md rather than folded in.
 
 - [ ] **M-mem-2 — Ingest owns the registry.** *Reversible.* Manifest re-keyed by
   uuid (`manifest_version: 2`, bidirectional converter), reconciliation, rename

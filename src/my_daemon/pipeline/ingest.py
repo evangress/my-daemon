@@ -98,9 +98,10 @@ def ingest_vault(
                 max_tokens=settings.chunking.max_tokens,
                 overlap_tokens=settings.chunking.overlap_tokens,
             )
+            # Chunks are replaced wholesale — their ids derive from the text,
+            # so an edit orphans every old point.
             if note.relative_path in manifest:
                 vector_store.delete_by_note(note.relative_path)
-                graph_store.remove_note(note.relative_path)
 
             if chunks:
                 texts = [c.text for c in chunks]
@@ -108,7 +109,10 @@ def ingest_vault(
                 sparse = sparse_embedder.encode(texts) if sparse_embedder is not None else None
                 vector_store.upsert(chunks, vectors, sparse_vectors=sparse)
 
-            graph_store.add_note(note, chunk_ids=[c.id for c in chunks])
+            # The graph is updated differentially, NOT replaced. Removing the
+            # node first would take every other note's links *to* this one with
+            # it, and re-adding would reset the edge weights M1 has learned.
+            graph_store.update_note(note, chunk_ids=[c.id for c in chunks])
 
             manifest[note.relative_path] = {
                 "mtime": note.mtime.isoformat(),
@@ -154,7 +158,6 @@ def ingest_note(
 
     if note.relative_path in manifest:
         vector_store.delete_by_note(note.relative_path)
-        graph_store.remove_note(note.relative_path)
 
     if chunks:
         vector_store.ensure_collection()
@@ -162,7 +165,9 @@ def ingest_note(
         sparse = sparse_embedder.encode([c.text for c in chunks]) if sparse_embedder is not None else None
         vector_store.upsert(chunks, vectors, sparse_vectors=sparse)
 
-    graph_store.add_note(note, chunk_ids=[c.id for c in chunks])
+    # Differential, for the same reason as `ingest_vault` — this path runs
+    # repeatedly within a single Hermes session as turns are captured.
+    graph_store.update_note(note, chunk_ids=[c.id for c in chunks])
     if save:
         graph_store.save()
 

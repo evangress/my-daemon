@@ -73,6 +73,68 @@ class GraphStore:
                 self.graph.add_node(tnode, type="tag", title=tag)
             self.graph.add_edge(node, tnode, kind="tag", weight=1.0)
 
+    def update_note(self, note: Note, chunk_ids: list[str]) -> None:
+        """Re-ingest a note *differentially*, preserving what it doesn't own.
+
+        A note owns its outgoing wikilink and tag edges and nothing else. This
+        refreshes the node's attributes, adds the edges the author introduced,
+        removes the ones they deleted, and — crucially — leaves surviving edges
+        completely untouched, so the ``weight`` and ``last_reinforced_at`` that
+        ``retrieval.weights`` accumulated on them carry across the edit.
+
+        Prefer this over ``remove_note`` + ``add_note``: ``remove_node`` drops
+        all incident edges in *both* directions, which deletes every other
+        note's links *to* this one, and ``add_note`` recreates edges at
+        ``weight=1.0``, discarding everything M1 has learned.
+
+        A link the author deletes and later restores correctly starts over at
+        1.0 — it genuinely left the set.
+        """
+
+        node = _note_node(note.relative_path)
+        if node not in self.graph:
+            self.add_note(note, chunk_ids)
+            return
+
+        self.graph.add_node(
+            node,
+            type="note",
+            title=note.title,
+            mtime=note.mtime.isoformat(),
+            chunk_ids=chunk_ids,
+        )
+        self.graph.nodes[node].pop("dangling", None)
+
+        desired: dict[tuple[str, str], str] = {
+            (_note_node(target), "wikilink"): target for target in note.wikilinks
+        }
+        desired.update({(_tag_node(tag), "tag"): tag for tag in note.tags})
+
+        existing: dict[tuple[str, str], list] = {}
+        for _src, dst, key, edata in list(
+            self.graph.out_edges(node, keys=True, data=True)
+        ):
+            kind = edata.get("kind")
+            if kind not in ("wikilink", "tag"):
+                continue  # not ours to manage — leave any other edge kind alone
+            existing.setdefault((dst, kind), []).append(key)
+
+        for slot, keys in existing.items():
+            if slot not in desired:
+                for key in keys:
+                    self.graph.remove_edge(node, slot[0], key)
+
+        for slot, label in desired.items():
+            if slot in existing:
+                continue  # survives the diff — its learned weight stays as-is
+            dst, kind = slot
+            if dst not in self.graph:
+                if kind == "wikilink":
+                    self.graph.add_node(dst, type="note", title=label, dangling=True)
+                else:
+                    self.graph.add_node(dst, type="tag", title=label)
+            self.graph.add_edge(node, dst, kind=kind, weight=1.0)
+
     def remove_note(self, rel_path: str) -> None:
         node = _note_node(rel_path)
         if node in self.graph:
