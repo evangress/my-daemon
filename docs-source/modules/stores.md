@@ -321,3 +321,19 @@ CREATE TABLE agent_reflect_runs (
 
 Schemas are additive (`CREATE TABLE IF NOT EXISTS`), so the agent state
 appears on top of an existing query-log DB without a migration step.
+
+
+## Construction: `integration/wiring.py`
+
+`build_stores(settings)` builds every collaborator; `build_orchestrator(stores)`
+wires the retrieval orchestrator with an `ActivationRecorder` attached.
+
+Everything that needs stores goes through here — the CLI, the GUI, `QueryEngine`
+and `build_core`. They each used to construct the same six objects
+independently, and drifted the moment the orchestrator gained `listeners=`: the
+GUI kept a hand-rolled synthesis call and so never learned about fingerprint
+recall at all. That is the failure mode this file exists to prevent.
+
+`build_orchestrator(record_activations=False)` exists for debug probes like
+`daemon search`, which are not questions the user asked and must not pollute
+the fingerprint space.

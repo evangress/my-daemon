@@ -17,12 +17,14 @@ from my_daemon.analysis import compute_report, persist_reports, simulate_evoluti
 from my_daemon.analysis.structural import report_dir_for
 from my_daemon.config import Settings, load_settings
 from my_daemon.embeddings import Embedder, SparseEmbedder
+from my_daemon.integration.wiring import build_stores
 from my_daemon.llm import LLMClient
 from my_daemon.pipeline import QueryEngine, ingest_vault
 from my_daemon.pipeline.agent_extract import run_extract
 from my_daemon.pipeline.agent_link import run_link
 from my_daemon.pipeline.agent_observe import run_observe
 from my_daemon.pipeline.agent_reflect import run_reflect
+from my_daemon.pipeline.backfill import backfill_activations
 from my_daemon.pipeline.migrate_uuids import (
     assign_uuids,
     list_migration_runs,
@@ -78,6 +80,11 @@ def _load() -> Settings:
     except FileNotFoundError as exc:
         console.print(f"[red]{exc}[/red]")
         raise typer.Exit(code=1) from exc
+
+
+# Construction lives in `integration/wiring.py` so the CLI, the GUI and the
+# Hermes core cannot drift apart again. These stay as thin shims because a
+# dozen commands reference them.
 
 
 def _build_embedder(s: Settings) -> Embedder:
@@ -203,17 +210,11 @@ def query(
 ) -> None:
     """Ask the daemon a question."""
     s = _load()
-    embedder = _build_embedder(s)
-    sparse_embedder = _build_sparse_embedder(s)
-    vector_store = _build_vector_store(s, dim=embedder.dimension)
-    graph_store = _build_graph_store(s)
-    graph_store.load()
-    feedback_store = _build_feedback_store(s)
-    llm = LLMClient(s.llm, api_key=s.anthropic_api_key)
-
+    stores = build_stores(s)
     engine = QueryEngine(
-        s, embedder, vector_store, graph_store, feedback_store, llm,
-        sparse_embedder=sparse_embedder,
+        s, stores.embedder, stores.vector_store, stores.graph_store,
+        stores.feedback_store, stores.llm,
+        sparse_embedder=stores.sparse_embedder,
     )
     response = engine.ask(text, synthesize=not no_synthesize)
 
@@ -1159,6 +1160,42 @@ def themes_review(
         )
         mark = "[green]✓[/green]" if result.changed else "[dim]·[/dim]"
         console.print(f"  {mark} {rel}: {result.reason}")
+
+
+@migrate_app.command("backfill-activations")
+def migrate_backfill_activations(
+    apply: bool = typer.Option(False, "--apply", help="Actually write. Dry-run otherwise."),
+    days: int | None = typer.Option(None, "--days", help="Only feedback rows from the last N days."),
+) -> None:
+    """Recover an activation ledger from the historical feedback log."""
+    from datetime import UTC, datetime, timedelta
+
+    s = _load()
+    since = datetime.now(UTC) - timedelta(days=days) if days else None
+    report = backfill_activations(
+        s.feedback.db_path,
+        NoteRegistry(db_path=s.feedback.db_path),
+        dry_run=not apply,
+        since=since,
+    )
+
+    table = Table(title="backfill-activations" + (" (DRY RUN)" if report.dry_run else ""))
+    table.add_column("metric")
+    table.add_column("value", justify="right")
+    table.add_row("Feedback rows scanned", str(report.feedback_rows_scanned))
+    table.add_row(
+        "Queries would write" if report.dry_run else "Queries written",
+        str(report.queries_written),
+    )
+    table.add_row("Queries skipped", str(report.queries_skipped))
+    table.add_row("Activations recovered", str(report.activations_written))
+    table.add_row("Activations dropped", str(report.activations_dropped))
+    console.print(table)
+
+    if report.warning:
+        console.print(f"[yellow]{report.warning}[/yellow]")
+    if report.dry_run:
+        console.print("\n[cyan]Dry run.[/cyan] Re-run with --apply to write.")
 
 
 @migrate_app.command("assign-uuids")

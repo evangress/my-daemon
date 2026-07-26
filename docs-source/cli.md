@@ -149,6 +149,23 @@ Shows the database's current schema version against the target, and lists any
 pending migrations by name. Works before the database has ever been created —
 a missing file reports version 0 and is not created by the check.
 
+### `daemon migrate backfill-activations`
+
+```
+daemon migrate backfill-activations [--apply] [--days N]
+```
+
+Recovers an activation ledger from the historical feedback log. Every query the
+daemon ever answered already recorded its ranked candidates, which is a
+proto-activation record — replaying it means fingerprint recall and themes start
+with history instead of starting empty.
+
+Dry-run by default, and idempotent: re-running writes nothing new.
+
+Honest limitation, reported rather than hidden: a query naming notes that have
+since been renamed or deleted yields a *partial* fingerprint, which looks less
+similar to everything than it should. Above a 20% drop rate the command says so.
+
 ### `daemon migrate assign-uuids`
 
 ```

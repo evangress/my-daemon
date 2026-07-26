@@ -234,10 +234,14 @@ NiceGUI's long-term fate) are not yet decided.
   accepted ones are written through a new textual list writer that `add_tags`
   now shares (closing its round-trip bug). Graph expansion refuses to walk
   `theme/` edges, which breaks the tags → edges → fingerprints → themes loop.
-  Suite 317 pass / 1 pre-existing skip. **Requires `daemon ingest --full`
-  once.** Remaining: M-mem-9 (cleanup) and three pieces deferred from M-mem-4 —
-  the `wiring.py` factory, the `DaemonCore.retrieve_only`/`log_answer` GUI
-  de-duplication, and the historical `retrieval_summary` backfill.
+  **M-mem-9:** one construction path
+  (`integration/wiring.py`), `DaemonCore.retrieve_only` / `log_answer` /
+  `ask_stream`, the GUI fully onto `DaemonCore` — which is how it gained
+  fingerprint recall it had silently never had — the reinforcement gate split
+  (an explicit click is not the same act as ambient write-back), and
+  `daemon migrate backfill-activations` to recover a ledger from the historical
+  feedback log. **The whole M-mem arc is complete.** Suite 358 pass / 1
+  pre-existing skip. **Requires `daemon ingest --full` once.**
 
 - **Hermes integration H1–H3 — memory-provider plugin (2026-06-05).** My Daemon is now a native Hermes memory provider (PLAN-HERMES.md Path A). One shared adapter — `src/my_daemon/integration/core.py` (`DaemonCore` + `build_core`) — wraps the existing pipeline behind plain methods: `recall`/`recall_block` (retrieval-only by default — Hermes brings its own model and wants cited context, not a composed answer), `endorse` (the `daemon select` reinforcement factored out of `cli.py`), `remember` (provenance-stamped capture → single-note `ingest_note` so it's recallable in-session), `latest_dream`/`dreams`/`read_dream` (the observer letters), `neighbors`, `status`. The plugin `src/my_daemon/hermes/provider.py` (`MyDaemonProvider`) subclasses Hermes's `MemoryProvider` ABC **lazily** (resolves to `object` when Hermes isn't importable, so `my_daemon` adds no runtime dep and the module unit-tests standalone) and implements the full hook set: `is_available` (network-free kill-switch on `provider_enabled`), `initialize`, `system_prompt_block` (identity framing + last night's letter), `prefetch` (ambient cited recall, caches the feedback id), `sync_turn` (non-blocking daemon thread: salient-turn capture + positive-only soft reinforcement of any prefetched note the reply used), `get_tool_schemas`/`handle_tool_call` (`mydaemon_recall`/`dream`/`neighbors` always; `endorse`/`remember` only when write-back is on), `on_memory_write`, `on_session_end`, `get_config_schema`/`save_config`, `shutdown`. New `HermesConfig` in `config.py` + both yamls (everything off by default: `provider_enabled`, `allow_write_back`). Hermes shim at `plugins/memory/my-daemon/` (`__init__.register`, `plugin.yaml`, `README.md`); new `daemon hermes doctor` preflight; new `pipeline.ingest.ingest_note`; docs at `docs-source/integrations/hermes.md` (+ mkdocs nav). The Anthropic key stays daemon-side (observer Opus + batch Haiku sub-agents) and Hermes never sees it; My Daemon stays local-only. 20 new tests (`tests/test_integration_core.py`, `tests/test_hermes_provider.py`) cover recall shape + `feedback_event_id`, budget-capped cited block, capture→recallable + provenance, write-back gating, soft endorse, dream newest-first + graceful-empty, tool routing, and non-blocking `sync_turn`. Full suite 86 pass / 1 pre-existing skip; ruff clean. **Deferred:** H4 MCP server; PLAN-HERMES §14 open questions. License: Hermes MIT → Apache-2.0 compatible, lazily imported, not redistributed.
 

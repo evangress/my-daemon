@@ -182,6 +182,11 @@ class MemoryConfig(BaseModel):
 
 class FeedbackConfig(BaseModel):
     db_path: Path = Path("./data/feedback.db")
+    # Gates graph reinforcement from an *explicit* pick (a GUI click, `daemon
+    # select`). Separate from `hermes.allow_write_back`, which gates ambient
+    # capture and Hermes' implicit soft-reinforcement — pressing a button is
+    # not the same act as the daemon deciding to write on your behalf.
+    reinforce_enabled: bool = True
 
 
 class SnapshotConfig(BaseModel):

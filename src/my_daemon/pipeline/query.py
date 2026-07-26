@@ -106,7 +106,7 @@ class QueryEngine:
     def ask(self, query: str, synthesize: bool = True) -> QueryResponse:
         t0 = time.perf_counter()
         result = self.orchestrator.retrieve(query, surface=self.surface)
-        memories = self._recall(result)
+        memories = self.recall_for(result)
         answer = (
             self.llm.synthesize(
                 query,
@@ -140,7 +140,7 @@ class QueryEngine:
             memories=memories,
         )
 
-    def _recall(self, result: RetrievalResult) -> list[RecalledMemory]:
+    def recall_for(self, result: RetrievalResult) -> list[RecalledMemory]:
         """Never let a recall failure break the query it was enriching."""
         if not result.query_uid or not self.s.memory.recall_enabled:
             return []

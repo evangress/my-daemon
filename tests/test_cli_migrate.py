@@ -172,3 +172,10 @@ def test_hot_notes_reports_nothing_gracefully_on_an_empty_ledger(settings_with_d
 
     assert result.exit_code == 0, result.output
     assert "No activations" in result.output
+
+
+def test_backfill_activations_is_a_dry_run_by_default(settings_with_db: Path):
+    result = runner.invoke(app, ["migrate", "backfill-activations"])
+
+    assert result.exit_code == 0, result.output
+    assert "dry run" in result.output.lower()

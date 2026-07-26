@@ -17,8 +17,10 @@ path remains for clients that want a one-shot grounded answer (NiceGUI, MCP).
 
 from __future__ import annotations
 
+import contextlib
 import re
 import threading
+import time
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from pathlib import Path
@@ -28,11 +30,12 @@ import frontmatter
 from my_daemon.config import Settings
 from my_daemon.embeddings import Embedder, SparseEmbedder
 from my_daemon.llm import LLMClient
-from my_daemon.models import THEME_TAG_PREFIX, RetrievalResult
+from my_daemon.models import THEME_TAG_PREFIX, FeedbackEvent, RetrievalResult
 from my_daemon.pipeline.ingest import ingest_note
 from my_daemon.pipeline.query import QueryEngine, build_retrieval_summary
 from my_daemon.retrieval.weights import apply_selection
 from my_daemon.stores import FeedbackStore, GraphStore, VectorStore
+from my_daemon.stores.activations import ActivationLedger
 from my_daemon.stores.registry import NoteRegistry
 from my_daemon.vault.identity import derive_path_uuid
 from my_daemon.vault.parser import parse_note
@@ -93,6 +96,7 @@ class DaemonCore:
         self.graph = graph_store
         self.feedback = feedback_store
         self.registry = NoteRegistry(db_path=settings.feedback.db_path)
+        self.ledger = ActivationLedger(db_path=settings.feedback.db_path)
         self.llm = llm_client
         self.engine = QueryEngine(
             settings, embedder, vector_store, graph_store, feedback_store, llm_client,
@@ -174,6 +178,71 @@ class DaemonCore:
             parts.append(entry)
             used += len(entry)
         return "".join(parts).rstrip() + "\n"
+
+    @property
+    def orchestrator(self):
+        """The engine's orchestrator — one instance, one set of listeners."""
+        return self.engine.orchestrator
+
+    def recall_for(self, retrieval: RetrievalResult) -> list:
+        """Past questions that lit up the same notes. Never fatal."""
+        return self.engine.recall_for(retrieval)
+
+    # ---- the answer path -------------------------------------------------
+    #
+    # Every surface goes through these two. The GUI used to hand-roll both,
+    # which is how it went a whole arc without fingerprint recall: QueryEngine
+    # learned about memories and the GUI's private copy did not.
+
+    def retrieve_only(self, query: str, *, surface: str, session_id: str | None = None):
+        """Retrieval with no synthesis. Records activations like any surface."""
+
+        return self.orchestrator.retrieve(query, surface=surface, session_id=session_id)
+
+    def log_answer(
+        self,
+        *,
+        query: str,
+        answer: str,
+        latency_ms: int,
+        retrieval: RetrievalResult,
+    ) -> int:
+        """Write the feedback row and back-link it to the retrieval.
+
+        The single place a feedback row is created. `queries` is the retrieval
+        record and `feedback` is the answer + signal record — they are not the
+        same event, so the link is one-directional and best-effort.
+        """
+
+        event_id = self.feedback.log(
+            FeedbackEvent(
+                timestamp=datetime.now(UTC),
+                query=query,
+                retrieval_summary=build_retrieval_summary(retrieval),
+                answer=answer,
+                latency_ms=latency_ms,
+            )
+        )
+        if retrieval.query_uid:
+            with contextlib.suppress(Exception):
+                self.ledger.link_feedback(retrieval.query_uid, event_id)
+        return event_id
+
+    def ask_stream(
+        self,
+        query: str,
+        *,
+        surface: str = "gui",
+        session_id: str | None = None,
+    ) -> AnswerStream:
+        """Retrieve, stream the answer, then log it — for live-updating UIs.
+
+        The returned object is the iterator *and* the record: consume it for
+        text deltas, then read ``answer`` / ``feedback_event_id`` / ``memories``
+        off it once it is exhausted.
+        """
+
+        return AnswerStream(self, query, surface=surface, session_id=session_id)
 
     def neighbors(self, note_path: str, *, depth: int = 1) -> dict:
         """Graph neighbours of a note, by path in and by path out.
@@ -276,15 +345,24 @@ class DaemonCore:
 
     # -- write-back (gated on allow_write_back) ---------------------------
 
-    def endorse(self, feedback_event_id: int, rank: int) -> dict:
+    def endorse(
+        self, feedback_event_id: int, rank: int, *, require_write_back: bool = True
+    ) -> dict:
         """Reinforce the graph path behind candidate #``rank`` of a past recall.
 
         This is the ``daemon select`` logic factored out of ``cli.py`` so both
         the explicit ``mydaemon_endorse`` tool and the provider's implicit
         soft-reinforcement in ``sync_turn`` go through one place.
+
+        ``require_write_back=False`` is for an *explicit* pick — a GUI click or
+        ``daemon select``. Pressing a button is not the same act as the daemon
+        deciding to write on your behalf, so it is gated by
+        ``feedback.reinforce_enabled`` instead of ``hermes.allow_write_back``.
         """
 
-        if not self.write_enabled:
+        if not self.s.feedback.reinforce_enabled:
+            return {"ok": False, "reason": "reinforcement disabled (feedback.reinforce_enabled=false)"}
+        if require_write_back and not self.write_enabled:
             return {"ok": False, "reason": "write-back disabled (hermes.allow_write_back=false)"}
         event = self.feedback.get(feedback_event_id)
         if event is None:
@@ -407,6 +485,57 @@ class DaemonCore:
             if not alt.exists():
                 return alt
         return parent / f"{stem}-{int(datetime.now(UTC).timestamp())}{suffix}"
+
+
+class AnswerStream:
+    """A streamed answer that records itself when the stream ends.
+
+    Iterating yields text deltas. When iteration completes the feedback row is
+    written, so a UI never has to reproduce that logic — which is exactly the
+    duplication that let the GUI drift.
+    """
+
+    def __init__(
+        self,
+        core: DaemonCore,
+        query: str,
+        *,
+        surface: str,
+        session_id: str | None = None,
+    ) -> None:
+        self.core = core
+        self.query = query
+        self.surface = surface
+        self.session_id = session_id
+        self.answer = ""
+        self.feedback_event_id: int | None = None
+        self.memories: list = []
+        self.retrieval = RetrievalResult(query=query)
+
+    def __iter__(self):
+        t0 = time.perf_counter()
+        self.retrieval = self.core.retrieve_only(
+            self.query, surface=self.surface, session_id=self.session_id
+        )
+        if not self.retrieval.ranked:
+            return
+
+        self.memories = self.core.recall_for(self.retrieval)
+        inject = self.core.s.memory.inject_into_context
+        parts: list[str] = []
+        for delta in self.core.llm.synthesize_stream(
+            self.query, self.retrieval.ranked, self.memories if inject else None
+        ):
+            parts.append(delta)
+            yield delta
+
+        self.answer = "".join(parts).strip()
+        self.feedback_event_id = self.core.log_answer(
+            query=self.query,
+            answer=self.answer,
+            latency_ms=int((time.perf_counter() - t0) * 1000),
+            retrieval=self.retrieval,
+        )
 
 
 def build_core(settings: Settings, *, load_graph: bool = True) -> DaemonCore:

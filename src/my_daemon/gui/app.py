@@ -15,24 +15,16 @@ import logging
 import threading
 from collections.abc import Iterator
 from dataclasses import dataclass
-from datetime import UTC, datetime
-from functools import partial
 from logging.handlers import RotatingFileHandler
 from pathlib import Path
 
 from nicegui import ui
 
 from my_daemon.config import Settings, load_settings
-from my_daemon.embeddings import Embedder, SparseEmbedder
-from my_daemon.llm import LLMClient
-from my_daemon.models import FeedbackEvent, RetrievalResult
+from my_daemon.integration.core import DaemonCore, build_core
+from my_daemon.models import RetrievalResult
 from my_daemon.paths import log_path as _shared_log_path
 from my_daemon.pipeline import build_retrieval_summary
-from my_daemon.pipeline.activation import ActivationRecorder
-from my_daemon.retrieval import RetrievalOrchestrator
-from my_daemon.retrieval.weights import apply_selection
-from my_daemon.stores import FeedbackStore, GraphStore, VectorStore
-from my_daemon.stores.activations import ActivationLedger
 
 log = logging.getLogger("my_daemon.chat")
 
@@ -78,47 +70,28 @@ class _DaemonContext:
     """
 
     settings: Settings
-    embedder: Embedder
-    sparse_embedder: SparseEmbedder | None
-    vector_store: VectorStore
-    graph_store: GraphStore
-    feedback_store: FeedbackStore
-    llm: LLMClient
-    orchestrator: RetrievalOrchestrator
+    core: DaemonCore
 
 
 def _build_context() -> _DaemonContext:
+    """One construction path — see `integration/wiring.py` for why."""
     s = load_settings()
-    embedder = Embedder(
-        s.embeddings.model,
-        batch_size=s.embeddings.batch_size,
-        device=s.embeddings.device,
-        cache_folder=s.embeddings.cache_folder,
-    )
-    sparse_embedder: SparseEmbedder | None = None
-    if s.embeddings.hybrid:
-        sparse_embedder = SparseEmbedder(
-            model_name=s.embeddings.sparse_model,
-            cache_folder=s.embeddings.cache_folder,
+    return _DaemonContext(settings=s, core=build_core(s))
+
+
+def _render_memories(chat_column, memories) -> None:  # noqa: ANN001
+    """The "you've been here before" strip — the GUI half of M-mem-5."""
+    with chat_column, ui.row().classes("w-full justify-start"):
+        rows = "".join(
+            f"<div class='memory-row'><span class='memory-date'>{m.ts.date().isoformat()}</span>"
+            f"<span class='memory-text'>{html.escape(m.text)}</span>"
+            f"<span class='memory-notes'>{html.escape(', '.join(m.shared_notes))}</span></div>"
+            for m in memories
         )
-    vector_store = VectorStore(
-        url=s.vector_store.qdrant.url,
-        collection=s.vector_store.qdrant.collection,
-        dim=embedder.dimension,
-        hybrid=s.embeddings.hybrid,
-    )
-    graph_store = GraphStore(path=s.graph.path)
-    graph_store.load()
-    feedback_store = FeedbackStore(db_path=s.feedback.db_path)
-    llm = LLMClient(s.llm, api_key=s.anthropic_api_key)
-    ledger = ActivationLedger(db_path=s.feedback.db_path)
-    orchestrator = RetrievalOrchestrator(
-        s, embedder, vector_store, graph_store, sparse_embedder=sparse_embedder,
-        listeners=[ActivationRecorder(ledger)],
-    )
-    return _DaemonContext(
-        s, embedder, sparse_embedder, vector_store, graph_store, feedback_store, llm, orchestrator,
-    )
+        ui.html(
+            f"<div class='memory-panel'><div class='memory-title'>"
+            f"You've been here before</div>{rows}</div>"
+        )
 
 
 def _render_sources(
@@ -181,26 +154,16 @@ def _render_sources(
         status.content = '<div class="sources-status">…recording your pick</div>'
 
         def _apply() -> str:
-            res = apply_selection(
-                ctx.graph_store,
-                seed_note_uuid=entry.get("seed_note_uuid") or entry.get("note_uuid"),
-                selected_note_uuid=entry.get("note_uuid"),
-            )
-            ctx.graph_store.save()
-            ctx.feedback_store.attach_signal(
-                feedback_event_id,
-                "candidate_selected",
-                selected_rank=rank,
-                selected_chunk_id=entry.get("chunk_id"),
-                selected_note_uuid=entry.get("note_uuid"),
-                selected_note_path=entry.get("note_path"),
-            )
-            if res.edges_reinforced == 0:
+            # A click is explicit, so it is not gated by hermes.allow_write_back.
+            res = ctx.core.endorse(feedback_event_id, rank, require_write_back=False)
+            if not res.get("ok"):
+                return res.get("reason", "could not record that pick")
+            if res["edges_reinforced"] == 0:
                 return "Recorded — this candidate was the seed itself; nothing to reinforce."
-            hops = max(len(res.path) - 1, 0)
+            hops = max(len(res["path"]) - 1, 0)
             return (
-                f"Reinforced {res.edges_reinforced} edge instance(s) "
-                f"along a {hops}-hop path (Δweight {res.total_delta:.2f})."
+                f"Reinforced {res['edges_reinforced']} edge instance(s) "
+                f"along a {hops}-hop path (Δweight {res['total_delta']:.2f})."
             )
 
         try:
@@ -491,6 +454,41 @@ def _mount_ui(ctx: _DaemonContext) -> None:
             color: var(--ink-mute);
             margin-top: 6px;
           }}
+          /* "You've been here before" — past questions that lit up the same
+             notes. Quieter than the sources panel: it is context, not an answer. */
+          .memory-panel {{
+            border-left: 2px solid var(--rule);
+            padding: 8px 0 8px 14px;
+            margin: 4px 0 2px 0;
+            max-width: 46rem;
+          }}
+          .memory-title {{
+            font-family: var(--font-mono);
+            font-size: 0.7rem;
+            letter-spacing: 0.09em;
+            text-transform: uppercase;
+            color: var(--ink-mute);
+            margin-bottom: 6px;
+          }}
+          .memory-row {{
+            display: flex;
+            flex-wrap: wrap;
+            gap: 8px;
+            align-items: baseline;
+            font-size: 0.86rem;
+            margin-bottom: 4px;
+          }}
+          .memory-date {{
+            font-family: var(--font-mono);
+            font-size: 0.72rem;
+            color: var(--ink-mute);
+          }}
+          .memory-text {{ color: var(--ink); }}
+          .memory-notes {{
+            font-family: var(--font-mono);
+            font-size: 0.72rem;
+            color: var(--ink-mute);
+          }}
         </style>
         """
     )
@@ -536,36 +534,27 @@ def _mount_ui(ctx: _DaemonContext) -> None:
             with ui.row().classes("w-full justify-start"):
                 daemon_label = ui.markdown("…").classes("daemon-bubble")
 
-        t0 = datetime.now(UTC)
         try:
-            result = await asyncio.to_thread(
-                partial(ctx.orchestrator.retrieve, query, surface="gui")
-            )
+            # `ask_stream` retrieves, recalls, streams, and logs. The GUI used
+            # to reproduce all four and drifted out of sync with the CLI.
+            stream = ctx.core.ask_stream(query, surface="gui")
+            accumulator: list[str] = []
+            daemon_label.content = ""
+            await _stream_into_label(daemon_label, iter(stream), accumulator)
 
-            if not result.ranked:
+            if not stream.retrieval.ranked:
                 daemon_label.content = (
                     "_Nothing in your notes matched. Try a different phrasing, "
                     "or ingest more of the vault._"
                 )
                 return
 
-            accumulator: list[str] = []
-            daemon_label.content = ""
-            generator = ctx.llm.synthesize_stream(query, result.ranked)
-            await _stream_into_label(daemon_label, generator, accumulator)
-            answer = "".join(accumulator).strip()
-
-            latency_ms = int((datetime.now(UTC) - t0).total_seconds() * 1000)
-            feedback_event_id = ctx.feedback_store.log(
-                FeedbackEvent(
-                    timestamp=t0,
-                    query=query,
-                    retrieval_summary=build_retrieval_summary(result),
-                    answer=answer,
-                    latency_ms=latency_ms,
+            if stream.memories and ctx.settings.memory.show_to_user:
+                _render_memories(chat_column, stream.memories)
+            if stream.feedback_event_id is not None:
+                _render_sources(
+                    ctx, chat_column, stream.retrieval, stream.feedback_event_id
                 )
-            )
-            _render_sources(ctx, chat_column, result, feedback_event_id)
         except Exception as exc:
             log.exception("chat send failed")
             daemon_label.content = f"_(daemon error: {exc})_"

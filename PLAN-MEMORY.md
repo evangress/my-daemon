@@ -757,9 +757,7 @@ Each leaves the system working, tested, and shippable.
   (`ActivationRecorder`), orchestrator `listeners=` seam with `surface`
   plumbing, `daemon activations` and `daemon hot-notes`.
   **Win:** you can see which notes your attention actually lands on.
-  *Deferred from this milestone:* the `wiring.py` factory,
-  `DaemonCore.retrieve_only`/`log_answer` GUI de-duplication, and the
-  historical `retrieval_summary` backfill.
+  *The deferred pieces shipped with M-mem-9.*
 
 - [ ] **M-mem-5 — Fingerprints and recall.** *Reversible, config-gated.* IDF,
   cosine, `similar()`. Injection into `LLMClient.synthesize`; a "You've been here
@@ -781,8 +779,16 @@ Each leaves the system working, tested, and shippable.
   **Win:** the loop closes — emergent themes become durable vault structure, with
   consent.
 
-- [ ] **M-mem-9 — Cleanup.** GUI fully onto `DaemonCore.ask_stream`, drop the
-  path-based `delete_by_note`, drop `manifest_version: 1` support.
+- [x] **M-mem-9 — Cleanup — shipped 2026-07-26.** `integration/wiring.py`
+  (`build_stores` / `build_orchestrator`), `DaemonCore.retrieve_only` /
+  `log_answer` / `ask_stream`, the GUI fully onto `DaemonCore`, the
+  reinforcement gate split (`feedback.reinforce_enabled` for an explicit click
+  vs `hermes.allow_write_back` for ambient capture), and
+  `daemon migrate backfill-activations`. The path-based `delete_by_note` went
+  with the cutover; `manifest_version: 1` never shipped, so there was nothing
+  to drop.
+  **Win:** the GUI gains fingerprint recall, which it had silently never had —
+  `QueryEngine` learned about memories and the GUI's private copy did not.
 
 > **Revision, 2026-07-26.** Evan confirmed the project is pre-production and a
 > full re-ingest is acceptable, and asked for the cleanest cut available. That
