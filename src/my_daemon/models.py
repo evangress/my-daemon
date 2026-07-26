@@ -20,7 +20,15 @@ class Note(BaseModel):
     title: str
     body: str
     frontmatter: dict = Field(default_factory=dict)
+    # Display targets: a vault-relative path when the link resolved, the raw
+    # `[[text]]` when it didn't.
     wikilinks: list[str] = Field(default_factory=list)
+    # Identities of the links that resolved to a real note, and the raw text of
+    # the ones that didn't. The graph keys the first as `note::<uuid>` and the
+    # second as `dangling::<text>` — a target with no note has no identity to
+    # borrow, so overloading one namespace for both would be a lie.
+    wikilink_uuids: list[str] = Field(default_factory=list)
+    dangling_wikilinks: list[str] = Field(default_factory=list)
     tags: list[str] = Field(default_factory=list)
     mtime: datetime
     word_count: int
@@ -71,6 +79,10 @@ class Chunk(BaseModel):
     """A retrievable piece of a Note."""
 
     id: str
+    # The join key across all three stores. `note_path` beside it is the
+    # *display* string — prompts, citations, GUI source lists and observer
+    # letters all render it, and a raw UUID would make them unreadable.
+    note_uuid: str = ""
     note_path: str
     heading_path: list[str] = Field(default_factory=list)
     text: str
@@ -122,6 +134,7 @@ class FeedbackEvent(BaseModel):
     selected_rank: int | None = None
     selected_chunk_id: str | None = None
     selected_note_path: str | None = None
+    selected_note_uuid: str | None = None
 
 
 class GraphStats(BaseModel):

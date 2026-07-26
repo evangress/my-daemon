@@ -9,14 +9,21 @@ import re
 from langchain_text_splitters import MarkdownHeaderTextSplitter, RecursiveCharacterTextSplitter
 
 from my_daemon.models import Chunk, Note
+from my_daemon.vault.identity import effective_uuid
 
 WIKILINK_RE = re.compile(r"\[\[([^\]|]+)(?:\|[^\]]+)?\]\]")
 
 _DEFAULT_HEADER_SPLITS = [("#", "h1"), ("##", "h2"), ("###", "h3")]
 
 
-def _stable_chunk_id(note_path: str, heading_path: tuple[str, ...], index: int, text: str) -> str:
-    payload = f"{note_path}::{'/'.join(heading_path)}::{index}::{text}".encode()
+def _stable_chunk_id(note_uuid: str, heading_path: tuple[str, ...], index: int, text: str) -> str:
+    """Derived from the note's *identity*, never its path.
+
+    A rename therefore leaves every chunk id untouched, which is what lets
+    ingest turn a move into a payload update instead of a re-embed.
+    """
+
+    payload = f"{note_uuid}::{'/'.join(heading_path)}::{index}::{text}".encode()
     return hashlib.sha1(payload).hexdigest()[:16]
 
 
@@ -29,6 +36,7 @@ def _approx_token_count(s: str) -> int:
 def chunk_note(note: Note, max_tokens: int = 512, overlap_tokens: int = 50) -> list[Chunk]:
     """Split a Note's body into Chunks, splitting first on headings then on size."""
 
+    note_uuid = effective_uuid(note)
     header_splitter = MarkdownHeaderTextSplitter(headers_to_split_on=_DEFAULT_HEADER_SPLITS)
     pieces = header_splitter.split_text(note.body) or []
 
@@ -67,10 +75,11 @@ def chunk_note(note: Note, max_tokens: int = 512, overlap_tokens: int = 50) -> l
             if not sub:
                 continue
             wikilinks = [m.group(1).strip() for m in WIKILINK_RE.finditer(sub)]
-            chunk_id = _stable_chunk_id(note.relative_path, tuple(heading_path), index, sub)
+            chunk_id = _stable_chunk_id(note_uuid, tuple(heading_path), index, sub)
             chunks.append(
                 Chunk(
                     id=chunk_id,
+                    note_uuid=note_uuid,
                     note_path=note.relative_path,
                     heading_path=heading_path,
                     text=sub,

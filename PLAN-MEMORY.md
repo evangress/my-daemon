@@ -736,18 +736,18 @@ Each leaves the system working, tested, and shippable.
   rebuild diverge when a linked note is deleted); logged in
   PROJECT_MANAGEMENT.md rather than folded in.
 
-- [ ] **M-mem-2 — Ingest owns the registry.** *Reversible.* Manifest re-keyed by
-  uuid (`manifest_version: 2`, bidirectional converter), reconciliation, rename
-  detection wired but inert.
-  **Win:** `daemon status` shows registry drift — notes with no uuid, uuids with
-  no file, duplicates.
-
-- [ ] **M-mem-3 — Qdrant carries `note_uuid`.** *Reversible.* `set_note_uuid()`,
-  payload indexes on `note_uuid` **and `note_path`**,
-  `daemon migrate qdrant-payload`, rename path does payload-only updates.
-  **Win:** renaming a note no longer costs a re-embed. Plus a free latency win —
-  `expand.py:40-47` scrolls on `note_path` on every seed of every query with
-  **no index today**.
+- [x] **M-mem-2/3/6 — the identity cutover — shipped 2026-07-26.**
+  Collapsed into one change once a full re-ingest became acceptable (see the
+  note below). Chunk ids derive from `note_uuid`; graph nodes are
+  `note::<uuid>` with the display path carried on the node; unresolved
+  wikilinks moved to a `dangling::<text>` namespace; the Qdrant payload gains
+  `note_uuid` plus payload indexes on it *and* `note_path`; the manifest is
+  uuid-keyed and content-hashed; ingest populates and soft-deletes registry
+  rows; `apply_selection` and the whole retrieval path key on identity.
+  **Win:** renaming or folder-moving a note costs no embedding and keeps every
+  learned edge weight — the Librarian can finally reorganize without amnesia.
+  Plus the `note_path` scroll in graph expansion, which ran for every seed of
+  every query against **no index**, is now indexed.
 
 - [ ] **M-mem-4 — The ledger and the seam.** *Reversible.* Migration 3,
   `RetrievalListener`, `ActivationRecorder`, `wiring.py`,
@@ -761,12 +761,6 @@ Each leaves the system working, tested, and shippable.
   before" strip in the GUI and `daemon query -v`.
   **Win: the headline feature.** A differently-worded question surfaces "you
   asked something like this on 12 March, and it landed on the same three notes."
-
-- [ ] **M-mem-6 — Graph relabel.** ⚠️ **ONE-WAY DOOR.**
-  `GRAPH_SCHEMA_VERSION = 2`, `relabel_to_uuid`, `dangling::` namespace,
-  `.v1.bak`.
-  **Win:** renaming preserves learned edge weights and graph position entirely.
-  With 1b, the graph accumulates instead of leaking.
 
 - [ ] **M-mem-7 — Themes.** *Reversible.* Migration 5, `cluster_fingerprints`
   inside `run_observe`, centroid matching, LLM naming for new clusters only,
@@ -782,6 +776,15 @@ Each leaves the system working, tested, and shippable.
 
 - [ ] **M-mem-9 — Cleanup.** GUI fully onto `DaemonCore.ask_stream`, drop the
   path-based `delete_by_note`, drop `manifest_version: 1` support.
+
+> **Revision, 2026-07-26.** Evan confirmed the project is pre-production and a
+> full re-ingest is acceptable, and asked for the cleanest cut available. That
+> removed both constraints the staged dual-key transition existed to satisfy —
+> avoiding a re-ingest, and keeping the one-way door late. M-mem-2, -3 and -6
+> were therefore collapsed into a single identity cutover, deleting the
+> `manifest_version` converter, the `daemon migrate qdrant-payload` command,
+> `relabel_to_uuid`, and every path-fallback branch before they were written.
+> `daemon ingest --full` is required once after this change.
 
 **Two properties of this ordering.** Nothing before M-mem-6 requires the graph to
 change — M-mem-4 and -5 (the entire fingerprint payoff) only need `note_uuid`

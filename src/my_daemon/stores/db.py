@@ -160,9 +160,25 @@ def _m002_registry(conn: sqlite3.Connection) -> None:
     exec_script(conn, _M002_SCHEMA)
 
 
+# ---------------------------------------------------------------------------
+# Migration 3 — identity on the feedback log. `selected_note_path` stays for
+# human-readable reports; the uuid is what weight replay joins on.
+# ---------------------------------------------------------------------------
+
+_M003_COLUMNS = {"selected_note_uuid": "TEXT"}
+
+
+def _m003_feedback_identity(conn: sqlite3.Connection) -> None:
+    existing = {row[1] for row in conn.execute("PRAGMA table_info(feedback)")}
+    for col, typ in _M003_COLUMNS.items():
+        if col not in existing:
+            conn.execute(f"ALTER TABLE feedback ADD COLUMN {col} {typ}")
+
+
 MIGRATIONS: list[tuple[int, str, Migration]] = [
     (1, "baseline_feedback_and_agent_state", _m001_baseline),
     (2, "note_registry_and_ordinals", _m002_registry),
+    (3, "feedback_note_identity", _m003_feedback_identity),
 ]
 
 SCHEMA_VERSION = MIGRATIONS[-1][0]

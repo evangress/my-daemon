@@ -23,6 +23,7 @@ from my_daemon.retrieval.weights import apply_selection
 from my_daemon.stores import FeedbackStore, GraphStore
 from my_daemon.vault import VaultReader
 from my_daemon.vault.chunker import chunk_note
+from my_daemon.vault.identity import derive_path_uuid as _u
 
 # ---------------------------------------------------------------------------
 # fakes — stand in for the embedder + Qdrant so tests stay offline
@@ -224,7 +225,7 @@ def test_remember_writes_provenance_capture_and_ingests(tmp_path: Path, vault_ro
 
     # The note was incrementally ingested: vector upsert + graph node + manifest.
     assert any("Conversations/hermes" in p for p in core.vector_store.upserted)
-    assert core.graph.chunk_ids_for(result["rel_path"])
+    assert core.graph.chunk_ids_for(_u(result["rel_path"]))
 
 
 def test_remember_noop_when_write_back_disabled(tmp_path: Path, vault_root: Path) -> None:
@@ -274,7 +275,9 @@ def test_endorse_reinforces_seed_to_note_path(tmp_path: Path, vault_root: Path) 
                     {
                         "chunk_id": "stub",
                         "note_path": "Pullman Daemons.md",
+                        "note_uuid": _u("Pullman Daemons.md"),
                         "seed_note_path": "Designing AI Memory.md",
+                        "seed_note_uuid": _u("Designing AI Memory.md"),
                     }
                 ]
             },
@@ -290,7 +293,8 @@ def test_endorse_reinforces_seed_to_note_path(tmp_path: Path, vault_root: Path) 
     # The feedback row now carries the selection signal.
     event = core.feedback.get(eid)
     assert event is not None and event.signal == "candidate_selected"
-    assert event.selected_note_path == "Pullman Daemons.md"
+    assert event.selected_note_uuid == _u("Pullman Daemons.md")
+    assert event.selected_note_path == "Pullman Daemons.md"  # display breadcrumb
 
 
 def test_endorse_noop_when_write_back_disabled(tmp_path: Path, vault_root: Path) -> None:
@@ -338,8 +342,8 @@ def test_neighbors_and_status(tmp_path: Path, vault_root: Path) -> None:
     # Reinforce one edge so a neighbor is reachable + the graph has warmth.
     apply_selection(
         core.graph,
-        seed_note_path="Designing AI Memory.md",
-        selected_note_path="Pullman Daemons.md",
+        seed_note_uuid=_u("Designing AI Memory.md"),
+        selected_note_uuid=_u("Pullman Daemons.md"),
     )
     n = core.neighbors("Designing AI Memory.md", depth=2)
     assert n["note_path"] == "Designing AI Memory.md"

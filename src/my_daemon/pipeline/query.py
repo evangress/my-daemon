@@ -33,6 +33,7 @@ def build_retrieval_summary(result: RetrievalResult) -> dict:
     """
 
     seed_note_by_chunk: dict[str, str] = {s.chunk.id: s.chunk.note_path for s in result.seeds}
+    seed_uuid_by_chunk: dict[str, str] = {s.chunk.id: s.chunk.note_uuid for s in result.seeds}
 
     ranked: list[dict] = []
     for rc in result.ranked:
@@ -41,17 +42,21 @@ def build_retrieval_summary(result: RetrievalResult) -> dict:
         # pulled in via expansion and the seed lookup gives us the start node.
         if rc.graph_distance == 0:
             seed_note = rc.chunk.note_path
+            seed_uuid = rc.chunk.note_uuid
         else:
             seed_note = seed_note_by_chunk.get(seed_chunk_id, rc.chunk.note_path)
+            seed_uuid = seed_uuid_by_chunk.get(seed_chunk_id, rc.chunk.note_uuid)
         ranked.append(
             {
                 "chunk_id": rc.chunk.id,
+                "note_uuid": rc.chunk.note_uuid,
                 "note_path": rc.chunk.note_path,
                 "heading_path": rc.chunk.heading_path,
                 "score": rc.combined_score,
                 "vector_score": rc.vector_score,
                 "graph_distance": rc.graph_distance,
                 "seed_chunk_id": seed_chunk_id,
+                "seed_note_uuid": seed_uuid,
                 "seed_note_path": seed_note,
             }
         )

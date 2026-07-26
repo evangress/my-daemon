@@ -45,8 +45,8 @@ class DecayResult:
 def apply_selection(
     graph_store: GraphStore,
     *,
-    seed_note_path: str,
-    selected_note_path: str,
+    seed_note_uuid: str,
+    selected_note_uuid: str,
     alpha: float = DEFAULT_ALPHA,
     hop_decay: float = DEFAULT_HOP_DECAY,
     ceiling: float = DEFAULT_CEILING,
@@ -63,7 +63,7 @@ def apply_selection(
         now = datetime.now(UTC)
     iso_now = now.isoformat()
 
-    path = graph_store.shortest_note_path(seed_note_path, selected_note_path)
+    path = graph_store.shortest_note_path(seed_note_uuid, selected_note_uuid)
     if not path or len(path) < 2:
         return ReinforcementResult(path=path or [], edges_reinforced=0, total_delta=0.0)
 

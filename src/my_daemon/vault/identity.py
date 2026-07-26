@@ -69,6 +69,16 @@ def derive_adopted_uuid(key: str, value: str) -> str:
     return str(uuidlib.uuid5(NAMESPACE, f"my-daemon/adopted/{key}/{value}"))
 
 
+def effective_uuid(note) -> str:  # noqa: ANN001 — avoids a models import cycle
+    """A note's identity, always. Stamped if it has one, path-derived if not.
+
+    Nothing downstream needs to care which: everything joins on a UUID string.
+    Only the registry records whether the identity is rename-stable.
+    """
+
+    return note.uuid or derive_path_uuid(note.relative_path)
+
+
 def read_note_uuid(fm: dict) -> tuple[str | None, str | None]:
     """Resolve a note's identity from its frontmatter.
 

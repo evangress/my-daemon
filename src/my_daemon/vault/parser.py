@@ -75,6 +75,11 @@ def parse_note(file_path: Path, vault_root: Path) -> Note:
         body=body,
         frontmatter=fm,
         wikilinks=wikilinks,
+        # Unresolved is the honest default: only the reader holds the title
+        # index needed to turn a link into an identity. A Note that never goes
+        # through it (single-note capture, agent_link) still keeps its links,
+        # as dangling targets, instead of silently losing them.
+        dangling_wikilinks=list(wikilinks),
         tags=tags,
         mtime=mtime,
         word_count=word_count,

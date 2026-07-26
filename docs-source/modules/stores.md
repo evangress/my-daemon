@@ -93,6 +93,22 @@ GraphStore(path)
 multi-digraph so it traverses both wikilink directions and the note↔tag↔note
 path. Returns `{neighbor_relative_path: distance}` for note nodes only.
 
+### Nodes are keyed by identity
+
+Note nodes are `note::<uuid>`, not `note::<rel_path>`. A rename or a folder move
+therefore keeps the node — and every learned edge weight on it — exactly where
+it was. Each node carries `rel_path` so reports can render prose without a
+registry round-trip; **never put a raw uuid in a `StructuralReport`**, since
+every string in one is read by an LLM and by a person.
+
+Unresolved wikilink targets live in a **separate `dangling::<text>` namespace**.
+A target with no note behind it has no identity to key on, so overloading
+`note::` for both would let a "note you keep meaning to write" collide with a
+real note. `Note.wikilink_uuids` holds the links that resolved;
+`Note.dangling_wikilinks` holds the ones that didn't. Only `VaultReader` has the
+title index needed to tell them apart, so `parse_note` treats every link as
+dangling and the reader promotes what it can resolve.
+
 ### `update_note` — differential re-ingest
 
 A note **owns its outgoing wikilink and tag edges, and nothing else.**

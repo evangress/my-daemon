@@ -263,12 +263,12 @@ class DaemonCore:
             return {"ok": False, "reason": f"rank {rank} out of range (1..{len(ranked)})"}
 
         picked = ranked[rank - 1]
-        seed_note = picked.get("seed_note_path") or picked.get("note_path")
-        selected_note = picked.get("note_path")
+        seed_note = picked.get("seed_note_uuid") or picked.get("note_uuid")
+        selected_note = picked.get("note_uuid")
 
         with self._write_lock:
             result = apply_selection(
-                self.graph, seed_note_path=seed_note, selected_note_path=selected_note,
+                self.graph, seed_note_uuid=seed_note, selected_note_uuid=selected_note,
             )
             self.graph.save()
             self.feedback.attach_signal(
@@ -276,12 +276,14 @@ class DaemonCore:
                 "candidate_selected",
                 selected_rank=rank,
                 selected_chunk_id=picked.get("chunk_id"),
-                selected_note_path=selected_note,
+                selected_note_uuid=selected_note,
+                selected_note_path=picked.get("note_path"),
             )
 
         return {
             "ok": True,
-            "selected_note_path": selected_note,
+            "selected_note_uuid": selected_note,
+            "selected_note_path": picked.get("note_path"),
             "path": result.path,
             "edges_reinforced": result.edges_reinforced,
             "total_delta": result.total_delta,

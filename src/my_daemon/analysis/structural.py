@@ -42,6 +42,7 @@ from my_daemon.stores.graph import GraphStore
 from my_daemon.stores.snapshot import SnapshotBundle, open_readonly
 
 _NOTE_PREFIX = "note::"
+_DANGLING_PREFIX = "dangling::"
 _TAG_PREFIX = "tag::"
 
 # Default cutoff for "warm" edges in the report. Edges above this are surfaced
@@ -139,7 +140,7 @@ def _louvain_communities(
     summaries: list[CommunitySummary] = []
     for idx, comm in enumerate(sorted(raw, key=len, reverse=True)):
         note_members = sorted(
-            n.removeprefix(_NOTE_PREFIX)
+            _display(g, n)
             for n in comm
             if n.startswith(_NOTE_PREFIX) and not g.nodes[n].get("dangling")
         )
@@ -181,7 +182,7 @@ def _bridging_notes(
     except Exception:  # noqa: BLE001
         return []
     ranked = sorted(
-        ((n.removeprefix(_NOTE_PREFIX), s) for n, s in bc.items() if n in note_nodes and s > 0),
+        ((_display(undirected, n), s) for n, s in bc.items() if n in note_nodes and s > 0),
         key=lambda x: x[1],
         reverse=True,
     )[:limit]
@@ -210,8 +211,8 @@ def _bridge_edges(
         kind, weight = _summarize_parallel_edges(g, u, v)
         out.append(
             BridgeEdge(
-                src=u.removeprefix(_NOTE_PREFIX),
-                dst=v.removeprefix(_NOTE_PREFIX),
+                src=_display(g, u),
+                dst=_display(g, v),
                 kind=kind,
                 weight=weight,
             )
@@ -237,7 +238,7 @@ def _orphan_notes(
     out: list[str] = []
     for n in sorted(note_nodes):
         if undirected.degree(n) <= 1:
-            out.append(n.removeprefix(_NOTE_PREFIX))
+            out.append(_display(undirected, n))
             if len(out) >= limit:
                 break
     return out
@@ -252,7 +253,7 @@ def _dangling_targets(
     """Wikilink targets without a backing note, ranked by how many notes name them."""
 
     ranked = sorted(
-        ((n.removeprefix(_NOTE_PREFIX), g.in_degree(n)) for n in dangling_nodes),
+        ((_strip_prefix(n), g.in_degree(n)) for n in dangling_nodes),
         key=lambda x: x[1],
         reverse=True,
     )[:limit]
@@ -274,8 +275,8 @@ def _warm_edges(
             continue
         ranked.append(
             WarmEdge(
-                src=_strip_prefix(u),
-                dst=_strip_prefix(v),
+                src=_display(g, u),
+                dst=_display(g, v),
                 kind=str(edata.get("kind", "unknown")),
                 weight=weight,
                 last_reinforced_at=edata.get("last_reinforced_at"),
@@ -311,11 +312,23 @@ def _summarize_parallel_edges(
 
 
 def _strip_prefix(node: str) -> str:
-    if node.startswith(_NOTE_PREFIX):
-        return node.removeprefix(_NOTE_PREFIX)
-    if node.startswith(_TAG_PREFIX):
-        return node.removeprefix(_TAG_PREFIX)
+    for prefix in (_NOTE_PREFIX, _TAG_PREFIX, _DANGLING_PREFIX):
+        if node.startswith(prefix):
+            return node.removeprefix(prefix)
     return node
+
+
+def _display(g: nx.Graph, node: str) -> str:
+    """Human-readable name for a node.
+
+    Note nodes are keyed by uuid, but every string in a StructuralReport is
+    rendered into prose that an LLM and a person read — so resolve back to the
+    vault-relative path the graph carries on the node.
+    """
+
+    if node.startswith(_NOTE_PREFIX):
+        return g.nodes[node].get("rel_path") or g.nodes[node].get("title") or _strip_prefix(node)
+    return _strip_prefix(node)
 
 
 # ---------------------------------------------------------------------------
@@ -364,8 +377,8 @@ def simulate_evolution(
                 continue
             apply_selection(
                 shadow,
-                seed_note_path=seed_path,
-                selected_note_path=selected_path,
+                seed_note_uuid=seed_path,
+                selected_note_uuid=selected_path,
                 now=ev.timestamp,
             )
             replayed += 1
@@ -396,14 +409,14 @@ def _seed_and_selected(event: FeedbackEvent) -> tuple[str | None, str | None]:
     (older M1 rows might lack ``selected_note_path``).
     """
 
-    selected_note = event.selected_note_path
+    selected_note = event.selected_note_uuid
     ranked = (event.retrieval_summary or {}).get("ranked") or []
     seed_note: str | None = None
     if event.selected_rank and 1 <= event.selected_rank <= len(ranked):
         picked = ranked[event.selected_rank - 1] or {}
-        seed_note = picked.get("seed_note_path") or picked.get("note_path")
+        seed_note = picked.get("seed_note_uuid") or picked.get("note_uuid")
         if not selected_note:
-            selected_note = picked.get("note_path")
+            selected_note = picked.get("note_uuid")
     return seed_note, selected_note
 
 
@@ -435,8 +448,8 @@ def _diff_graphs(
             continue
         edge_deltas.append(
             EdgeWeightDelta(
-                src=_strip_prefix(u),
-                dst=_strip_prefix(v),
+                src=_display(snapshot, u),
+                dst=_display(snapshot, v),
                 kind=str(edata.get("kind", "unknown")),
                 before=before,
                 after=after,
@@ -451,7 +464,7 @@ def _diff_graphs(
     edge_deltas.sort(key=lambda d: abs(d.delta), reverse=True)
     note_summaries = [
         NoteWeightDelta(
-            note_path=node.removeprefix(_NOTE_PREFIX),
+            note_path=_display(snapshot, node),
             total_delta=sum(deltas),
             edges_changed=len(deltas),
         )

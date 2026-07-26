@@ -3,6 +3,7 @@
 
 from __future__ import annotations
 
+import contextlib
 import uuid
 from typing import TYPE_CHECKING
 
@@ -91,6 +92,28 @@ class VectorStore:
                 vectors_config=VectorParams(size=self.dim, distance=Distance.COSINE),
             )
 
+        self._ensure_payload_indexes()
+
+    def _ensure_payload_indexes(self) -> None:
+        """Index the fields we filter on.
+
+        ``note_uuid`` carries graph expansion's scroll, which runs for *every
+        seed of every query* — it was unindexed before the cutover and that was
+        pure latency. ``note_path`` is indexed too so display-side lookups
+        (and the rename path) stay cheap.
+        """
+
+        from qdrant_client.http.models import PayloadSchemaType
+
+        client = self._client_()
+        for field in ("note_uuid", "note_path"):
+            with contextlib.suppress(Exception):  # already indexed → fine
+                client.create_payload_index(
+                    collection_name=self.collection,
+                    field_name=field,
+                    field_schema=PayloadSchemaType.KEYWORD,
+                )
+
     def upsert(
         self,
         chunks: list[Chunk],
@@ -108,6 +131,7 @@ class VectorStore:
         for i, (chunk, vec) in enumerate(zip(chunks, vectors, strict=True)):
             payload = {
                 "chunk_id": chunk.id,
+                "note_uuid": chunk.note_uuid,
                 "note_path": chunk.note_path,
                 "heading_path": chunk.heading_path,
                 "chunk_index": chunk.chunk_index,
@@ -171,15 +195,38 @@ class VectorStore:
         )
         return [{"score": p.score, **(p.payload or {})} for p in response.points]
 
-    def delete_by_note(self, note_path: str) -> None:
+    def set_note_path(self, note_uuid: str, rel_path: str) -> None:
+        """Update the display path on every chunk of a note, without re-embedding.
+
+        A rename changes nothing semantic, and chunk ids derive from the uuid,
+        so the points themselves are already correct — only this one payload
+        field is stale.
+        """
+
         from qdrant_client.http.models import FieldCondition, Filter, MatchValue
 
-        client = self._client_()
-        client.delete(
+        self._client_().set_payload(
             collection_name=self.collection,
-            points_selector=Filter(
-                must=[FieldCondition(key="note_path", match=MatchValue(value=note_path))]
+            payload={"note_path": rel_path},
+            points=Filter(
+                must=[FieldCondition(key="note_uuid", match=MatchValue(value=note_uuid))]
             ),
+            wait=True,
+        )
+
+    def delete_by_note_uuid(self, note_uuid: str) -> None:
+        from qdrant_client.http.models import FieldCondition, Filter, FilterSelector, MatchValue
+
+        self._client_().delete(
+            collection_name=self.collection,
+            points_selector=FilterSelector(
+                filter=Filter(
+                    must=[
+                        FieldCondition(key="note_uuid", match=MatchValue(value=note_uuid))
+                    ]
+                )
+            ),
+            wait=True,
         )
 
     def count(self) -> int:

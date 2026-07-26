@@ -16,6 +16,7 @@ from my_daemon.config import Settings
 from my_daemon.pipeline.ingest import ingest_vault
 from my_daemon.retrieval.weights import apply_selection
 from my_daemon.stores.graph import GraphStore
+from my_daemon.vault.identity import derive_path_uuid as _u
 
 
 class FakeEmbedder:
@@ -34,13 +35,17 @@ class FakeEmbedder:
 class FakeVectorStore:
     def __init__(self) -> None:
         self.deleted: list[str] = []
+        self.renamed: list[tuple[str, str]] = []
         self.upserted: list[str] = []
 
     def ensure_collection(self) -> None:
         pass
 
-    def delete_by_note(self, note_path: str) -> None:
-        self.deleted.append(note_path)
+    def delete_by_note_uuid(self, note_uuid: str) -> None:
+        self.deleted.append(note_uuid)
+
+    def set_note_path(self, note_uuid: str, rel_path: str) -> None:
+        self.renamed.append((note_uuid, rel_path))
 
     def upsert(self, chunks, vectors, sparse_vectors=None) -> None:  # noqa: ANN001
         self.upserted.extend(c.id for c in chunks)
@@ -61,6 +66,7 @@ def settings(vault: Path, tmp_path: Path) -> Settings:
     s.vault.path = vault
     s.graph.path = tmp_path / "data" / "graph.gpickle"
     s.graph.manifest_path = tmp_path / "data" / "manifest.json"
+    s.feedback.db_path = tmp_path / "data" / "state.db"
     return s
 
 
@@ -69,7 +75,7 @@ def _ingest(settings: Settings, graph_store: GraphStore) -> None:
 
 
 def _edge_weight(store: GraphStore, src: str, dst: str) -> float:
-    data = store.graph[f"note::{src}"][f"note::{dst}"]
+    data = store.graph[f"note::{_u(src)}"][f"note::{_u(dst)}"]
     return max(float(d.get("weight", 1.0)) for d in data.values())
 
 
@@ -79,12 +85,12 @@ def test_editing_a_note_keeps_inbound_wikilinks_from_other_notes(
     """Editing B used to delete A's link to B until A was re-ingested too."""
     store = GraphStore(path=settings.graph.path)
     _ingest(settings, store)
-    assert store.graph.has_edge("note::A.md", "note::B.md")
+    assert store.graph.has_edge(f"note::{_u('A.md')}", f"note::{_u('B.md')}")
 
     (vault / "B.md").write_text("# B\n\nRevised thoughts.\n", encoding="utf-8")
     _ingest(settings, store)
 
-    assert store.graph.has_edge("note::A.md", "note::B.md")
+    assert store.graph.has_edge(f"note::{_u('A.md')}", f"note::{_u('B.md')}")
 
 
 def test_editing_a_note_preserves_weights_learned_on_its_own_edges(
@@ -92,7 +98,7 @@ def test_editing_a_note_preserves_weights_learned_on_its_own_edges(
 ):
     store = GraphStore(path=settings.graph.path)
     _ingest(settings, store)
-    apply_selection(store, seed_note_path="A.md", selected_note_path="B.md")
+    apply_selection(store, seed_note_uuid=_u("A.md"), selected_note_uuid=_u("B.md"))
     store.save()
     reinforced = _edge_weight(store, "A.md", "B.md")
     assert reinforced > 1.0
@@ -111,7 +117,7 @@ def test_editing_a_note_preserves_weights_learned_on_inbound_edges(
     """Editing the *target* of a reinforced edge must not reset it either."""
     store = GraphStore(path=settings.graph.path)
     _ingest(settings, store)
-    apply_selection(store, seed_note_path="A.md", selected_note_path="B.md")
+    apply_selection(store, seed_note_uuid=_u("A.md"), selected_note_uuid=_u("B.md"))
     store.save()
     reinforced = _edge_weight(store, "A.md", "B.md")
 
@@ -130,7 +136,7 @@ def test_editing_a_note_still_replaces_its_vectors(settings: Settings, vault: Pa
     vector_store = FakeVectorStore()
     ingest_vault(settings, FakeEmbedder(), vector_store, store)
 
-    assert "A.md" in vector_store.deleted
+    assert _u("A.md") in vector_store.deleted
     assert vector_store.upserted  # and re-added
 
 
@@ -143,7 +149,7 @@ def test_deleting_a_note_still_removes_it_from_the_graph(
     (vault / "B.md").unlink()
     _ingest(settings, store)
 
-    assert "note::B.md" not in store.graph
+    assert f"note::{_u('B.md')}" not in store.graph
 
 
 def test_deleting_a_notes_target_currently_loses_the_inbound_edge(
@@ -167,8 +173,8 @@ def test_deleting_a_notes_target_currently_loses_the_inbound_edge(
     (vault / "B.md").unlink()
     _ingest(settings, store)
 
-    assert list(store.graph.out_edges("note::A.md")) == [("note::A.md", "tag::memory")]
-    assert "note::B" not in store.graph  # what a full rebuild would have created
+    assert list(store.graph.out_edges(f"note::{_u('A.md')}")) == [(f"note::{_u('A.md')}", "tag::memory")]
+    assert "dangling::B" not in store.graph  # what a full rebuild would have created
 
 
 def test_ingest_note_keeps_inbound_links_when_recapturing(
@@ -190,7 +196,7 @@ def test_ingest_note_keeps_inbound_links_when_recapturing(
         parse_note(vault / "B.md", vault),
     )
 
-    assert store.graph.has_edge("note::A.md", "note::B.md")
+    assert store.graph.has_edge(f"note::{_u('A.md')}", f"note::{_u('B.md')}")
 
 
 def test_ingest_note_preserves_learned_weights(settings: Settings, vault: Path):
@@ -199,7 +205,7 @@ def test_ingest_note_preserves_learned_weights(settings: Settings, vault: Path):
 
     store = GraphStore(path=settings.graph.path)
     _ingest(settings, store)
-    apply_selection(store, seed_note_path="A.md", selected_note_path="B.md")
+    apply_selection(store, seed_note_uuid=_u("A.md"), selected_note_uuid=_u("B.md"))
     reinforced = _edge_weight(store, "A.md", "B.md")
     assert reinforced > 1.0
 
@@ -224,4 +230,4 @@ def test_removing_a_wikilink_from_a_note_drops_the_edge(
     (vault / "A.md").write_text("# A\n\nNo links now.\n\n#memory\n", encoding="utf-8")
     _ingest(settings, store)
 
-    assert not store.graph.has_edge("note::A.md", "note::B.md")
+    assert not store.graph.has_edge(f"note::{_u('A.md')}", f"note::{_u('B.md')}")

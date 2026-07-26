@@ -178,8 +178,8 @@ def _render_sources(
         def _apply() -> str:
             res = apply_selection(
                 ctx.graph_store,
-                seed_note_path=entry.get("seed_note_path") or entry.get("note_path"),
-                selected_note_path=entry.get("note_path"),
+                seed_note_uuid=entry.get("seed_note_uuid") or entry.get("note_uuid"),
+                selected_note_uuid=entry.get("note_uuid"),
             )
             ctx.graph_store.save()
             ctx.feedback_store.attach_signal(
@@ -187,6 +187,7 @@ def _render_sources(
                 "candidate_selected",
                 selected_rank=rank,
                 selected_chunk_id=entry.get("chunk_id"),
+                selected_note_uuid=entry.get("note_uuid"),
                 selected_note_path=entry.get("note_path"),
             )
             if res.edges_reinforced == 0:

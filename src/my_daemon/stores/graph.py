@@ -10,14 +10,25 @@ from pathlib import Path
 import networkx as nx
 
 from my_daemon.models import GraphStats, Note
+from my_daemon.vault.identity import effective_uuid
 
 
 def _tag_node(tag: str) -> str:
     return f"tag::{tag}"
 
 
-def _note_node(rel_path: str) -> str:
-    return f"note::{rel_path}"
+def _dangling_node(target: str) -> str:
+    """A wikilink target with no note behind it. Its own namespace, because it
+    has no identity to key on and must never collide with a real note."""
+
+    return f"dangling::{target}"
+
+
+def _note_node(note_uuid: str) -> str:
+    """Note nodes are keyed by *identity*, so a rename or a folder move keeps
+    the node — and every learned edge weight on it — exactly where it was."""
+
+    return f"note::{note_uuid}"
 
 
 class GraphStore:
@@ -48,22 +59,29 @@ class GraphStore:
             pickle.dump(self.graph, fh)
 
     def add_note(self, note: Note, chunk_ids: list[str]) -> None:
-        node = _note_node(note.relative_path)
+        node = _note_node(effective_uuid(note))
         self.graph.add_node(
             node,
             type="note",
             title=note.title,
+            # Carried so reports can render prose without a registry lookup.
+            rel_path=note.relative_path,
             mtime=note.mtime.isoformat(),
             chunk_ids=chunk_ids,
         )
         # If this node was previously a wikilink placeholder, promote it now.
         self.graph.nodes[node].pop("dangling", None)
 
-        for target in note.wikilinks:
-            target_node = _note_node(target)
+        for target_uuid in note.wikilink_uuids:
+            target_node = _note_node(target_uuid)
             if target_node not in self.graph:
-                # Dangling wikilinks become placeholder note nodes — keeps the graph
-                # complete, and a later ingest can fill the target in.
+                self.graph.add_node(target_node, type="note", title=target_uuid)
+            self.graph.add_edge(node, target_node, kind="wikilink", weight=1.0)
+
+        for target in note.dangling_wikilinks:
+            # Keeps the graph complete: "notes you keep meaning to write".
+            target_node = _dangling_node(target)
+            if target_node not in self.graph:
                 self.graph.add_node(target_node, type="note", title=target, dangling=True)
             self.graph.add_edge(node, target_node, kind="wikilink", weight=1.0)
 
@@ -91,7 +109,7 @@ class GraphStore:
         1.0 — it genuinely left the set.
         """
 
-        node = _note_node(note.relative_path)
+        node = _note_node(effective_uuid(note))
         if node not in self.graph:
             self.add_note(note, chunk_ids)
             return
@@ -100,14 +118,18 @@ class GraphStore:
             node,
             type="note",
             title=note.title,
+            rel_path=note.relative_path,
             mtime=note.mtime.isoformat(),
             chunk_ids=chunk_ids,
         )
         self.graph.nodes[node].pop("dangling", None)
 
         desired: dict[tuple[str, str], str] = {
-            (_note_node(target), "wikilink"): target for target in note.wikilinks
+            (_note_node(u), "wikilink"): u for u in note.wikilink_uuids
         }
+        desired.update(
+            {(_dangling_node(t), "wikilink"): t for t in note.dangling_wikilinks}
+        )
         desired.update({(_tag_node(tag), "tag"): tag for tag in note.tags})
 
         existing: dict[tuple[str, str], list] = {}
@@ -129,26 +151,28 @@ class GraphStore:
                 continue  # survives the diff — its learned weight stays as-is
             dst, kind = slot
             if dst not in self.graph:
-                if kind == "wikilink":
+                if kind != "wikilink":
+                    self.graph.add_node(dst, type="tag", title=label)
+                elif dst.startswith("dangling::"):
                     self.graph.add_node(dst, type="note", title=label, dangling=True)
                 else:
-                    self.graph.add_node(dst, type="tag", title=label)
+                    self.graph.add_node(dst, type="note", title=label)
             self.graph.add_edge(node, dst, kind=kind, weight=1.0)
 
-    def remove_note(self, rel_path: str) -> None:
-        node = _note_node(rel_path)
+    def remove_note(self, note_uuid: str) -> None:
+        node = _note_node(note_uuid)
         if node in self.graph:
             self.graph.remove_node(node)
 
-    def chunk_ids_for(self, rel_path: str) -> list[str]:
-        node = _note_node(rel_path)
+    def chunk_ids_for(self, note_uuid: str) -> list[str]:
+        node = _note_node(note_uuid)
         if node not in self.graph:
             return []
         return list(self.graph.nodes[node].get("chunk_ids", []))
 
     def neighbors_within(
         self,
-        rel_path: str,
+        note_uuid: str,
         depth: int,
         *,
         weighted: bool = False,
@@ -164,7 +188,7 @@ class GraphStore:
         can't pull a chunk in from arbitrarily far away.
         """
 
-        start = _note_node(rel_path)
+        start = _note_node(note_uuid)
         if start not in self.graph:
             return {}
 
@@ -221,7 +245,7 @@ class GraphStore:
             notes_only[rel] = dist
         return notes_only
 
-    def shortest_note_path(self, rel_from: str, rel_to: str) -> list[str] | None:
+    def shortest_note_path(self, uuid_from: str, uuid_to: str) -> list[str] | None:
         """Return the shortest hop path between two notes as a list of node ids.
 
         Used by ``retrieval.weights.apply_selection`` to walk the edges it
@@ -229,7 +253,7 @@ class GraphStore:
         no path exists.
         """
 
-        a, b = _note_node(rel_from), _note_node(rel_to)
+        a, b = _note_node(uuid_from), _note_node(uuid_to)
         if a not in self.graph or b not in self.graph:
             return None
         ug = self.graph.to_undirected(as_view=True)

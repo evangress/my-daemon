@@ -64,6 +64,7 @@ class FeedbackStore:
         selected_rank: int | None = None,
         selected_chunk_id: str | None = None,
         selected_note_path: str | None = None,
+        selected_note_uuid: str | None = None,
     ) -> None:
         if self.read_only:
             raise RuntimeError("FeedbackStore is read-only")
@@ -75,7 +76,8 @@ class FeedbackStore:
                     signal_captured_at = ?,
                     selected_rank = ?,
                     selected_chunk_id = ?,
-                    selected_note_path = ?
+                    selected_note_path = ?,
+                    selected_note_uuid = ?
                 WHERE id = ?
                 """,
                 (
@@ -84,6 +86,7 @@ class FeedbackStore:
                     selected_rank,
                     selected_chunk_id,
                     selected_note_path,
+                    selected_note_uuid,
                     event_id,
                 ),
             )
@@ -147,4 +150,5 @@ def _row_to_event(row: sqlite3.Row) -> FeedbackEvent:
         selected_rank=raw.get("selected_rank"),
         selected_chunk_id=raw.get("selected_chunk_id"),
         selected_note_path=raw.get("selected_note_path"),
+        selected_note_uuid=raw.get("selected_note_uuid"),
     )

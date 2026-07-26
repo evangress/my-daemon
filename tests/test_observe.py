@@ -27,6 +27,7 @@ from my_daemon.retrieval.weights import apply_selection
 from my_daemon.stores import AgentStateStore, FeedbackStore, GraphStore
 from my_daemon.vault import VaultReader
 from my_daemon.vault.chunker import chunk_note
+from my_daemon.vault.identity import derive_path_uuid as _u
 
 # ---------------------------------------------------------------------------
 # fixtures / helpers
@@ -83,11 +84,11 @@ def _populate_live_state(settings: Settings, vault_root: Path) -> None:
     # Reinforce one edge and back-date its stamp so decay has work to do.
     apply_selection(
         graph,
-        seed_note_path="Designing AI Memory.md",
-        selected_note_path="Pullman Daemons.md",
+        seed_note_uuid=_u("Designing AI Memory.md"),
+        selected_note_uuid=_u("Pullman Daemons.md"),
     )
     old_iso = (datetime.now(UTC) - timedelta(days=60)).isoformat()
-    edge = graph.graph["note::Designing AI Memory.md"]["note::Pullman Daemons.md"]
+    edge = graph.graph[f"note::{_u('Designing AI Memory.md')}"][f"note::{_u('Pullman Daemons.md')}"]
     for d in edge.values():
         d["last_reinforced_at"] = old_iso
     graph.save()
@@ -102,7 +103,9 @@ def _populate_live_state(settings: Settings, vault_root: Path) -> None:
                     {
                         "chunk_id": "stub",
                         "note_path": "Pullman Daemons.md",
+                        "note_uuid": _u("Pullman Daemons.md"),
                         "seed_note_path": "Designing AI Memory.md",
+                        "seed_note_uuid": _u("Designing AI Memory.md"),
                     }
                 ]
             },
@@ -112,7 +115,7 @@ def _populate_live_state(settings: Settings, vault_root: Path) -> None:
     )
     feedback.attach_signal(
         eid, "candidate_selected",
-        selected_rank=1, selected_chunk_id="stub", selected_note_path="Pullman Daemons.md",
+        selected_rank=1, selected_chunk_id="stub", selected_note_uuid=_u("Pullman Daemons.md"),
     )
 
 
@@ -231,8 +234,8 @@ def test_observe_decays_live_graph(
     feedback = FeedbackStore(db_path=settings.feedback.db_path)
     graph = GraphStore(path=settings.graph.path)
     graph.load()
-    pre_edge = next(iter(graph.graph["note::Designing AI Memory.md"][
-        "note::Pullman Daemons.md"].values()))
+    pre_edge = next(iter(graph.graph[f"note::{_u('Designing AI Memory.md')}"][
+        f"note::{_u('Pullman Daemons.md')}"].values()))
     pre_weight = pre_edge["weight"]
     assert pre_weight > 1.0  # populated_live_state reinforced it
 
@@ -246,8 +249,8 @@ def test_observe_decays_live_graph(
     # Reload from disk to confirm decay actually persisted.
     reloaded = GraphStore(path=settings.graph.path)
     reloaded.load()
-    post_edge = next(iter(reloaded.graph["note::Designing AI Memory.md"][
-        "note::Pullman Daemons.md"].values()))
+    post_edge = next(iter(reloaded.graph[f"note::{_u('Designing AI Memory.md')}"][
+        f"note::{_u('Pullman Daemons.md')}"].values()))
     assert post_edge["weight"] < pre_weight
 
 

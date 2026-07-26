@@ -7,6 +7,7 @@ from collections.abc import Iterator
 from pathlib import Path
 
 from my_daemon.models import Note
+from my_daemon.vault.identity import effective_uuid
 from my_daemon.vault.parser import parse_note
 
 
@@ -37,22 +38,43 @@ class VaultReader:
             files.append(p)
         return sorted(files)
 
-    def _build_title_index(self, notes: list[Note]) -> dict[str, str]:
-        index: dict[str, str] = {}
+    def _build_title_index(self, notes: list[Note]) -> dict[str, tuple[str, str]]:
+        """Lookup key -> (relative_path, note_uuid) for every resolvable alias."""
+
+        index: dict[str, tuple[str, str]] = {}
         for n in notes:
-            index.setdefault(n.title.lower(), n.relative_path)
-            index.setdefault(n.relative_path.lower(), n.relative_path)
+            entry = (n.relative_path, effective_uuid(n))
+            index.setdefault(n.title.lower(), entry)
+            index.setdefault(n.relative_path.lower(), entry)
             # also index by stem so [[Foo]] matches Foo.md regardless of dir
             stem = n.relative_path.rsplit("/", 1)[-1].removesuffix(".md").lower()
-            index.setdefault(stem, n.relative_path)
+            index.setdefault(stem, entry)
         return index
 
-    def _resolve_wikilinks(self, note: Note, index: dict[str, str]) -> Note:
-        resolved: list[str] = []
+    def _resolve_wikilinks(self, note: Note, index: dict[str, tuple[str, str]]) -> Note:
+        """Split each link into a display target plus either an identity or a
+        dangling marker. A target with no note has no uuid to borrow."""
+
+        display: list[str] = []
+        uuids: list[str] = []
+        dangling: list[str] = []
         for target in note.wikilinks:
             key = target.lower().removesuffix(".md")
-            resolved.append(index.get(key, target))
-        return note.model_copy(update={"wikilinks": resolved})
+            hit = index.get(key)
+            if hit is None:
+                display.append(target)
+                dangling.append(target)
+            else:
+                rel_path, note_uuid = hit
+                display.append(rel_path)
+                uuids.append(note_uuid)
+        return note.model_copy(
+            update={
+                "wikilinks": display,
+                "wikilink_uuids": uuids,
+                "dangling_wikilinks": dangling,
+            }
+        )
 
     def read_all(self) -> Iterator[Note]:
         """Two-pass: parse every file, build the title index, yield resolved notes."""

@@ -131,3 +131,33 @@ lives in, since the user only ever needs to back up *one* state file).
   That's why the first chat send takes a few seconds and the rest are fast.
 - **Streaming synthesis in the chat.** Felt cold without it. The CLI is
   fine being one-shot.
+
+
+## Identity: one key across three stores
+
+Every note carries a `uuid:` in its frontmatter (see
+`daemon migrate assign-uuids`). That UUID is the join key across all three
+stores, and each store owns a different *aspect* of the note:
+
+| Store | Aspect | Keyed by |
+|---|---|---|
+| SQLite `notes` | identity — path, hashes, tags, status | `uuid` |
+| Qdrant | semantics — chunk embeddings | payload `note_uuid` |
+| networkx | relations — wikilinks, tags, learned weights | node `note::<uuid>` |
+
+**Identity and display are deliberately separate.** `note_path` travels
+alongside `note_uuid` on every chunk and stays in the Qdrant payload, because
+prompts, citations, GUI source lists, and observer letters all render it as
+prose — a raw UUID would make the daemon's own writing unreadable. Only joins
+use the UUID.
+
+Chunk ids derive from the note's UUID rather than its path, so a rename leaves
+every chunk id untouched. Ingest exploits that: a note whose body hash is
+unchanged but whose path moved is a **rename**, handled with a single Qdrant
+`set_payload` call — no chunking, no embedding, no graph churn, and no loss of
+the edge weights the adaptive loop has learned.
+
+Notes the daemon may not write to (`daemon: ignore`, read-only, unparseable)
+fall back to a deterministic path-derived UUID. They still participate in
+everything, but their identity is **not** stable across renames — the registry
+records which notes are in this state, and `daemon status` reports the count.

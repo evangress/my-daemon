@@ -269,15 +269,16 @@ def select(
         raise typer.Exit(code=1)
 
     picked = ranked[rank - 1]
-    seed_note = picked.get("seed_note_path") or picked.get("note_path")
-    selected_note = picked.get("note_path")
+    seed_note = picked.get("seed_note_uuid") or picked.get("note_uuid")
+    selected_note = picked.get("note_uuid")
 
     graph_store = _build_graph_store(s)
     graph_store.load()
     result = apply_selection(
         graph_store,
-        seed_note_path=seed_note,
-        selected_note_path=selected_note,
+        seed_note_uuid=seed_note,
+        selected_note_uuid=selected_note,
+        selected_note_path=picked.get("note_path"),
     )
     graph_store.save()
 
@@ -286,7 +287,8 @@ def select(
         "candidate_selected",
         selected_rank=rank,
         selected_chunk_id=picked.get("chunk_id"),
-        selected_note_path=selected_note,
+        selected_note_uuid=selected_note,
+        selected_note_path=picked.get("note_path"),
     )
 
     console.print(

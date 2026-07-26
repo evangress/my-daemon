@@ -20,6 +20,7 @@ from my_daemon.retrieval.weights import apply_selection
 from my_daemon.stores import FeedbackStore, GraphStore, create_snapshot
 from my_daemon.vault import VaultReader
 from my_daemon.vault.chunker import chunk_note
+from my_daemon.vault.identity import derive_path_uuid as _u
 
 # ---------------------------------------------------------------------------
 # fixtures / helpers
@@ -106,8 +107,8 @@ def test_compute_report_warm_edges_surface_reinforcement(
     for _ in range(4):
         apply_selection(
             store,
-            seed_note_path="Designing AI Memory.md",
-            selected_note_path="Pullman Daemons.md",
+            seed_note_uuid=_u("Designing AI Memory.md"),
+            selected_note_uuid=_u("Pullman Daemons.md"),
         )
 
     report = compute_report(store, warm_threshold=1.5)
@@ -147,6 +148,7 @@ def test_compute_report_finds_dangling_targets(tmp_path: Path) -> None:
             mtime=datetime(2026, 5, 17, tzinfo=UTC),
             word_count=10,
             wikilinks=wikilinks,
+            dangling_wikilinks=wikilinks,
             tags=[],
         )
 
@@ -191,7 +193,9 @@ def _seed_live_for_simulation(settings: Settings, vault_root: Path) -> int:
                     {
                         "chunk_id": "stub-chunk-id",
                         "note_path": "Pullman Daemons.md",
+                        "note_uuid": _u("Pullman Daemons.md"),
                         "seed_note_path": "Designing AI Memory.md",
+                        "seed_note_uuid": _u("Designing AI Memory.md"),
                         "score": 0.42,
                         "graph_distance": 1,
                     }
@@ -208,7 +212,7 @@ def _seed_live_for_simulation(settings: Settings, vault_root: Path) -> int:
         "candidate_selected",
         selected_rank=1,
         selected_chunk_id="stub-chunk-id",
-        selected_note_path="Pullman Daemons.md",
+        selected_note_uuid=_u("Pullman Daemons.md"),
     )
     return event_id
 
@@ -286,7 +290,9 @@ def test_simulate_evolution_skips_pre_lookback_events(
                     {
                         "chunk_id": "x",
                         "note_path": "Pullman Daemons.md",
+                        "note_uuid": _u("Pullman Daemons.md"),
                         "seed_note_path": "Designing AI Memory.md",
+                        "seed_note_uuid": _u("Designing AI Memory.md"),
                     }
                 ]
             },
@@ -296,7 +302,7 @@ def test_simulate_evolution_skips_pre_lookback_events(
     )
     feedback.attach_signal(
         old_id, "candidate_selected",
-        selected_rank=1, selected_chunk_id="x", selected_note_path="Pullman Daemons.md",
+        selected_rank=1, selected_chunk_id="x", selected_note_uuid=_u("Pullman Daemons.md"),
     )
 
     bundle = create_snapshot(settings, include_qdrant=False)
