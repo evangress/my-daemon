@@ -225,10 +225,25 @@ def query(
         table.add_row(str(i), f"{rc.combined_score:.3f}", f"{rc.chunk.note_path}\n› {heading}", preview)
     console.print(table)
 
+    if response.memories and s.memory.show_to_user:
+        lines = [
+            f"[dim]{m.ts.date().isoformat()}[/dim]  {m.text}\n"
+            f"    [dim]same notes: {', '.join(m.shared_notes) or '—'}[/dim]"
+            for m in response.memories
+        ]
+        console.print(
+            Panel(
+                "\n".join(lines),
+                title="You've been here before",
+                border_style="magenta",
+            )
+        )
+
     if verbose:
         console.log(
             f"seeds={len(response.retrieval.seeds)} expanded={len(response.retrieval.expanded)} "
-            f"latency_ms={response.latency_ms} feedback_id={response.feedback_event_id}"
+            f"latency_ms={response.latency_ms} feedback_id={response.feedback_event_id} "
+            f"memories={len(response.memories)}"
         )
 
 

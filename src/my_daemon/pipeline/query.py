@@ -3,8 +3,9 @@
 
 from __future__ import annotations
 
+import logging
 import time
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import UTC, datetime
 
 from my_daemon.config import Settings
@@ -12,9 +13,13 @@ from my_daemon.embeddings import Embedder, SparseEmbedder
 from my_daemon.llm import LLMClient
 from my_daemon.models import FeedbackEvent, RetrievalResult
 from my_daemon.pipeline.activation import ActivationRecorder
+from my_daemon.pipeline.recall import RecalledMemory, recall_related
 from my_daemon.retrieval import RetrievalOrchestrator
 from my_daemon.stores import FeedbackStore, GraphStore, VectorStore
 from my_daemon.stores.activations import ActivationLedger
+from my_daemon.stores.registry import NoteRegistry
+
+log = logging.getLogger(__name__)
 
 
 @dataclass
@@ -23,6 +28,10 @@ class QueryResponse:
     retrieval: RetrievalResult
     feedback_event_id: int
     latency_ms: int
+    # Past questions that lit up the same notes. Populated whenever recall is
+    # enabled, regardless of whether they were injected into the prompt —
+    # `memory.show_to_user` decides whether a surface renders them.
+    memories: list[RecalledMemory] = field(default_factory=list)
 
 
 def build_retrieval_summary(result: RetrievalResult) -> dict:
@@ -85,6 +94,7 @@ class QueryEngine:
         self.s = settings
         self.surface = surface
         self.ledger = ActivationLedger(db_path=settings.feedback.db_path)
+        self.registry = NoteRegistry(db_path=settings.feedback.db_path)
         self.orchestrator = RetrievalOrchestrator(
             settings, embedder, vector_store, graph_store,
             sparse_embedder=sparse_embedder,
@@ -96,7 +106,16 @@ class QueryEngine:
     def ask(self, query: str, synthesize: bool = True) -> QueryResponse:
         t0 = time.perf_counter()
         result = self.orchestrator.retrieve(query, surface=self.surface)
-        answer = self.llm.synthesize(query, result.ranked) if synthesize else ""
+        memories = self._recall(result)
+        answer = (
+            self.llm.synthesize(
+                query,
+                result.ranked,
+                memories if self.s.memory.inject_into_context else None,
+            )
+            if synthesize
+            else ""
+        )
         latency_ms = int((time.perf_counter() - t0) * 1000)
 
         event_id = self.feedback.log(
@@ -113,4 +132,25 @@ class QueryEngine:
             # is the answer + signal record. They are not the same event — a
             # Hermes prefetch produces no answer at all.
             self.ledger.link_feedback(result.query_uid, event_id)
-        return QueryResponse(answer=answer, retrieval=result, feedback_event_id=event_id, latency_ms=latency_ms)
+        return QueryResponse(
+            answer=answer,
+            retrieval=result,
+            feedback_event_id=event_id,
+            latency_ms=latency_ms,
+            memories=memories,
+        )
+
+    def _recall(self, result: RetrievalResult) -> list[RecalledMemory]:
+        """Never let a recall failure break the query it was enriching."""
+        if not result.query_uid or not self.s.memory.recall_enabled:
+            return []
+        try:
+            row = self.ledger.get(result.query_uid)
+            if row is None:
+                return []
+            return recall_related(
+                self.ledger, self.registry, query_id=int(row["id"]), settings=self.s
+            )
+        except Exception:  # noqa: BLE001
+            log.warning("recall failed", exc_info=True)
+            return []

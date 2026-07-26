@@ -163,6 +163,23 @@ class HermesConfig(BaseModel):
     mcp_auth_token_env: str = "MY_DAEMON_MCP_TOKEN"
 
 
+class MemoryConfig(BaseModel):
+    """Fingerprint recall — "you've been here before".
+
+    Injection and display toggle independently on purpose: enriching the
+    model's context and showing you the memory are different acts, and you
+    may want one without the other.
+    """
+
+    recall_enabled: bool = True
+    inject_into_context: bool = True
+    show_to_user: bool = True
+    min_score: float = 0.15
+    top_k: int = 3
+    lookback_days: int = 180
+    max_df_ratio: float = 0.25
+
+
 class FeedbackConfig(BaseModel):
     db_path: Path = Path("./data/feedback.db")
 
@@ -223,6 +240,7 @@ class Settings(BaseSettings):
     graph: GraphConfig = Field(default_factory=GraphConfig)
     retrieval: RetrievalConfig = Field(default_factory=RetrievalConfig)
     llm: LLMConfig = Field(default_factory=LLMConfig)
+    memory: MemoryConfig = Field(default_factory=MemoryConfig)
     feedback: FeedbackConfig = Field(default_factory=FeedbackConfig)
     snapshot: SnapshotConfig = Field(default_factory=SnapshotConfig)
     consolidation: ConsolidationConfig = Field(default_factory=ConsolidationConfig)
