@@ -160,7 +160,7 @@ def test_recall_shape_and_feedback_id(tmp_path: Path, vault_root: Path) -> None:
             latency_ms=5,
         )
     )
-    core.engine.ask = lambda q, synthesize=False: QueryResponse(  # type: ignore[method-assign]
+    core.engine.ask = lambda q, synthesize=False, surface=None: QueryResponse(  # type: ignore[method-assign]
         answer="", retrieval=_fake_retrieval(), feedback_event_id=eid, latency_ms=5,
     )
 
@@ -177,7 +177,7 @@ def test_recall_block_is_cited_and_budget_capped(tmp_path: Path, vault_root: Pat
     vault = _tmp_vault(tmp_path, vault_root)
     settings = _settings(tmp_path, vault)
     core = _core(settings, vault)
-    core.engine.ask = lambda q, synthesize=False: QueryResponse(  # type: ignore[method-assign]
+    core.engine.ask = lambda q, synthesize=False, surface=None: QueryResponse(  # type: ignore[method-assign]
         answer="", retrieval=_fake_retrieval(two=True), feedback_event_id=1, latency_ms=5,
     )
 

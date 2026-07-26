@@ -35,7 +35,7 @@ from my_daemon.pipeline.ingest import ingest_note
 from my_daemon.pipeline.query import QueryEngine, build_retrieval_summary
 from my_daemon.retrieval.weights import apply_selection
 from my_daemon.stores import FeedbackStore, GraphStore, VectorStore
-from my_daemon.stores.activations import ActivationLedger
+from my_daemon.stores.activations import HERMES_RECALL_SURFACE, ActivationLedger
 from my_daemon.stores.registry import NoteRegistry
 from my_daemon.vault.identity import derive_path_uuid
 from my_daemon.vault.parser import parse_note
@@ -101,7 +101,7 @@ class DaemonCore:
         self.engine = QueryEngine(
             settings, embedder, vector_store, graph_store, feedback_store, llm_client,
             sparse_embedder=sparse_embedder,
-            surface="hermes_recall",
+            surface=HERMES_RECALL_SURFACE,
         )
         self._write_lock = threading.Lock()
 
@@ -111,16 +111,28 @@ class DaemonCore:
     def write_enabled(self) -> bool:
         return self.s.hermes.allow_write_back
 
-    def recall(self, query: str, *, top_k: int | None = None, synthesize: bool = False) -> dict:
+    def recall(
+        self,
+        query: str,
+        *,
+        top_k: int | None = None,
+        synthesize: bool = False,
+        surface: str | None = None,
+    ) -> dict:
         """Retrieve (and optionally synthesize) for ``query``.
 
         Returns the ``feedback_event_id`` the retrieval logged plus ranked
         candidates carrying ``seed_note_path`` — exactly what ``endorse`` needs
         to reinforce the graph path the agent ends up leaning on.
+
+        ``surface`` names *who asked*. It defaults to the engine's
+        ``hermes_recall`` — a deliberate lookup — so direct callers keep today's
+        behaviour; Hermes's per-turn prefetch passes the ambient surface instead
+        so it never counts as a question the user asked.
         """
 
         limit = top_k or self.s.hermes.recall_top_k
-        resp = self.engine.ask(query, synthesize=synthesize)
+        resp = self.engine.ask(query, synthesize=synthesize, surface=surface)
         out: dict = {
             "feedback_event_id": resp.feedback_event_id,
             "latency_ms": resp.latency_ms,
@@ -131,12 +143,17 @@ class DaemonCore:
         return out
 
     def recall_block(
-        self, query: str, *, budget_chars: int, top_k: int | None = None
+        self,
+        query: str,
+        *,
+        budget_chars: int,
+        top_k: int | None = None,
+        surface: str | None = None,
     ) -> RecallBlock:
         """Recall, then render a cited, size-capped markdown block for injection
         into ``prefetch()`` / ``system_prompt_block()``."""
 
-        data = self.recall(query, top_k=top_k, synthesize=False)
+        data = self.recall(query, top_k=top_k, synthesize=False, surface=surface)
         text = self._format_block(query, data["candidates"], budget_chars=budget_chars)
         return RecallBlock(
             text=text,

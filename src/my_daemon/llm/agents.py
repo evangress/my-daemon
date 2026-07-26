@@ -36,6 +36,22 @@ class AgentNotesPayload:
 
 
 @dataclass
+class LetterTheme:
+    """One emergent theme, flattened for the observer letter's prompt.
+
+    The dream phase mints these (cluster → reconcile → name) and the letter is
+    the only place the user meets them in prose, so the letter has to run
+    *after* clustering and receive them.
+    """
+
+    label: str
+    summary: str = ""
+    is_new: bool = False
+    query_count: int = 0
+    note_titles: list[str] = field(default_factory=list)
+
+
+@dataclass
 class LinkSuggestion:
     target: str       # target note title
     anchor: str       # exact substring of the source body to wrap as [[target|anchor]]
@@ -298,6 +314,7 @@ def update_memory(
     for n in recent_notes:
         excerpt = n.body[:note_excerpt_chars].strip()
         note_blocks.append(f"### {n.title}  ({n.relative_path})\n{excerpt}")
+    recent_chats = answered_only(recent_chats)
     chat_blocks: list[str] = []
     for ev in recent_chats:
         chat_blocks.append(
@@ -336,12 +353,14 @@ You will be given:
 - A structural snapshot of the user's vault graph: communities the algorithm found, notes that bridge those communities, "load-bearing" links whose removal would disconnect parts of the graph, orphan notes (poorly connected), dangling wikilink targets (notes-they-keep-meaning-to-write), and the warmest edges (the ones that have been most reinforced by the user's recent picks).
 - A weight-evolution preview: which edges *would* shift if the recent feedback were replayed against the snapshot.
 - A short list of the user's most recent chats with the daemon.
+- The **emergent themes**: clusters of the user's own questions that kept landing on the same notes, each already named. Some are new this run; some are recurring, and a recurring theme is a concern the user keeps returning to. A churn number says how settled the themes are overall.
 - The bodies of up to a handful of your own prior letters, for continuity.
 
 Write a single-page **second-person markdown letter** that interprets these patterns *semantically*. Treat the structural numbers as evidence, not subject matter — the user already saw the JSON. Your job is to translate the numbers into things like "your daemon-related notes have started pulling Obsidian-tooling notes into the same conversation" or "the journal entries about Austin keep being the bridge between projects and relationships — they are doing structural work in your second brain."
 
 Rules:
 - Do not invent. If a community's top tags don't suggest a clear theme, name the uncertainty ("a cluster I can't yet read") instead of pretending.
+- Weave the emergent themes into the letter by name — they are the closest thing you have to *what the user has been wondering about*, as opposed to what their files look like. Say plainly which ones are new and which keep coming back. If churn is high (above ~0.5) or a theme appeared only this run, say the reading is provisional.
 - Address the user directly. Warm, but not saccharine. Not a corporate report.
 - Name *uncertainty* when evidence is thin: "this is from one week of selections, so take it as a hunch, not a verdict."
 - Continuity: when a prior letter said something that's still true (or no longer true), acknowledge it explicitly. Avoid restating it verbatim.
@@ -428,7 +447,20 @@ def _render_evolution(evolution: WeightEvolutionReport | None) -> str:
     return "\n".join(lines)
 
 
+def answered_only(events: list[FeedbackEvent]) -> list[FeedbackEvent]:
+    """Drop feedback rows that carry no answer.
+
+    A row with an empty answer is a *retrieval* record, not a conversation: an
+    ambient Hermes prefetch, or a retrieval-only tool call. Rendering them as
+    "recent chats" pads the observer's and reflector's prompts with turns that
+    never happened, and Hermes generates one per turn.
+    """
+
+    return [ev for ev in events if (ev.answer or "").strip()]
+
+
 def _render_recent_chats(recent: list[FeedbackEvent], *, limit: int = 8) -> str:
+    recent = answered_only(recent)
     if not recent:
         return "(no recent chats)"
     chunks: list[str] = []
@@ -438,6 +470,24 @@ def _render_recent_chats(recent: list[FeedbackEvent], *, limit: int = 8) -> str:
             f"    A: {(ev.answer or '').strip()[:300]}"
         )
     return "\n".join(chunks)
+
+
+def _render_themes(themes: list[LetterTheme], *, churn: float | None = None) -> str:
+    if not themes:
+        return "(no emergent themes yet)"
+    lines: list[str] = []
+    if churn is not None:
+        lines.append(
+            f"Theme churn: {churn:.2f} (0 = the same themes as last run, "
+            "1 = nothing carried over)."
+        )
+    for t in themes:
+        age = "new this run" if t.is_new else "recurring"
+        notes = ", ".join(t.note_titles[:6]) or "(no resolvable notes)"
+        lines.append(f"- **{t.label}** — {age}, {t.query_count} question(s); notes: {notes}")
+        if t.summary:
+            lines.append(f"    {t.summary}")
+    return "\n".join(lines)
 
 
 def _render_prior_letters(letters: list[str]) -> str:
@@ -458,6 +508,8 @@ def observer_letter(
     recent_feedback: list[FeedbackEvent],
     prior_letters: list[str],
     snapshot_id: str,
+    themes: list[LetterTheme] | None = None,
+    theme_churn: float | None = None,
     max_communities: int = 8,
     model: str | None = None,
     max_tokens: int = 2400,
@@ -481,6 +533,8 @@ def observer_letter(
             "--- dangling wikilink targets ---\n" + _render_dangling(structural),
             "--- hypothetical weight evolution ---\n" + _render_evolution(evolution),
             "--- recent chats ---\n" + _render_recent_chats(recent_feedback),
+            "--- emergent themes (this run's clustering of your questions) ---\n"
+            + _render_themes(themes or [], churn=theme_churn),
             "--- prior letters (for continuity) ---\n" + _render_prior_letters(prior_letters),
             "Write the letter now. Markdown body only.",
         ]

@@ -24,7 +24,7 @@ from tkinter import filedialog, ttk
 import yaml
 from dotenv import set_key
 
-from my_daemon.paths import log_path
+from my_daemon.paths import CONFIG_FILENAME, find_config, log_path
 
 # Brand palette — hex approximations of the OKLCH values from THEME.md.
 # Tkinter doesn't support oklch(); these are the closest sRGB equivalents.
@@ -38,11 +38,6 @@ GOLD = "#E2B27E"        # human spark — focus / save success
 RULE = "#3A3A55"        # hairline borders
 ERROR = "#E37070"
 
-PROJECT_ROOT = Path.cwd()
-CONFIG_PATH = PROJECT_ROOT / "config.yaml"
-CONFIG_EXAMPLE = PROJECT_ROOT / "config.example.yaml"
-DOTENV_PATH = PROJECT_ROOT / ".env"
-
 ENV_KEY = "ANTHROPIC_API_KEY"
 
 # Windows Task Scheduler job name for the daily reflection run.
@@ -50,9 +45,39 @@ REFLECT_TASK_NAME = "MyDaemonReflect"
 REFLECT_TASK_TIME = "03:00"
 
 
+def config_path() -> Path:
+    """The config this window edits.
+
+    Resolved through the same search order the daemon itself uses, so the
+    window edits the file the daemon will read. Only when nothing exists
+    anywhere does it fall back to the current directory — i.e. the file
+    `daemon init` would have written.
+
+    Deliberately a function, not an import-time constant: the old
+    `PROJECT_ROOT = Path.cwd()` meant `daemon setup` wrote config.yaml into
+    whatever directory the launcher happened to start in.
+    """
+    found = find_config()
+    return found if found is not None else Path.cwd() / CONFIG_FILENAME
+
+
+def project_root() -> Path:
+    """Directory the config lives in — the anchor for its relative paths."""
+    return config_path().parent
+
+
+def _config_example() -> Path:
+    return project_root() / "config.example.yaml"
+
+
+def _dotenv_path() -> Path:
+    """`.env` sits beside the config, which is where `load_settings` reads it."""
+    return project_root() / ".env"
+
+
 def _load_yaml() -> dict:
     """Read config.yaml; fall back to config.example.yaml; finally an empty dict."""
-    for path in (CONFIG_PATH, CONFIG_EXAMPLE):
+    for path in (config_path(), _config_example()):
         if path.is_file():
             with path.open("r", encoding="utf-8") as fh:
                 return yaml.safe_load(fh) or {}
@@ -63,7 +88,9 @@ def _save_vault_path(vault_path: str) -> None:
     """Persist vault.path to config.yaml, preserving other settings."""
     data = _load_yaml()
     data.setdefault("vault", {})["path"] = vault_path
-    with CONFIG_PATH.open("w", encoding="utf-8") as fh:
+    target = config_path()
+    target.parent.mkdir(parents=True, exist_ok=True)
+    with target.open("w", encoding="utf-8") as fh:
         yaml.safe_dump(data, fh, sort_keys=False, default_flow_style=False)
 
 
@@ -75,8 +102,10 @@ def _persist_api_key(api_key: str) -> tuple[bool, str]:
     so anything launched from this process sees it without a restart.
     """
     # .env — handles quoting/escaping correctly.
-    DOTENV_PATH.touch(exist_ok=True)
-    set_key(str(DOTENV_PATH), ENV_KEY, api_key, quote_mode="never")
+    dotenv_path = _dotenv_path()
+    dotenv_path.parent.mkdir(parents=True, exist_ok=True)
+    dotenv_path.touch(exist_ok=True)
+    set_key(str(dotenv_path), ENV_KEY, api_key, quote_mode="never")
 
     os.environ[ENV_KEY] = api_key
 
@@ -103,7 +132,7 @@ def _persist_api_key(api_key: str) -> tuple[bool, str]:
 
 def _daemon_exe_path() -> Path:
     """Resolve the bundled daemon entry point inside the project's venv."""
-    return PROJECT_ROOT / ".venv" / "Scripts" / "daemon.exe"
+    return project_root() / ".venv" / "Scripts" / "daemon.exe"
 
 
 def _reflect_task_exists() -> bool:
@@ -114,6 +143,18 @@ def _reflect_task_exists() -> bool:
         capture_output=True, text=True, creationflags=0x08000000,
     )
     return res.returncode == 0
+
+
+def reflect_task_command(exe: Path, cfg: Path) -> str:
+    """The `/TR` string for the scheduled reflect job.
+
+    A Windows scheduled task starts in `system32`, and `schtasks` has no
+    working-directory switch outside XML task definitions. So the working
+    directory is made irrelevant instead: `--config` names the file
+    absolutely, and every relative state path in it anchors to *its* directory,
+    not the process CWD. That also puts `.env` (the API key) back in scope.
+    """
+    return f'"{exe}" --config "{cfg}" reflect'
 
 
 def _schedule_reflect_task() -> tuple[bool, str]:
@@ -129,7 +170,7 @@ def _schedule_reflect_task() -> tuple[bool, str]:
                 "schtasks", "/Create",
                 "/SC", "DAILY",
                 "/TN", REFLECT_TASK_NAME,
-                "/TR", f'"{exe}" reflect',
+                "/TR", reflect_task_command(exe, config_path()),
                 "/ST", REFLECT_TASK_TIME,
                 "/F",
             ],

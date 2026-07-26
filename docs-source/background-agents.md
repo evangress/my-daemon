@@ -129,6 +129,14 @@ to start a theme over.
 
 ## Scheduling
 
+Every scheduler starts the job in a directory you did not choose — cron in
+`$HOME`, Windows Task Scheduler in `system32`. A daemon that resolved
+`config.yaml` and `./data/...` against that directory would read an empty,
+phantom daemon and report success. So **name the config explicitly, or `cd`
+first.** Either is enough: relative paths inside a config are resolved against
+*that config's directory*, never the working directory. See
+[Configuration](configuration.md) for the full search order.
+
 ### Windows
 
 The `daemon setup` window has a checkbox: *"Run `daemon reflect` daily at
@@ -136,17 +144,40 @@ The `daemon setup` window has a checkbox: *"Run `daemon reflect` daily at
 under the hood. The task is named `MyDaemonReflect`; unchecking it on a
 subsequent save removes the task.
 
+The registered command names the config absolutely, because `schtasks` has no
+working-directory switch:
+
+```text
+"C:\path\to\my-daemon\.venv\Scripts\daemon.exe" --config "C:\path\to\my-daemon\config.yaml" reflect
+```
+
+If you register a task by hand, use the same shape.
+
 ### Linux / macOS
 
 ```cron
 # crontab -e
- 0 3 * * *  /path/to/my-daemon/.venv/bin/daemon reflect
-15 3 * * *  /path/to/my-daemon/.venv/bin/daemon extract
+ 0 3 * * *  cd /path/to/my-daemon && .venv/bin/daemon reflect
+15 3 * * *  cd /path/to/my-daemon && .venv/bin/daemon extract
 ```
 
 The 15-minute gap exists because `reflect` reads recent notes; running
 `extract` afterward lets the next reflection see the new `## Agent Notes`
 sections.
+
+The `cd` is not decoration — without it cron runs in `$HOME`, finds no
+`./config.yaml`, and the job exits 1 with a message naming every location it
+searched. If you would rather not depend on the working directory at all, name
+the config instead:
+
+```cron
+0 3 * * *  MY_DAEMON_CONFIG=/path/to/my-daemon/config.yaml /path/to/my-daemon/.venv/bin/daemon reflect
+```
+
+or equivalently `daemon --config /path/to/my-daemon/config.yaml reflect`.
+
+Either form also puts the `.env` beside that config back in scope, which is
+where `ANTHROPIC_API_KEY` lives — cron inherits almost no environment.
 
 ## Recommended rollout
 

@@ -104,9 +104,18 @@ class QueryEngine:
         self.feedback = feedback_store
         self.llm = llm_client
 
-    def ask(self, query: str, synthesize: bool = True) -> QueryResponse:
+    def ask(
+        self, query: str, synthesize: bool = True, *, surface: str | None = None
+    ) -> QueryResponse:
+        """``surface`` overrides the engine's default for this one call.
+
+        One engine serves both of Hermes's paths — the deliberate
+        ``mydaemon_recall`` tool and the per-turn ambient prefetch — and they
+        must not be recorded as the same kind of event.
+        """
+
         t0 = time.perf_counter()
-        result = self.orchestrator.retrieve(query, surface=self.surface)
+        result = self.orchestrator.retrieve(query, surface=surface or self.surface)
         memories = self.recall_for(result)
         answer = (
             self.llm.synthesize(

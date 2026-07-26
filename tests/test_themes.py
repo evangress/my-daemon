@@ -220,11 +220,13 @@ def test_consolidate_clusters_themes_without_the_letter_depending_on_it(
 
     monkeypatch.setattr("my_daemon.analysis.themes.cluster_fingerprints", _boom)
 
-    result = agent_observe._cluster_themes(
+    result, letter_themes = agent_observe._cluster_themes(
         settings, object(), "s1", dry_run=False, progress=None, stats=stats
     )
 
     assert result is None
+    # The letter still gets written — with no themes in it, not with none at all.
+    assert letter_themes == []
     assert any("theme clustering failed" in e for e in stats.errors)
 
 
@@ -238,7 +240,7 @@ def test_a_dry_run_names_nothing_and_writes_nothing(tmp_path: Path):
     for i in range(4):
         _ask(ledger, f"q{i}", [A, B])
 
-    result = agent_observe._cluster_themes(
+    result, letter_themes = agent_observe._cluster_themes(
         settings,
         object(),
         "s1",
@@ -248,6 +250,7 @@ def test_a_dry_run_names_nothing_and_writes_nothing(tmp_path: Path):
     )
 
     assert result is None
+    assert letter_themes == []
     assert ThemeStore(db_path=settings.feedback.db_path).all() == []
 
 
@@ -259,10 +262,7 @@ def test_clustering_can_be_switched_off(tmp_path: Path):
     settings.feedback.db_path = tmp_path / "state.db"
     settings.consolidation.cluster_themes = False
 
-    assert (
-        agent_observe._cluster_themes(
-            settings, object(), "s1", dry_run=False, progress=None,
-            stats=agent_observe.ObserveStats(snapshot_id="s1"),
-        )
-        is None
-    )
+    assert agent_observe._cluster_themes(
+        settings, object(), "s1", dry_run=False, progress=None,
+        stats=agent_observe.ObserveStats(snapshot_id="s1"),
+    ) == (None, [])

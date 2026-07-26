@@ -47,10 +47,24 @@ STRENGTH_BY_SOURCE: dict[str, float] = {
     "recall_injected": 0.3,
 }
 
+# Hermes has two retrieval paths and they are *not* the same act. The
+# `mydaemon_recall` tool is the agent deliberately looking something up on the
+# user's behalf; `prefetch` fires on every conversational turn whether or not
+# anyone wanted memory consulted. They get different surfaces so the ambient one
+# can be filtered everywhere the intentional one is trusted.
+HERMES_RECALL_SURFACE = "hermes_recall"
+HERMES_PREFETCH_SURFACE = "hermes_prefetch"
+
 # Surfaces that represent a question the user actually asked. Hermes `prefetch`
 # fires on *every* conversational turn, so including it would let ambient
-# lookups dominate the fingerprint space.
-INTENTIONAL_SURFACES: tuple[str, ...] = ("cli", "gui", "hermes_recall", "mcp")
+# lookups dominate the fingerprint space — themes would become
+# themes-of-Hermes-turns.
+INTENTIONAL_SURFACES: tuple[str, ...] = ("cli", "gui", HERMES_RECALL_SURFACE, "mcp")
+
+# Retrievals nobody asked for. Recorded (they are still real activations, and
+# the graph still learns from them) but never treated as evidence of what the
+# user is thinking about.
+AMBIENT_SURFACES: tuple[str, ...] = (HERMES_PREFETCH_SURFACE,)
 
 # Below this many queries a document-frequency *ratio* means nothing — with two
 # queries logged, a note in one of them scores 0.5 and every sane threshold

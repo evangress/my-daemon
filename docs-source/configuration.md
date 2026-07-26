@@ -2,10 +2,54 @@
 
 Every knob the daemon exposes lives in `config.yaml`. Defaults come from
 `src/my_daemon/config.py`; values in `config.yaml` override defaults; env
-vars (`MY_DAEMON_<SECTION>__<KEY>`) override the YAML.
+vars (`MY_DAEMON_<SECTION>__<KEY>`) fill in anything the YAML leaves unset.
 
 The Anthropic API key is **never** read from `config.yaml`. It comes from the
-environment (or the project-local `.env`, auto-loaded on startup).
+environment (or the `.env` beside the config, auto-loaded on startup).
+
+## Where `config.yaml` comes from
+
+The first of these that exists wins:
+
+| # | Location | For |
+|---|---|---|
+| 1 | `daemon --config PATH` | One-off, and schedulers |
+| 2 | `$MY_DAEMON_CONFIG` | The same, from a crontab or a service unit |
+| 3 | `./config.yaml` | Working in a checkout — unchanged from day one |
+| 4 | `~/.config/my-daemon/config.yaml`<br>(`$XDG_CONFIG_HOME` honored; `%APPDATA%\my-daemon\config.yaml` on Windows) | An installed daemon. Create it with `daemon init --user` |
+
+Naming a file (1 or 2) is *exclusive*: if that file does not exist the daemon
+stops rather than quietly resolving to a different one, because a typo that
+lands you on someone else's config is worse than a typo that fails.
+
+**If none of them exists, the daemon refuses.** Every state-touching command
+exits 1 and prints the list above with real paths filled in. It does not fall
+back to built-in defaults — those describe a vault nobody owns, and a
+scheduled job running against them would look like it was working.
+`daemon version`, `daemon init` and `daemon setup` need no config.
+
+## Relative paths follow the config, not your shell
+
+Every relative path in a config — `graph.path`, `graph.manifest_path`,
+`feedback.db_path`, `snapshot.dir`, `consolidation.out_dir`,
+`embeddings.cache_folder`, `vector_store.qdrant.path`, `vault.path` — is
+resolved against **the directory the config file is in**, at load time.
+
+A config at `/home/evan/dev/my-daemon/config.yaml` that says
+`./data/graph.gpickle` always means `/home/evan/dev/my-daemon/data/graph.gpickle`
+— from that directory, from `$HOME` under cron, from `system32` under Windows
+Task Scheduler. Your one daemon stays one daemon no matter where you launch it.
+
+- Absolute paths pass through untouched.
+- `~` expands to your home directory (it is not treated as a relative path).
+- `:memory:` for `vector_store.qdrant.path` is a mode, not a path, and is left
+  alone.
+- Paths supplied via `MY_DAEMON_*` env vars are anchored the same way.
+- The `.env` read for `ANTHROPIC_API_KEY` is the one beside the config (the
+  copy in your current directory is still honored as a fallback).
+
+`daemon init --user` therefore puts state under `~/.config/my-daemon/data/`.
+If you want it somewhere else, give those keys absolute paths.
 
 ## Section by section
 

@@ -3,6 +3,7 @@
 
 from __future__ import annotations
 
+import os
 import shutil
 from pathlib import Path
 
@@ -15,7 +16,13 @@ from rich.table import Table
 from my_daemon import __version__
 from my_daemon.analysis import compute_report, persist_reports, simulate_evolution
 from my_daemon.analysis.structural import report_dir_for
-from my_daemon.config import Settings, load_settings
+from my_daemon.config import (
+    CONFIG_FILENAME,
+    ConfigNotFoundError,
+    Settings,
+    load_settings,
+    user_config_dir,
+)
 from my_daemon.embeddings import Embedder, SparseEmbedder
 from my_daemon.integration.wiring import build_stores
 from my_daemon.llm import LLMClient
@@ -73,12 +80,56 @@ app.add_typer(migrate_app)
 
 console = Console()
 
+# Set by the app callback on every invocation, so it can never go stale between
+# runs (the callback always fires, and always writes — None when --config was
+# not passed).
+_config_override: Path | None = None
+
+
+_CONFIG_HELP = (
+    "Config file to use, ahead of every other candidate. Default search order: "
+    f"$MY_DAEMON_CONFIG, ./{CONFIG_FILENAME}, then the user config directory. "
+    "When none exists the daemon refuses and names each location."
+)
+
+
+# B008 is Typer's whole calling convention; ruff exempts `@app.command()` but
+# not `@app.callback()`.
+@app.callback()
+def main(
+    config: Path | None = typer.Option(  # noqa: B008
+        None,
+        "--config",
+        metavar="PATH",
+        help=_CONFIG_HELP,
+    ),
+) -> None:
+    """My Daemon — a personal memory companion over your Obsidian vault."""
+    global _config_override
+    _config_override = config
+    if config is not None:
+        # Make the choice authoritative for the whole process, not just for
+        # `_load()`: the chat GUI and the Hermes provider call `load_settings`
+        # themselves, and `--config` would otherwise mean something different
+        # depending on which surface you launched.
+        os.environ["MY_DAEMON_CONFIG"] = str(config)
+
 
 def _load() -> Settings:
+    """Resolve settings, or refuse loudly.
+
+    The old version caught a `FileNotFoundError` that `load_settings` never
+    raised — a missing config silently became defaults, so a scheduled job ran
+    happily against a vault that did not exist. Now the miss is typed and the
+    exit code is the 1 the docs always claimed.
+    """
     try:
-        return load_settings()
-    except FileNotFoundError as exc:
-        console.print(f"[red]{exc}[/red]")
+        return load_settings(_config_override)
+    except ConfigNotFoundError as exc:
+        # No markup: the message carries filesystem paths, which may contain
+        # square brackets that rich would eat. `soft_wrap` because a path
+        # broken across a terminal-width boundary is not a path you can paste.
+        console.print(str(exc), style="red", soft_wrap=True)
         raise typer.Exit(code=1) from exc
 
 
@@ -132,11 +183,24 @@ def version() -> None:
 def init(
     vault: str | None = typer.Option(None, help="Path to your Obsidian vault."),
     force: bool = typer.Option(False, "--force", help="Overwrite an existing config.yaml."),
+    user: bool = typer.Option(
+        False,
+        "--user",
+        help="Write into the user config directory instead of the current directory.",
+    ),
 ) -> None:
-    """Generate config.yaml + .env from examples, prompting for the vault path."""
+    """Generate config.yaml + .env from examples, prompting for the vault path.
+
+    Default target is the current directory, which keeps the repo-dev workflow
+    exactly as it was. `--user` writes to the per-user config directory instead
+    — the right choice for an installed daemon, since relative state paths
+    anchor to wherever the config ends up living.
+    """
     cwd = Path.cwd()
-    config_path = cwd / "config.yaml"
-    env_path = cwd / ".env"
+    dest = user_config_dir() if user else cwd
+    config_path = dest / CONFIG_FILENAME
+    env_path = dest / ".env"
+    # Templates always come from the checkout you invoked from.
     config_example = cwd / "config.example.yaml"
     env_example = cwd / ".env.example"
 
@@ -151,6 +215,7 @@ def init(
         "Vault path",
         default="~/Documents/Obsidian/MyVault",
     )
+    dest.mkdir(parents=True, exist_ok=True)
     text = config_example.read_text(encoding="utf-8")
     text = text.replace("~/Documents/Obsidian/MyVault", vault_path)
     config_path.write_text(text, encoding="utf-8")
@@ -159,6 +224,11 @@ def init(
     if not env_path.exists() and env_example.is_file():
         shutil.copy(env_example, env_path)
         console.print(f"[green]Wrote {env_path} — add your ANTHROPIC_API_KEY there.[/green]")
+
+    if user:
+        console.print(
+            f"Relative paths in that file (./data/…) now resolve under {dest}."
+        )
 
 
 @app.command()
@@ -421,6 +491,11 @@ def chat(
     ),
 ) -> None:
     """Launch the warm-themed chat window for the daemon."""
+    # Resolve the config here so a missing one is the same one-line refusal as
+    # every other command. The GUI builds its own Settings a moment later; if
+    # this succeeds, so will that.
+    _load()
+
     # Cheap, fast preflight when running native: NiceGUI swallows a missing
     # pywebview import in unhelpful ways. Catching it here means the silent
     # .vbs launcher writes a clear cause to the log instead of dying mute.

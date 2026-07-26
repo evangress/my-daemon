@@ -33,6 +33,7 @@ from typing import Any
 
 from my_daemon.config import Settings, load_settings
 from my_daemon.integration.core import DaemonCore, build_core
+from my_daemon.stores.activations import HERMES_PREFETCH_SURFACE
 
 # Candidate import paths for Hermes's memory-provider ABC, most-likely first.
 _ABC_CANDIDATES = (
@@ -167,6 +168,11 @@ class MyDaemonProvider(_MemoryProviderBase):  # type: ignore[misc,valid-type]
 
         Logs a FeedbackEvent (inside ``recall``) and caches its id + candidates
         so ``sync_turn`` can reinforce whichever note the assistant actually used.
+
+        Recorded under the **ambient** surface. Nobody asked for this lookup —
+        it fires on every turn — so it must not be read back as evidence of what
+        the user has been thinking about (fingerprint recall, theme clustering).
+        The deliberate ``mydaemon_recall`` tool keeps the intentional surface.
         """
         if self._core is None:
             return ""
@@ -175,6 +181,7 @@ class MyDaemonProvider(_MemoryProviderBase):  # type: ignore[misc,valid-type]
             query,
             budget_chars=s.hermes.prefetch_budget_chars,
             top_k=s.hermes.recall_top_k,
+            surface=HERMES_PREFETCH_SURFACE,
         )
         self._last_prefetch[session_id or self._session_id] = {
             "feedback_event_id": block.feedback_event_id,

@@ -1,24 +1,48 @@
 # CLI Reference
 
 The `daemon` binary is a Typer app installed by the project. Every command
-below loads `config.yaml` from the current working directory (or
-`$MY_DAEMON_CONFIG`), merges environment overrides, and reads
-`ANTHROPIC_API_KEY` from the environment / `.env`.
+below resolves a `config.yaml`, merges environment overrides, and reads
+`ANTHROPIC_API_KEY` from the environment / the `.env` beside that config.
 
 Run `daemon --help` for the live listing.
+
+## Global options
+
+```
+daemon [--config PATH] <command> ...
+```
+
+`--config` names the config file to use, ahead of every other candidate. It is
+authoritative for the whole process, so `daemon --config … chat` and
+`daemon --config … reflect` mean the same thing.
+
+Without it the search order is `$MY_DAEMON_CONFIG` → `./config.yaml` →
+the per-user config directory (`~/.config/my-daemon/config.yaml`, or
+`%APPDATA%\my-daemon\config.yaml` on Windows). If none exists, any
+state-touching command exits 1 and prints every location it looked in — it
+never falls back to defaults. See
+[Configuration](configuration.md#where-configyaml-comes-from).
+
+`version`, `init` and `setup` do not need a config and work without one.
 
 ## Top-level
 
 ### `daemon init`
 
 ```
-daemon init [--vault PATH] [--force]
+daemon init [--vault PATH] [--force] [--user]
 ```
 
 Generates `config.yaml` (from `config.example.yaml`) and `.env` (from
 `.env.example`). If `--vault` is omitted, prompts for the vault path
 interactively. Refuses to overwrite an existing `config.yaml` without
 `--force`.
+
+Writes into the current directory by default — the repo-dev workflow. `--user`
+writes into the per-user config directory instead (creating it), which is the
+right choice for an installed daemon: state paths follow the config, so
+`./data/...` then lives under `~/.config/my-daemon/data/`. Templates are still
+read from the directory you invoke it from.
 
 ### `daemon setup`
 
@@ -313,11 +337,15 @@ export MY_DAEMON_GRAPH__EXPANSION_DEPTH=3
 export MY_DAEMON_EMBEDDINGS__HYBRID=false
 ```
 
-`MY_DAEMON_CONFIG=/path/to/other.yaml` chooses an alternate config file.
+`MY_DAEMON_CONFIG=/path/to/other.yaml` chooses an alternate config file — the
+env-var equivalent of `--config`, useful in a crontab line.
 
 ## Exit codes
 
 - `0` — success.
-- `1` — refused (missing `config.yaml`, `agent.enabled` false, user declined
-  a destructive prompt).
+- `1` — refused. Includes a missing `config.yaml` (the message lists every
+  location searched), `agent.enabled` false, and a declined destructive
+  prompt.
+- `2` — a preflight failed (e.g. `daemon chat --native` with pywebview
+  missing).
 - Other non-zero — unexpected exception; see the stack trace.

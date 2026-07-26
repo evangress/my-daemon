@@ -26,6 +26,10 @@ from my_daemon.vault.writer import snapshot, write_atomic
 
 ProgressFn = Callable[[int, int, str], None]
 
+# How many feedback rows to scan per chat we want — ambient retrieval records
+# (Hermes prefetch) share the table with real chats and outnumber them.
+_CHAT_SCAN_MULTIPLIER = 5
+
 
 @dataclass
 class ReflectStats:
@@ -42,9 +46,20 @@ def _recent_notes(settings: Settings, days: int) -> list[Note]:
 
 
 def _recent_chats(feedback: FeedbackStore, limit: int = 20) -> list[FeedbackEvent]:
-    rows = feedback.recent(limit=limit)
+    """Real conversations only.
+
+    An answer-less row is a retrieval record, not a chat — Hermes's ambient
+    prefetch writes one every turn — so it is skipped, and we scan deeper than
+    ``limit`` to still find ``limit`` genuine chats underneath them.
+    """
+
+    rows = feedback.recent(limit=limit * _CHAT_SCAN_MULTIPLIER)
     out: list[FeedbackEvent] = []
     for r in rows:
+        if len(out) >= limit:
+            break
+        if not (r.get("answer") or "").strip():
+            continue
         out.append(
             FeedbackEvent(
                 id=r.get("id"),

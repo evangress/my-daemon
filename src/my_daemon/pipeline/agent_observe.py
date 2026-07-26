@@ -1,9 +1,14 @@
 # SPDX-License-Identifier: Apache-2.0
-"""Observer pipeline (M4): snapshot → analyze → letter → index → decay.
+"""Observer pipeline (M4): snapshot → analyze → themes → letter → index → decay.
 
 The closing loop of the adaptive memory cycle. The observer LLM reads the
-structural + weight-evolution reports a snapshot produces and writes a single
-markdown letter into ``<vault>/Agent/observer-<YYYY-MM-DD>.md``. The same
+structural + weight-evolution reports a snapshot produces, plus the themes the
+clustering phase just minted, and writes a single markdown letter into
+``<vault>/Agent/observer-<YYYY-MM-DD>.md``.
+
+Theme clustering runs *before* the letter on purpose. The letter is the primary
+human-facing output, and minting the themes after it was written is how they
+stayed invisible to the person they were about. The same
 writeback safety discipline as `daemon reflect` applies: atomic write,
 backup snapshot of any prior letter, a rolling index file for navigation,
 and a record in `agent_observer_runs`.
@@ -21,6 +26,7 @@ from collections.abc import Callable
 from dataclasses import dataclass, field
 from datetime import UTC, date, datetime
 from pathlib import Path
+from typing import TYPE_CHECKING
 
 import frontmatter
 
@@ -28,7 +34,7 @@ from my_daemon.analysis import compute_report, persist_reports, simulate_evoluti
 from my_daemon.analysis.structural import report_dir_for
 from my_daemon.config import Settings
 from my_daemon.llm import LLMClient
-from my_daemon.llm.agents import _model_for, observer_letter
+from my_daemon.llm.agents import LetterTheme, _model_for, observer_letter
 from my_daemon.models import FeedbackEvent
 from my_daemon.retrieval.weights import decay_unused_edges
 from my_daemon.stores import (
@@ -43,10 +49,17 @@ from my_daemon.stores import (
 from my_daemon.vault.writer import snapshot as vault_snapshot
 from my_daemon.vault.writer import write_atomic
 
+if TYPE_CHECKING:  # sklearn/numpy stay out of the import path until clustering runs
+    from my_daemon.analysis.themes import ReconcileResult
+
 ProgressFn = Callable[[str], None]
 
 _LETTER_FILE_RE = re.compile(r"^observer-(\d{4}-\d{2}-\d{2})\.md$")
 _INDEX_FILENAME = "observer.md"
+
+# How many feedback rows to scan per chat we want. Ambient retrieval records
+# (Hermes prefetch) share the table with real chats and vastly outnumber them.
+_CHAT_SCAN_MULTIPLIER = 5
 
 
 @dataclass
@@ -142,9 +155,21 @@ def _load_prior_letters(
 
 
 def _recent_feedback(feedback: FeedbackStore, *, limit: int = 20) -> list[FeedbackEvent]:
-    """Recent chats, hydrated into FeedbackEvent for the observer prompt."""
+    """Recent *chats*, hydrated into FeedbackEvent for the observer prompt.
+
+    Answer-less rows are skipped: they are retrieval records (an ambient Hermes
+    prefetch fires one per conversational turn), not conversations. We scan
+    deeper than ``limit`` because with Hermes on, ambient rows outnumber real
+    chats by an order of magnitude — a flat `recent(limit)` would return a
+    window containing no chats at all.
+    """
+
     out: list[FeedbackEvent] = []
-    for row in feedback.recent(limit=limit):
+    for row in feedback.recent(limit=limit * _CHAT_SCAN_MULTIPLIER):
+        if len(out) >= limit:
+            break
+        if not (row.get("answer") or "").strip():
+            continue
         try:
             out.append(
                 FeedbackEvent(
@@ -250,7 +275,7 @@ def run_observe(
     now: datetime | None = None,
     progress: ProgressFn | None = None,
 ) -> ObserveStats:
-    """Run the consolidation loop: snapshot → analyze → letter → index → decay.
+    """Run the consolidation loop: snapshot → analyze → themes → letter → index → decay.
 
     ``snapshot_id`` lets the caller reuse an existing bundle (idempotent
     re-runs against the same point in time). ``dry_run`` lets the LLM run
@@ -301,6 +326,29 @@ def run_observe(
     out_dir = report_dir_for(bundle.id, root=cons.out_dir)
     persist_reports(out_dir, structural=structural, evolution=evolution)
 
+    model_used = _model_for(llm, cfg.observer_model)
+    stats = ObserveStats(
+        snapshot_id=bundle.id,
+        model_used=model_used,
+        communities_seen=structural.community_count,
+        events_replayed=evolution.events_replayed,
+        dry_run=dry_run,
+    )
+
+    # --- themes (before the letter, deliberately) -------------------------
+    #
+    # Clustering + naming has to finish first, or the themes the daemon just
+    # minted never reach the one thing the user actually reads. The letter is
+    # the primary human-facing output; the themes are the closest thing the
+    # system has to "what you have been wondering about".
+    theme_result, letter_themes = _cluster_themes(
+        settings, llm, bundle.id, dry_run=dry_run, progress=progress, stats=stats
+    )
+    if theme_result is not None:
+        stats.themes_seen = len(theme_result.matched) + len(theme_result.created)
+        stats.themes_new = len(theme_result.created)
+        stats.theme_churn = theme_result.churn
+
     # --- letter -----------------------------------------------------------
     vault_root = settings.vault.path
     agent_folder = cfg.folder_name
@@ -311,7 +359,6 @@ def run_observe(
         exclude=today_letter_path,
     )
     recent_feedback = _recent_feedback(feedback, limit=20)
-    model_used = _model_for(llm, cfg.observer_model)
 
     if progress:
         progress(f"calling observer LLM ({model_used})…")
@@ -322,25 +369,11 @@ def run_observe(
         recent_feedback=recent_feedback,
         prior_letters=prior_letters,
         snapshot_id=bundle.id,
+        themes=letter_themes,
+        theme_churn=theme_result.churn if theme_result is not None else None,
         max_communities=cfg.observer_max_communities,
         model=cfg.observer_model,
     )
-
-    stats = ObserveStats(
-        snapshot_id=bundle.id,
-        model_used=model_used,
-        communities_seen=structural.community_count,
-        events_replayed=evolution.events_replayed,
-        dry_run=dry_run,
-    )
-
-    theme_result = _cluster_themes(
-        settings, llm, bundle.id, dry_run=dry_run, progress=progress, stats=stats
-    )
-    if theme_result is not None:
-        stats.themes_seen = len(theme_result.matched) + len(theme_result.created)
-        stats.themes_new = len(theme_result.created)
-        stats.theme_churn = theme_result.churn
 
     # --- write (skipped on dry-run) ---------------------------------------
     letter_written_path: Path | None = None
@@ -401,16 +434,19 @@ def _cluster_themes(
     dry_run: bool,
     progress,  # noqa: ANN001
     stats: ObserveStats,
-):
+) -> tuple[ReconcileResult | None, list[LetterTheme]]:
     """Cluster query fingerprints into named themes, inside the dream phase.
 
+    Returns ``(reconcile_result, letter_themes)``. The second element is what
+    the observer letter renders, which is why this runs *before* the letter.
+
     Deliberately non-fatal: a consolidation run that cannot cluster should
-    still write its letter.
+    still write its letter — with no themes in it rather than none at all.
     """
 
     cons = settings.consolidation
     if not getattr(cons, "cluster_themes", True):
-        return None
+        return None, []
 
     from my_daemon.analysis.themes import cluster_fingerprints, reconcile_themes
     from my_daemon.llm.agents import name_theme
@@ -426,7 +462,9 @@ def _cluster_themes(
         if progress:
             progress(f"themes: {len(clusters)} cluster(s) found")
         if dry_run:
-            return None
+            # Reconciliation writes to the theme store, so a dry run stops here
+            # — and the letter is written with no themes, honestly.
+            return None, []
 
         store = ThemeStore(db_path=settings.feedback.db_path)
         result = reconcile_themes(
@@ -435,18 +473,40 @@ def _cluster_themes(
         )
 
         registry = NoteRegistry(db_path=settings.feedback.db_path)
+
+        def _titles_for(cluster) -> list[str]:  # noqa: ANN001
+            records = [registry.get(u) for u in cluster.centroid]
+            return [r.title or r.rel_path for r in records if r]
+
         # Only *new* clusters are named. A returning one keeps its id, label and
         # summary — no LLM call, and no churn in what the user sees.
         for theme_id, cluster in result.needs_naming[: cons.max_new_themes_per_run]:
-            records = [registry.get(u) for u in cluster.centroid]
-            titles = [r.title or r.rel_path for r in records if r]
             label, summary = name_theme(
                 llm,
-                note_titles=titles,
+                note_titles=_titles_for(cluster),
                 representative_queries=cluster.representative_queries,
                 model=settings.agent.observer_model,
             )
             store.set_label(theme_id, label=label, summary=summary)
+
+        # Read the labels back from the store rather than from what we just
+        # sent: a user-locked label wins over the namer, and a recurring theme
+        # keeps the name it already had.
+        new_ids = {theme_id for theme_id, _ in result.created}
+        letter_themes: list[LetterTheme] = []
+        for theme_id, cluster in [*result.matched, *result.created]:
+            theme = store.get(theme_id)
+            if theme is None:
+                continue
+            letter_themes.append(
+                LetterTheme(
+                    label=theme.label,
+                    summary=theme.summary,
+                    is_new=theme_id in new_ids,
+                    query_count=len(cluster.query_ids),
+                    note_titles=_titles_for(cluster),
+                )
+            )
 
         if len(result.needs_naming) > cons.max_new_themes_per_run:
             stats.notes.append(
@@ -457,7 +517,7 @@ def _cluster_themes(
             stats.notes.append(
                 f"theme churn {result.churn:.2f} — themes are not settled yet"
             )
-        return result
+        return result, letter_themes
     except Exception as exc:  # noqa: BLE001
         stats.errors.append(f"theme clustering failed: {exc!r}")
-        return None
+        return None, []

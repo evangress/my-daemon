@@ -55,6 +55,26 @@ The Anthropic connection stays in My Daemon for its own sub-agent needs — the
 observer letter (Opus) and the extract/link/reflect batch jobs (Haiku). Hermes
 never sees the API key.
 
+### Ambient prefetch vs. deliberate recall
+
+Hermes has two retrieval paths and the daemon records them differently:
+
+| Path | Surface | Counted as a question you asked? |
+|---|---|---|
+| `prefetch` (every turn) | `hermes_prefetch` | **No** — ambient |
+| `mydaemon_recall` tool | `hermes_recall` | Yes — intentional |
+
+`prefetch` fires on *every* conversational turn, whether or not anyone wanted
+memory consulted. Both paths still record activations (the graph learns from
+either), but only intentional surfaces feed the things that are meant to reflect
+*your* attention: fingerprint recall ("you asked something like this before")
+and nightly theme clustering. Without the split, your themes would become
+themes-of-Hermes-turns.
+
+For the same reason, the retrieval rows a prefetch leaves in the feedback log
+carry no answer, and the observer/reflect prompts skip answer-less rows: they
+are retrieval records, not conversations.
+
 ## Install
 
 ```bash

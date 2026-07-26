@@ -5,20 +5,51 @@ Env var overrides use the prefix ``MY_DAEMON_`` and double-underscore nesting,
 e.g. ``MY_DAEMON_LLM__MODEL=claude-sonnet-4-6``.
 
 The Anthropic API key is **never** read from config.yaml — it comes from the
-environment (or a project-local ``.env`` file, which is auto-loaded). This
+environment (or a ``.env`` file next to the config, which is auto-loaded). This
 keeps the key out of any file the user might accidentally commit.
+
+Two rules make the daemon safe to run from a scheduler:
+
+* **A config must be found.** :func:`load_settings` raises
+  :class:`ConfigNotFoundError` rather than falling back to defaults, because
+  "defaults" means an empty vault that nobody owns and state written into
+  whatever directory the process happened to start in.
+* **Relative paths anchor to the config file's directory, not the CWD.** A
+  config at ``/home/evan/dev/my-daemon/config.yaml`` saying ``./data/graph.gpickle``
+  always means ``/home/evan/dev/my-daemon/data/graph.gpickle`` — from cron
+  (which starts in ``$HOME``), from a Windows scheduled task (which starts in
+  ``system32``), from anywhere.
 """
 
 from __future__ import annotations
 
 import os
 from pathlib import Path
-from typing import Literal
+from typing import Literal, get_args
 
 import yaml
 from dotenv import load_dotenv
 from pydantic import BaseModel, Field, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
+
+from my_daemon.paths import (
+    CONFIG_FILENAME,
+    config_search_paths,
+    find_config,
+    user_config_dir,
+    user_config_path,
+)
+
+__all__ = [
+    "CONFIG_FILENAME",
+    "ConfigNotFoundError",
+    "Settings",
+    "config_search_paths",
+    "find_config",
+    "load_settings",
+    "user_config_dir",
+    "user_config_path",
+]
 
 
 class VaultConfig(BaseModel):
@@ -305,37 +336,111 @@ class Settings(BaseSettings):
 
     anthropic_api_key: str | None = None
 
-
-def _default_config_path() -> Path:
-    explicit = os.environ.get("MY_DAEMON_CONFIG")
-    if explicit:
-        return Path(explicit).expanduser()
-    return Path.cwd() / "config.yaml"
+    # The file `load_settings` actually resolved — the anchor every relative
+    # path in this object was made absolute against. None when a Settings was
+    # constructed programmatically (tests, library callers).
+    config_path: Path | None = None
 
 
-def load_settings(config_path: Path | None = None) -> Settings:
-    """Load settings from yaml (if present) and merge env overrides on top.
+class ConfigNotFoundError(FileNotFoundError):
+    """No ``config.yaml`` in any searched location.
 
-    Loads a project-local ``.env`` file first so ``ANTHROPIC_API_KEY`` (and any
-    other env-driven overrides) are honored without requiring the user to
-    ``export`` them in every shell.
+    Subclasses :class:`FileNotFoundError` so anything already catching that
+    keeps working, but it is a *typed* error the CLI can render as a one-line
+    refusal instead of a traceback — and, crucially, instead of the old silent
+    fall-through to defaults that let a scheduled job report success against a
+    vault that does not exist.
     """
 
-    # `.env` lives next to the config (project root by default). `override=False`
-    # means a value already in the real environment wins, which is what we want
-    # when the OS env var was set persistently via `setx` or shell profile.
+    def __init__(self, searched: list[Path]) -> None:
+        self.searched = list(searched)
+        locations = "\n".join(f"  - {p}" for p in self.searched)
+        super().__init__(
+            "no config.yaml found — run `daemon init` here, or "
+            "`daemon init --user` to create one in your user config directory.\n"
+            f"searched:\n{locations}"
+        )
+
+
+# qdrant-client's in-memory sentinel. Looks path-shaped, is not a path.
+_EMBEDDED_MEMORY = ":memory:"
+
+
+def _anchor(value: Path, root: Path) -> Path:
+    """Make one config-supplied path absolute.
+
+    ``~`` first (a user writing ``~/notes`` means their home, not a directory
+    literally named ``~`` under the config), then anchor anything still
+    relative to the config's own directory. Absolute paths pass through
+    untouched.
+    """
+    expanded = value.expanduser()
+    if expanded.is_absolute():
+        return expanded
+    return Path(os.path.normpath(root / expanded))
+
+
+def _annotation_allows_path(annotation: object) -> bool:
+    return annotation is Path or Path in get_args(annotation)
+
+
+def _anchor_model_paths(model: BaseModel, root: Path) -> None:
+    """Recursively rewrite every relative path field to be absolute.
+
+    Done on the *constructed* Settings rather than on the raw yaml so that
+    ``MY_DAEMON_*`` env overrides get anchored too — an override is just as
+    likely to be relative, and just as broken from cron if it isn't resolved.
+
+    ``vector_store.qdrant.path`` is annotated ``Path | str | None`` and pydantic
+    keeps a yaml string as a ``str``, hence the annotation check: it is a real
+    path and has to be anchored, while ``:memory:`` must not be.
+    """
+    for name, field in type(model).model_fields.items():
+        value = getattr(model, name)
+        if isinstance(value, BaseModel):
+            _anchor_model_paths(value, root)
+        elif isinstance(value, Path):
+            setattr(model, name, _anchor(value, root))
+        elif (
+            isinstance(value, str)
+            and value != _EMBEDDED_MEMORY
+            and _annotation_allows_path(field.annotation)
+        ):
+            setattr(model, name, str(_anchor(Path(value), root)))
+
+
+def load_settings(config_path: Path | str | None = None) -> Settings:
+    """Resolve a config file, load it, and merge env overrides on top.
+
+    Search order (first hit wins, see :func:`my_daemon.paths.config_search_paths`):
+    ``config_path`` / ``--config`` → ``$MY_DAEMON_CONFIG`` → ``./config.yaml``
+    → the user config dir.
+
+    Raises :class:`ConfigNotFoundError` when none of them exist. Every relative
+    path in the result is anchored to the resolved config's directory.
+    """
+    searched = config_search_paths(config_path)
+    path = find_config(config_path)
+    if path is None:
+        raise ConfigNotFoundError(searched)
+
+    root = Path(os.path.abspath(path)).parent
+
+    # `.env` lives next to the config. `override=False` means a value already in
+    # the real environment wins, which is what we want when the OS env var was
+    # set persistently via `setx` or a shell profile. The CWD copy is still
+    # honored second so an interactive shell in a checkout keeps working when
+    # the active config lives elsewhere.
+    load_dotenv(dotenv_path=root / ".env", override=False)
     load_dotenv(dotenv_path=Path.cwd() / ".env", override=False)
 
-    path = config_path or _default_config_path()
-    data: dict = {}
-    if path.is_file():
-        with path.open("r", encoding="utf-8") as fh:
-            data = yaml.safe_load(fh) or {}
-
-    if "vault" in data and "path" in data["vault"]:
-        data["vault"]["path"] = str(Path(data["vault"]["path"]).expanduser())
+    with path.open("r", encoding="utf-8") as fh:
+        data = yaml.safe_load(fh) or {}
 
     # API key is environment-only — never read from yaml, never written back.
     data["anthropic_api_key"] = os.environ.get("ANTHROPIC_API_KEY")
 
-    return Settings(**data)
+    settings = Settings(**data)
+    _anchor_model_paths(settings, root)
+    settings.config_path = path
+    return settings

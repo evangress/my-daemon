@@ -24,6 +24,9 @@ class StubCore:
         self.remembered: list[dict] = []
         self.endorsed: list[tuple[int, int]] = []
         self.recalled: list[str] = []
+        # (query, surface) for each path, so tests can pin ambient vs intentional.
+        self.block_surfaces: list[tuple[str, str | None]] = []
+        self.recall_surfaces: list[tuple[str, str | None]] = []
 
         class _VS:
             def ensure_collection(self) -> None:
@@ -31,7 +34,8 @@ class StubCore:
 
         self.vector_store = _VS()
 
-    def recall_block(self, query, *, budget_chars, top_k=None) -> RecallBlock:
+    def recall_block(self, query, *, budget_chars, top_k=None, surface=None) -> RecallBlock:
+        self.block_surfaces.append((query, surface))
         return RecallBlock(
             text=f"BLOCK for {query}",
             feedback_event_id=42,
@@ -41,8 +45,9 @@ class StubCore:
             ],
         )
 
-    def recall(self, query, *, top_k=None, synthesize=False) -> dict:
+    def recall(self, query, *, top_k=None, synthesize=False, surface=None) -> dict:
         self.recalled.append(query)
+        self.recall_surfaces.append((query, surface))
         return {"feedback_event_id": 7, "candidates": []}
 
     def latest_dream(self) -> dict | None:
@@ -115,6 +120,18 @@ def test_prefetch_returns_block_and_caches(tmp_path: Path) -> None:
     cached = provider._last_prefetch["s1"]
     assert cached["feedback_event_id"] == 42
     assert cached["candidates"][0]["note_path"] == "Pullman Daemons.md"
+
+
+def test_prefetch_is_ambient_and_the_tool_is_intentional(tmp_path: Path) -> None:
+    """The two Hermes paths must not be recorded as the same kind of event."""
+    provider, core = _provider(tmp_path)
+
+    provider.prefetch("an ambient turn", session_id="s1")
+    provider.handle_tool_call("mydaemon_recall", {"query": "the deliberate question"})
+
+    assert core.block_surfaces == [("an ambient turn", "hermes_prefetch")]
+    # None = the core's default, which is the intentional `hermes_recall`.
+    assert core.recall_surfaces == [("the deliberate question", None)]
 
 
 # ---------------------------------------------------------------------------
