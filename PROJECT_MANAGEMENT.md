@@ -76,6 +76,30 @@ below for the full implementation summary.
   non-selection rides passively. Add explicit down-weights as v2 once we
   see how the positive-only signal accumulates.
 
+## Known Bugs
+
+Both found while planning the memory refocus (2026-07-26) and **verified in the
+code**. Neither depends on that plan; both should be fixed regardless.
+
+- [ ] **Re-ingesting a note destroys inbound edges and resets learned weights.**
+  `pipeline/ingest.py:101-103` calls `graph_store.remove_note()` →
+  `nx.MultiDiGraph.remove_node`, which drops *all* incident edges in both
+  directions. `add_note` (`graph.py:50-74`) only recreates that note's
+  **outgoing** edges, hardcoded to `weight=1.0`. So editing note `A`
+  permanently deletes every `C → A` wikilink edge and resets every M1-learned
+  weight touching `A`, until `C` is re-ingested or `--full` runs. **The adaptive
+  memory loop has been leaking its learning on every save.** Fix: a differential
+  `GraphStore.update_note()` that keeps the node, replaces only its outgoing
+  `wikilink`/`tag` edges, and carries `weight` / `last_reinforced_at` forward
+  for edges that survive the diff. ~30 lines, independently testable, needs no
+  other work. Tracked as M-mem-1b in [PLAN-MEMORY.md](PLAN-MEMORY.md).
+
+- [ ] **`_atomic_write_text` forces `newline="\n"`** (`vault/writer.py:103`).
+  On a CRLF vault — anything synced from Windows — any write rewrites every line
+  of the file, turning a one-line edit into a whole-file diff. Parameterize the
+  line ending and detect the file's dominant one. Blocking for any whole-vault
+  write.
+
 ## Other Planned Work
 
 Separate from the Adaptive Memory Loop arc:
@@ -85,6 +109,30 @@ Separate from the Adaptive Memory Loop arc:
 - [ ] Obsidian plugin / file watcher.
 - [ ] `daemon graph todos` — surface dangling wikilink targets as
   "notes you keep meaning to write" (see AI Suggestions).
+- [ ] **No payload index on Qdrant's `note_path`**, though
+  `retrieval/expand.py:40-47` scrolls on it for every seed of every query.
+  Free latency win; folded into M-mem-3.
+
+## Memory Refocus — UUID identity + activation ledger
+
+Plan to re-key the system on **per-note UUIDs** and add an **activation
+ledger** lives in [PLAN-MEMORY.md](PLAN-MEMORY.md). Note identity today is the
+vault-relative path, which is load-bearing in four places and breaks the moment
+the Librarian moves a file. The plan puts a `uuid:` in each note's frontmatter
+as the shared key across SQLite (identity), Qdrant (semantics), and networkx
+(relations); records which notes *fire* for every query as a sparse
+"fingerprint" over note-UUID space; finds historically related queries by
+activation pattern rather than wording; clusters those fingerprints into named
+**themes** during the nightly `daemon consolidate` dream phase; and surfaces
+past queries both into the LLM's context and back to the user.
+
+Decisions locked in 2026-07-26: frontmatter UUID with a one-shot backfill;
+themes clustered offline in consolidation; recall both injected and displayed;
+theme tags proposed and written only on confirmation. Eleven milestones
+(M-mem-0 … M-mem-9), each independently shippable. **No milestone requires a
+full re-ingest**, and the only one-way door (the graph relabel, M-mem-6) sits
+after the entire fingerprint payoff has shipped. Plan file:
+`~/.claude/plans/it-s-been-a-while-compiled-ritchie.md`.
 
 ## Hermes Integration
 
