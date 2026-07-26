@@ -176,6 +176,30 @@ NiceGUI's long-term fate) are not yet decided.
 
 ## Done
 
+- **Memory refocus M-mem-0 → M-mem-4 (2026-07-26).** The identity spine and the
+  activation ledger, per [PLAN-MEMORY.md](PLAN-MEMORY.md). **M-mem-0:** a real
+  `PRAGMA user_version` migration ladder in `stores/db.py`, replacing the
+  `PRAGMA table_info` hack; WAL, `busy_timeout`, and `foreign_keys` (all three
+  were missing, and `foreign_keys` being off had silently made every
+  `REFERENCES` clause inert). **M-mem-1b:** `GraphStore.update_note()` —
+  differential re-ingest that stops every note save from deleting inbound
+  wikilinks and resetting M1's learned edge weights. **M-mem-1a:** `uuid:` in
+  frontmatter via a textual single-key writer that changes exactly one line,
+  `vault/identity.py` (adoption of foreign id keys, deterministic derivation,
+  path-derived fallback), the `notes`/`note_ordinals` registry, and
+  `daemon migrate assign-uuids | list-runs | rollback-uuids`. **M-mem-2/3/6:**
+  the identity cutover, collapsed into one change once a full re-ingest became
+  acceptable — chunk ids from `note_uuid`, graph nodes `note::<uuid>` with a
+  `dangling::<text>` namespace for unresolved links, `note_uuid` in the Qdrant
+  payload with indexes on it and `note_path`, uuid-keyed content-hashed
+  manifest, and renames handled as a payload update with no embedding and no
+  weight loss. **M-mem-4:** the activation ledger (`queries`,
+  `query_activations`, `note_activation_stats`), IDF-weighted fingerprints with
+  inverted-index cosine, the `RetrievalListener` seam on the orchestrator, and
+  `daemon activations` / `daemon hot-notes`. Suite 262 pass / 1 pre-existing
+  skip. **Requires `daemon ingest --full` once.** Remaining: M-mem-5 (recall
+  surfacing), M-mem-7 (themes), M-mem-8 (tag proposals), M-mem-9 (cleanup).
+
 - **Hermes integration H1–H3 — memory-provider plugin (2026-06-05).** My Daemon is now a native Hermes memory provider (PLAN-HERMES.md Path A). One shared adapter — `src/my_daemon/integration/core.py` (`DaemonCore` + `build_core`) — wraps the existing pipeline behind plain methods: `recall`/`recall_block` (retrieval-only by default — Hermes brings its own model and wants cited context, not a composed answer), `endorse` (the `daemon select` reinforcement factored out of `cli.py`), `remember` (provenance-stamped capture → single-note `ingest_note` so it's recallable in-session), `latest_dream`/`dreams`/`read_dream` (the observer letters), `neighbors`, `status`. The plugin `src/my_daemon/hermes/provider.py` (`MyDaemonProvider`) subclasses Hermes's `MemoryProvider` ABC **lazily** (resolves to `object` when Hermes isn't importable, so `my_daemon` adds no runtime dep and the module unit-tests standalone) and implements the full hook set: `is_available` (network-free kill-switch on `provider_enabled`), `initialize`, `system_prompt_block` (identity framing + last night's letter), `prefetch` (ambient cited recall, caches the feedback id), `sync_turn` (non-blocking daemon thread: salient-turn capture + positive-only soft reinforcement of any prefetched note the reply used), `get_tool_schemas`/`handle_tool_call` (`mydaemon_recall`/`dream`/`neighbors` always; `endorse`/`remember` only when write-back is on), `on_memory_write`, `on_session_end`, `get_config_schema`/`save_config`, `shutdown`. New `HermesConfig` in `config.py` + both yamls (everything off by default: `provider_enabled`, `allow_write_back`). Hermes shim at `plugins/memory/my-daemon/` (`__init__.register`, `plugin.yaml`, `README.md`); new `daemon hermes doctor` preflight; new `pipeline.ingest.ingest_note`; docs at `docs-source/integrations/hermes.md` (+ mkdocs nav). The Anthropic key stays daemon-side (observer Opus + batch Haiku sub-agents) and Hermes never sees it; My Daemon stays local-only. 20 new tests (`tests/test_integration_core.py`, `tests/test_hermes_provider.py`) cover recall shape + `feedback_event_id`, budget-capped cited block, capture→recallable + provenance, write-back gating, soft endorse, dream newest-first + graceful-empty, tool routing, and non-blocking `sync_turn`. Full suite 86 pass / 1 pre-existing skip; ruff clean. **Deferred:** H4 MCP server; PLAN-HERMES §14 open questions. License: Hermes MIT → Apache-2.0 compatible, lazily imported, not redistributed.
 
 - **Observer LLM agent (2026-05-17).** Closes the adaptive memory loop. `daemon consolidate [--snapshot <id>] [--dry-run] [-v]` runs the full M1→M4 pipeline as one command: create-or-reuse snapshot → `compute_report` + `simulate_evolution` (M3) → load prior observer letters for continuity → call the observer LLM → write `<vault>/Agent/observer-<YYYY-MM-DD>.md` via `write_atomic` (with a `vault_snapshot` of any prior same-day letter for recovery) → refresh the rolling `<vault>/Agent/observer.md` index → record `agent_observer_runs` row → `decay_unused_edges` on the live graph. Decay is the only place the live graph is mutated by consolidation, and only gentle-direction. New module `pipeline/agent_observe.py`; `_OBSERVER_SYSTEM` + `observer_letter` added to `llm/agents.py` (second-person letter, "do not invent" + uncertainty discipline, prior letters fed in for continuity); new `AgentConfig.observer_*` fields gating on a separate switch from the master `agent.enabled` (observer defaults to Opus 4.7 since this is the structural→prose lift worth paying for); new `agent_observer_runs` table in `AgentStateStore`. Seven observe tests cover letter+index write, dry-run (no vault writes, no live mutations, still records the attempt), live-graph decay, snapshot reuse, missing-snapshot error path, prior-letter continuity, and same-day re-run backup discipline. Full suite 66 pass / 1 pre-existing skip; ruff clean. Plan file: `~/.claude/plans/this-project-uses-qdrant-optimized-pizza.md`.
