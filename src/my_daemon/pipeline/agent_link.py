@@ -20,9 +20,10 @@ from my_daemon.config import Settings
 from my_daemon.embeddings import Embedder
 from my_daemon.llm import LLMClient
 from my_daemon.llm.agents import LinkSuggestion, propose_links
-from my_daemon.models import Note
+from my_daemon.models import THEME_TAG_PREFIX, Note, is_daemon_authored_tag
 from my_daemon.stores import AgentStateStore, GraphStore, VectorStore
 from my_daemon.vault import VaultReader
+from my_daemon.vault.identity import effective_uuid
 from my_daemon.vault.writer import add_tags, insert_wikilinks, write_atomic
 
 ProgressFn = Callable[[int, int, str], None]
@@ -98,22 +99,33 @@ def _gather_link_candidates(
 def _gather_tag_candidates(
     note: Note,
     graph_store: GraphStore,
-    path_to_note: dict[str, Note],
+    uuid_to_note: dict[str, Note],
     min_neighbor_count: int,
     depth: int = 2,
 ) -> list[str]:
-    """Tags carried by >= N graph-nearby notes but missing from the source."""
-    neighbors = graph_store.neighbors_within(note.relative_path, depth=depth)
+    """Tags carried by >= N graph-nearby notes but missing from the source.
+
+    Daemon-authored tags are never propagated. A theme tag reaching a note must
+    be a decision the user made in ``daemon themes review``, not a side effect
+    of enough neighbours happening to carry it — otherwise the daemon spreads
+    its own conclusion into notes nobody accepted it for.
+    """
+
+    neighbors = graph_store.neighbors_within(
+        effective_uuid(note),
+        depth=depth,
+        exclude_tag_prefixes=(THEME_TAG_PREFIX,),
+    )
     if not neighbors:
         return []
     have = set(note.tags)
     counts: dict[str, int] = {}
-    for rel_path in neighbors:
-        nb_note = path_to_note.get(rel_path)
+    for neighbor_uuid in neighbors:
+        nb_note = uuid_to_note.get(neighbor_uuid)
         if nb_note is None:
             continue
         for t in nb_note.tags:
-            if t in have:
+            if t in have or is_daemon_authored_tag(t):
                 continue
             counts[t] = counts.get(t, 0) + 1
     return sorted([t for t, c in counts.items() if c >= min_neighbor_count])
@@ -156,6 +168,8 @@ def run_link(
     reader = VaultReader(vault_root, exclude_dirs=settings.vault.exclude_dirs)
     all_notes = list(reader.read_all())
     path_to_note: dict[str, Note] = {n.relative_path: n for n in all_notes}
+    # The graph is keyed by identity, so tag gathering needs a uuid-keyed map.
+    uuid_to_note: dict[str, Note] = {effective_uuid(n): n for n in all_notes}
 
     candidates = (
         [path_to_note[only_note]]
@@ -178,7 +192,7 @@ def run_link(
                 max_per_note=settings.agent.link_max_per_note,
             )
             tag_adds = _gather_tag_candidates(
-                note, graph_store, path_to_note,
+                note, graph_store, uuid_to_note,
                 min_neighbor_count=settings.agent.tag_apply_min_neighbor_count,
             )
 

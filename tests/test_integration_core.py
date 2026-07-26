@@ -347,7 +347,23 @@ def test_neighbors_and_status(tmp_path: Path, vault_root: Path) -> None:
     )
     n = core.neighbors("Designing AI Memory.md", depth=2)
     assert n["note_path"] == "Designing AI Memory.md"
-    assert isinstance(n["neighbors"], list)
+    # Asserting the shape only is what let this silently return {} for a whole
+    # release after the identity cutover. Assert real values.
+    assert n["ok"] is True
+    returned = {nb["note_path"] for nb in n["neighbors"]}
+    assert "Pullman Daemons.md" in returned
+    assert all(p.endswith(".md") for p in returned), "paths, not uuids"
+
+
+def test_neighbors_of_an_unknown_path_says_so(tmp_path: Path, vault_root: Path) -> None:
+    """An empty list is indistinguishable from a bug. Be explicit."""
+    settings = _settings(tmp_path, vault_root)
+    core = _core(settings, _tmp_vault(tmp_path, vault_root))
+
+    n = core.neighbors("No Such Note.md")
+
+    assert n["ok"] is False
+    assert n["neighbors"] == []
 
     status = core.status()
     assert status["notes"] >= 1

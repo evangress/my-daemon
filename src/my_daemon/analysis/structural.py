@@ -36,6 +36,7 @@ from my_daemon.models import (
     StructuralReport,
     WarmEdge,
     WeightEvolutionReport,
+    is_daemon_authored_tag,
 )
 from my_daemon.retrieval.weights import apply_selection
 from my_daemon.stores.graph import GraphStore
@@ -87,12 +88,27 @@ def compute_report(
         if d.get("type") == "note" and not d.get("dangling")
     }
     tag_nodes = {n for n, d in g.nodes(data=True) if d.get("type") == "tag"}
+    # Daemon-authored tags are this report's own past conclusions. They stay in
+    # the graph and in `stats()`, but the observer must not read them back as
+    # evidence — the letter is written in the same consolidate run that mints
+    # them, so citing one would be the daemon quoting itself.
+    daemon_tag_nodes = {
+        n for n in tag_nodes
+        if is_daemon_authored_tag(str(g.nodes[n].get("title", "")))
+    }
+    # Communities only: betweenness, bridges and orphans measure the graph's
+    # real shape, and a tag the user accepted is part of that shape.
+    community_projection = (
+        undirected.subgraph([n for n in undirected if n not in daemon_tag_nodes])
+        if daemon_tag_nodes
+        else undirected
+    )
     dangling_nodes = {
         n for n, d in g.nodes(data=True)
         if d.get("type") == "note" and d.get("dangling")
     }
 
-    communities = _louvain_communities(g, undirected, max_communities=max_communities)
+    communities = _louvain_communities(g, community_projection, max_communities=max_communities)
     bridging = _bridging_notes(
         undirected, note_nodes, k=betweenness_sample_k, limit=max_bridging_notes
     )
@@ -123,7 +139,10 @@ def _louvain_communities(
     *,
     max_communities: int,
 ) -> list[CommunitySummary]:
-    """Louvain on the full undirected projection (tags carry useful signal).
+    """Louvain on the undirected projection (user tags carry useful signal).
+
+    ``undirected`` arrives with daemon-authored tag nodes already removed, so a
+    theme tag can never be the reason two notes share a community.
 
     Members reported are note-only — tags are clustering glue, not output.
     Communities of size 1 (singleton notes) are pruned: they're already
@@ -147,7 +166,13 @@ def _louvain_communities(
         if len(note_members) < 2:
             continue
         tag_counts = Counter(
-            n.removeprefix(_TAG_PREFIX) for n in comm if n.startswith(_TAG_PREFIX)
+            tag
+            for tag in (
+                n.removeprefix(_TAG_PREFIX) for n in comm if n.startswith(_TAG_PREFIX)
+            )
+            # Belt and braces: the projection already excludes these, but this
+            # Counter feeds the observer prompt directly.
+            if not is_daemon_authored_tag(tag)
         )
         summaries.append(
             CommunitySummary(
@@ -272,6 +297,14 @@ def _warm_edges(
     for u, v, edata in g.edges(data=True):
         weight = float(edata.get("weight", 1.0))
         if weight <= threshold:
+            continue
+        # A warm edge is evidence in the letter; a daemon-authored tag edge is
+        # the daemon's own output, however reinforced it has become.
+        if any(
+            is_daemon_authored_tag(str(g.nodes[node].get("title", "")))
+            for node in (u, v)
+            if g.nodes[node].get("type") == "tag"
+        ):
             continue
         ranked.append(
             WarmEdge(

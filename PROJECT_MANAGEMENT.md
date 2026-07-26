@@ -118,6 +118,33 @@ code**. Neither depends on that plan; both should be fixed regardless.
   already there — flow stays flow, block stays block at its own indentation, a
   scalar becomes a flow list — and leaves every other byte alone.
 
+- [x] **`neighbors_within` was called with a path after the UUID cutover.**
+  Found 2026-07-26 while auditing the theme self-reinforcement loop.
+  `pipeline/agent_link.py` and `integration/core.py` still passed a
+  vault-relative path where nodes had become `note::<uuid>`, so both hit the
+  "not in graph" early return and silently yielded `{}`. **`daemon link`'s tag
+  suggestions and the Hermes `neighbors` tool were dead.** The test that should
+  have caught it asserted only `isinstance(result, list)`, which passes on
+  empty. **Fixed** — both resolve identities properly, `neighbors()` reports
+  `ok: False` for an unknown path instead of an empty list, and the tests now
+  assert real neighbour values.
+
+- [x] **Frontmatter-only edits were invisible to ingest.** Also found
+  2026-07-26. The identity cutover changed the skip check from `mtime` to
+  `body_sha256`, so editing only frontmatter — every tag added in Obsidian,
+  every theme tag accepted — never reached the graph, the registry, or the
+  payload until `daemon ingest --full`. **Fixed** by hashing frontmatter
+  separately and adding a *metadata refresh* path: differential graph update
+  plus a registry refresh, with no chunking and no embedding. Reported as
+  "Notes metadata-refreshed" in the ingest summary.
+
+- [ ] **Activation rows recorded before the theme-tag exclusion shipped.**
+  Any activation logged before 2026-07-26 may have been derived through a
+  daemon-authored tag edge, and still clusters at full weight. Not worth
+  invalidation machinery today — the ledger is effectively empty and the
+  `memory.lookback_days` window (180d) ages them out. Revisit only if a real
+  ledger predates the fix.
+
 ## Other Planned Work
 
 Separate from the Adaptive Memory Loop arc:

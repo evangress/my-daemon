@@ -270,3 +270,92 @@ def test_deleting_a_note_soft_deletes_its_registry_row(
     registry = NoteRegistry(db_path=settings.feedback.db_path)
     assert registry.get(UUID_B).deleted_at is not None
     assert registry.by_path("B.md") is None
+
+
+# ---------------------------------------------------------------------------
+# Frontmatter-only edits must not be invisible
+# ---------------------------------------------------------------------------
+
+
+def test_a_frontmatter_only_edit_reaches_the_graph(settings: Settings, vault: Path):
+    """Tags live in frontmatter. Skipping on body hash alone hid every one."""
+    store = GraphStore(path=settings.graph.path)
+    ingest_vault(settings, FakeEmbedder(), FakeVectorStore(), store)
+    assert not store.graph.has_edge(f"note::{UUID_A}", "tag::solitude")
+
+    (vault / "A.md").write_text(
+        f"---\nuuid: {UUID_A}\ntags: [solitude]\n---\n\n# A\n\nSee [[B]].\n",
+        encoding="utf-8",
+    )
+    ingest_vault(settings, FakeEmbedder(), FakeVectorStore(), store)
+
+    assert store.graph.has_edge(f"note::{UUID_A}", "tag::solitude")
+
+
+def test_a_frontmatter_only_edit_refreshes_the_registry(
+    settings: Settings, vault: Path
+):
+    store = GraphStore(path=settings.graph.path)
+    ingest_vault(settings, FakeEmbedder(), FakeVectorStore(), store)
+
+    (vault / "A.md").write_text(
+        f"---\nuuid: {UUID_A}\ntags: [solitude]\n---\n\n# A\n\nSee [[B]].\n",
+        encoding="utf-8",
+    )
+    ingest_vault(settings, FakeEmbedder(), FakeVectorStore(), store)
+
+    assert "solitude" in NoteRegistry(db_path=settings.feedback.db_path).get(UUID_A).tags
+
+
+def test_a_frontmatter_only_edit_costs_no_embedding(settings: Settings, vault: Path):
+    """The body is unchanged, so there is nothing new to embed."""
+    store = GraphStore(path=settings.graph.path)
+    ingest_vault(settings, FakeEmbedder(), FakeVectorStore(), store)
+
+    (vault / "A.md").write_text(
+        f"---\nuuid: {UUID_A}\ntags: [solitude]\n---\n\n# A\n\nSee [[B]].\n",
+        encoding="utf-8",
+    )
+    embedder = FakeEmbedder()
+    stats = ingest_vault(settings, embedder, FakeVectorStore(), store)
+
+    assert embedder.encoded == []
+    assert stats.notes_metadata_refreshed == 1
+    assert stats.notes_new_or_updated == 0
+
+
+def test_a_frontmatter_only_edit_preserves_learned_weights(
+    settings: Settings, vault: Path
+):
+    from my_daemon.retrieval.weights import apply_selection
+
+    store = GraphStore(path=settings.graph.path)
+    ingest_vault(settings, FakeEmbedder(), FakeVectorStore(), store)
+    apply_selection(store, seed_note_uuid=UUID_A, selected_note_uuid=UUID_B)
+    store.save()
+    weight = max(
+        float(d.get("weight", 1.0))
+        for d in store.graph[f"note::{UUID_A}"][f"note::{UUID_B}"].values()
+    )
+
+    (vault / "A.md").write_text(
+        f"---\nuuid: {UUID_A}\ntags: [solitude]\n---\n\n# A\n\nSee [[B]].\n",
+        encoding="utf-8",
+    )
+    ingest_vault(settings, FakeEmbedder(), FakeVectorStore(), store)
+
+    after = max(
+        float(d.get("weight", 1.0))
+        for d in store.graph[f"note::{UUID_A}"][f"note::{UUID_B}"].values()
+    )
+    assert after == weight
+
+
+def test_a_truly_unchanged_note_is_still_skipped(settings: Settings):
+    store = GraphStore(path=settings.graph.path)
+    ingest_vault(settings, FakeEmbedder(), FakeVectorStore(), store)
+
+    stats = ingest_vault(settings, FakeEmbedder(), FakeVectorStore(), store)
+
+    assert stats.skipped_unchanged == 2
+    assert stats.notes_metadata_refreshed == 0

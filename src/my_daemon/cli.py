@@ -185,6 +185,8 @@ def ingest(
     table.add_column("value", justify="right")
     table.add_row("Notes scanned", str(stats.notes_scanned))
     table.add_row("Notes new/updated", str(stats.notes_new_or_updated))
+    table.add_row("Notes renamed (no re-embed)", str(stats.notes_renamed))
+    table.add_row("Notes metadata-refreshed", str(stats.notes_metadata_refreshed))
     table.add_row("Notes skipped (unchanged)", str(stats.skipped_unchanged))
     table.add_row("Notes deleted", str(stats.notes_deleted))
     table.add_row("Chunks upserted", str(stats.chunks_upserted))

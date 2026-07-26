@@ -28,11 +28,13 @@ import frontmatter
 from my_daemon.config import Settings
 from my_daemon.embeddings import Embedder, SparseEmbedder
 from my_daemon.llm import LLMClient
-from my_daemon.models import RetrievalResult
+from my_daemon.models import THEME_TAG_PREFIX, RetrievalResult
 from my_daemon.pipeline.ingest import ingest_note
 from my_daemon.pipeline.query import QueryEngine, build_retrieval_summary
 from my_daemon.retrieval.weights import apply_selection
 from my_daemon.stores import FeedbackStore, GraphStore, VectorStore
+from my_daemon.stores.registry import NoteRegistry
+from my_daemon.vault.identity import derive_path_uuid
 from my_daemon.vault.parser import parse_note
 from my_daemon.vault.writer import write_atomic
 
@@ -90,6 +92,7 @@ class DaemonCore:
         self.vector_store = vector_store
         self.graph = graph_store
         self.feedback = feedback_store
+        self.registry = NoteRegistry(db_path=settings.feedback.db_path)
         self.llm = llm_client
         self.engine = QueryEngine(
             settings, embedder, vector_store, graph_store, feedback_store, llm_client,
@@ -173,13 +176,42 @@ class DaemonCore:
         return "".join(parts).rstrip() + "\n"
 
     def neighbors(self, note_path: str, *, depth: int = 1) -> dict:
-        dists = self.graph.neighbors_within(note_path, depth, weighted=True)
+        """Graph neighbours of a note, by path in and by path out.
+
+        The graph is keyed by identity, so this resolves both ways through the
+        registry — Hermes and the user both speak in paths. An unknown path
+        reports ``ok: False`` rather than an empty list, because an empty list
+        is indistinguishable from a bug (and was one, for a release).
+        """
+
+        # Registry first; fall back to the deterministic path-derived identity,
+        # which is what an unstamped note carries anyway. Only when neither
+        # lands on a real graph node is the path genuinely unknown.
+        record = self.registry.by_path(note_path)
+        note_uuid = record.uuid if record else derive_path_uuid(note_path)
+        if f"note::{note_uuid}" not in self.graph.graph:
+            return {
+                "ok": False,
+                "note_path": note_path,
+                "depth": depth,
+                "neighbors": [],
+                "reason": "no such note in the graph — has it been ingested?",
+            }
+
+        dists = self.graph.neighbors_within(
+            note_uuid, depth, weighted=True,
+            exclude_tag_prefixes=(THEME_TAG_PREFIX,),
+        )
+        # Resolve back to paths: the registry knows them, and the graph node
+        # carries `rel_path` for anything the registry has not seen.
+        paths = self.registry.paths_for(dists)
         ordered = sorted(dists.items(), key=lambda kv: kv[1])
-        return {
-            "note_path": note_path,
-            "depth": depth,
-            "neighbors": [{"note_path": n, "distance": round(d, 4)} for n, d in ordered],
-        }
+        out = []
+        for u, d in ordered:
+            rel = paths.get(u) or self.graph.graph.nodes.get(f"note::{u}", {}).get("rel_path")
+            if rel:
+                out.append({"note_path": rel, "distance": round(d, 4)})
+        return {"ok": True, "note_path": note_path, "depth": depth, "neighbors": out}
 
     def status(self) -> dict:
         g = self.graph.stats()

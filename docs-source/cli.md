@@ -52,7 +52,16 @@ daemon ingest [--full] [-v]
 
 Walk the vault, embed new/changed notes, update the graph. Incremental by
 default — the manifest at `./data/manifest.json` lets unchanged notes be
-skipped. `--full` clears the graph and manifest and re-ingests everything;
+skipped.
+
+Three cheap paths avoid re-embedding entirely, and the summary reports each:
+
+- **renamed** — body identical, path moved. One Qdrant payload update; chunk
+  ids derive from the note's UUID, so the points are already correct.
+- **metadata-refreshed** — body identical, frontmatter changed (a tag added in
+  Obsidian, or a theme tag accepted). Differential graph update plus a registry
+  refresh, so learned edge weights survive.
+- **skipped** — nothing changed at all. `--full` clears the graph and manifest and re-ingests everything;
 necessary after switching `embeddings.hybrid` on or off.
 
 ### `daemon query`

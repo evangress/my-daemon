@@ -28,6 +28,9 @@ class IngestStats:
     notes_deleted: int = 0
     # Moved on disk but unchanged in content: a payload update, no embedding.
     notes_renamed: int = 0
+    # Frontmatter changed but the body didn't: tags and links refresh, but
+    # there is nothing new to embed.
+    notes_metadata_refreshed: int = 0
     chunks_upserted: int = 0
     skipped_unchanged: int = 0
     errors: list[str] = field(default_factory=list)
@@ -40,6 +43,19 @@ def _body_hash(note: Note) -> str:
     return hashlib.sha256(note.body.encode("utf-8")).hexdigest()
 
 
+def _frontmatter_hash(note: Note) -> str:
+    """Frontmatter identity, so a tag edit is not mistaken for no edit at all.
+
+    Skipping on ``body_sha256`` alone made every frontmatter-only change
+    invisible until a full rebuild — including every tag added in Obsidian and
+    every theme tag the user accepted.
+    """
+
+    return hashlib.sha256(
+        repr(sorted(note.frontmatter.items(), key=lambda kv: kv[0])).encode("utf-8")
+    ).hexdigest()
+
+
 def _register(registry: NoteRegistry, note_uuid: str, note: Note, chunk_count: int) -> None:
     registry.upsert(
         NoteRecord(
@@ -48,6 +64,7 @@ def _register(registry: NoteRegistry, note_uuid: str, note: Note, chunk_count: i
             title=note.title,
             mtime=note.mtime,
             body_sha256=_body_hash(note),
+            frontmatter_sha256=_frontmatter_hash(note),
             tags=note.tags,
             word_count=note.word_count,
             chunk_count=chunk_count,
@@ -117,16 +134,26 @@ def ingest_vault(
 
         body_hash = _body_hash(note)
         if prev.get("body_sha256") == body_hash:
-            # Content is identical. If only the path moved, this is a rename:
-            # chunk ids derive from the uuid, so the points are already right
-            # and one payload field is all that's stale. No embedding at all.
-            if prev.get("path") != note.relative_path:
+            # The body is identical, so nothing needs embedding. Two cheaper
+            # things may still have changed.
+            chunk_ids = prev.get("chunk_ids", [])
+            renamed = prev.get("path") != note.relative_path
+            fm_changed = prev.get("frontmatter_sha256") != _frontmatter_hash(note)
+
+            if renamed:
+                # Chunk ids derive from the uuid, so the points are already
+                # right and one payload field is all that's stale.
                 vector_store.set_note_path(note_uuid, note.relative_path)
-                graph_store.update_note(note, chunk_ids=prev.get("chunk_ids", []))
                 manifest[note_uuid]["path"] = note.relative_path
+            if renamed or fm_changed:
+                # `update_note` is differential, so tags and wikilinks refresh
+                # while learned edge weights survive.
+                graph_store.update_note(note, chunk_ids=chunk_ids)
+                _register(registry, note_uuid, note, len(chunk_ids))
                 manifest[note_uuid]["mtime"] = note.mtime.isoformat()
-                stats.notes_renamed += 1
-                _register(registry, note_uuid, note, len(prev.get("chunk_ids", [])))
+                manifest[note_uuid]["frontmatter_sha256"] = _frontmatter_hash(note)
+                stats.notes_renamed += int(renamed)
+                stats.notes_metadata_refreshed += int(fm_changed and not renamed)
             else:
                 stats.skipped_unchanged += 1
             continue
@@ -162,6 +189,7 @@ def ingest_vault(
                 "path": note.relative_path,
                 "mtime": note.mtime.isoformat(),
                 "body_sha256": _body_hash(note),
+                "frontmatter_sha256": _frontmatter_hash(note),
                 "chunk_ids": [c.id for c in chunks],
                 "title": note.title,
             }
@@ -223,6 +251,7 @@ def ingest_note(
         "path": note.relative_path,
         "mtime": note.mtime.isoformat(),
         "body_sha256": _body_hash(note),
+        "frontmatter_sha256": _frontmatter_hash(note),
         "chunk_ids": [c.id for c in chunks],
         "title": note.title,
     }

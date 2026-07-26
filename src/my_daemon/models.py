@@ -17,6 +17,19 @@ from pydantic import BaseModel, ConfigDict, Field
 THEME_TAG_PREFIX = "theme/"
 
 
+def is_daemon_authored_tag(tag: str) -> bool:
+    """Did the daemon write this tag, rather than the user?
+
+    The single place that decision lives. Daemon-authored tags stay real —
+    visible in Obsidian, present in the graph, counted in `stats()` — but they
+    are excluded everywhere the daemon would read its own conclusion back as
+    independent evidence: graph expansion, Louvain communities, the observer's
+    top tags and warm edges, and the linker's tag propagation.
+    """
+
+    return tag.startswith(THEME_TAG_PREFIX)
+
+
 class Note(BaseModel):
     """A raw markdown file from the vault."""
 

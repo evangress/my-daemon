@@ -120,6 +120,26 @@ real note. `Note.wikilink_uuids` holds the links that resolved;
 title index needed to tell them apart, so `parse_note` treats every link as
 dangling and the reader promotes what it can resolve.
 
+### Daemon-authored tags are excluded from the daemon's own evidence
+
+Tags matching `models.is_daemon_authored_tag` (currently the `theme/` prefix)
+are the daemon's own output. They stay **real** — visible in Obsidian, present
+as graph nodes and edges, counted in `stats()` and PageRank — but they are
+excluded everywhere the daemon would read its own conclusion back as
+independent evidence:
+
+| Excluded from | Why |
+|---|---|
+| `neighbors_within(exclude_tag_prefixes=…)` | expansion feeds activations, which feed fingerprints, which mint themes |
+| Louvain communities (`analysis/structural.py`) | two notes must never share a community *because of* a daemon tag |
+| `CommunitySummary.top_tags` and warm edges | both are rendered into the observer prompt, in the same `consolidate` run that mints themes |
+| `agent_link`'s tag propagation | a theme tag must be a decision made in `daemon themes review`, not a side effect of four neighbours carrying it |
+
+Without this the cycle is: theme tags → new graph edges → different expansion →
+different fingerprints → new themes derived from the daemon's own earlier
+conclusions. The predicate lives in exactly one place so the exclusions cannot
+drift apart.
+
 ### `update_note` — differential re-ingest
 
 A note **owns its outgoing wikilink and tag edges, and nothing else.**
