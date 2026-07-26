@@ -145,13 +145,55 @@ code**. Neither depends on that plan; both should be fixed regardless.
   `memory.lookback_days` window (180d) ages them out. Revisit only if a real
   ledger predates the fix.
 
+The 2026-07-26 five-agent maturity evaluation
+([MATURITY-EVALUATION-2026-07-26.md](MATURITY-EVALUATION-2026-07-26.md), §7)
+found thirteen more. Status after the same-day fix waves:
+
+- [x] **Reinforcement crashed all retrieval** — float Dijkstra distances vs
+  `RetrievedChunk.graph_distance: int`. The adaptive loop had never closed.
+  Fixed: field widened to float, `is_seed_distance()` owns seed semantics,
+  seam test added (`tests/test_expand_seam.py`).
+- [x] **`daemon select` raised TypeError on every invocation** (dead
+  `selected_note_path` kwarg from the UUID cutover). Fixed + 20 CliRunner
+  tests (`tests/test_cli.py`).
+- [x] **`daemon ask` silently never synthesized** (truthy Typer `OptionInfo`
+  sentinels). Fixed via shared `_run_query()`.
+- [x] **Hermes ambient prefetch classified as intentional** — new
+  `hermes_prefetch` ambient surface; prompt-boundary filter for answer-less
+  rows. Feedback rows kept (endorse + weight replay read them).
+- [x] **Themes never reached the observer letter** — phase order now
+  snapshot → analyze → themes → letter → decay; `observer_letter(themes=)`.
+- [x] **Missing config silently became defaults** (broke cron/schtasks) —
+  `ConfigNotFoundError`, search order, config-dir-anchored paths.
+- [x] **Non-atomic, unlocked graph/manifest writes** — atomic replace +
+  inter-process lock + `GraphStore.transaction()` at all three
+  read-modify-write sites; `GraphCorruptError` with recovery hint.
+- [x] **`daemon reset` footgun** — config-aware, `--models`/`--all` tiers,
+  refuses live server storage; plus new `daemon backup`/`restore`.
+- [x] **`config.example.yaml` shipped `agent.enabled: true`** — now matches
+  the code default (false) after the example rewrite for embedded Qdrant.
+- [ ] **`ActivationLedger.compact()` would destroy fingerprints** (nothing
+  reads `fingerprint_json`); still zero callers. Fix or delete before wiring.
+- [ ] **`apply_selection` can route through theme-tag hubs**
+  (`shortest_note_path` has no tag exclusion) — latent until theme tags are
+  accepted; part of finishing the loop severance (eval §6 item 25).
+- [ ] **`similar()` IDF asymmetry** (probe weighted, candidates not) —
+  eval §2 "3.6".
+- [ ] **`agent_link_runs`/`agent_extract_runs` still path-keyed** after the
+  UUID cutover — a rename re-runs the extractor/linker.
+
 ## Other Planned Work
 
 Separate from the Adaptive Memory Loop arc:
 
 - [ ] Light setup UI for `ANTHROPIC_API_KEY` + a "compose docker" button.
+  *(Partly obsolete since 2026-07-26: embedded Qdrant is the default, so
+  Docker is optional; the setup UI ask shrinks to key + vault + first ingest.)*
 - [ ] Multi-embedding spaces.
-- [ ] Obsidian plugin / file watcher.
+- [x] ~~Obsidian plugin /~~ file watcher — **shipped 2026-07-26** as
+  `daemon run` (watchfiles debounced ingest + nightly consolidate) plus
+  `daemon schedule` (systemd --user / schtasks units). An Obsidian *plugin*
+  remains unplanned.
 - [ ] `daemon graph todos` — surface dangling wikilink targets as
   "notes you keep meaning to write" (see AI Suggestions).
 - [ ] **No payload index on Qdrant's `note_path`**, though
@@ -202,6 +244,22 @@ questions in PLAN-HERMES §14 (identity-note seed, single-vs-many clients,
 NiceGUI's long-term fate) are not yet decided.
 
 ## Done
+
+- **Maturity-evaluation fix waves, Arcs 1+2 (2026-07-26).** Five-agent audit
+  ([MATURITY-EVALUATION-2026-07-26.md](MATURITY-EVALUATION-2026-07-26.md))
+  followed by four fix waves, all Opus sub-agents, TDD throughout;
+  358 → 624 passing tests. **Arc 1 (loop closure):** the three dead commands
+  (float `graph_distance`, `select` kwarg, `ask` sentinel bug), the missing
+  reinforce→expand seam test, `hermes_prefetch` ambient surface, themes into
+  the observer letter. **Arc 2 (daemon envelope):** config search order +
+  loud missing-config failure + config-dir-anchored paths (cron/schtasks now
+  correct-by-construction), atomic graph/manifest writes + inter-process
+  lock + `transaction()`, embedded Qdrant as default (Docker optional; local
+  hybrid RRF verified by test), `daemon doctor` (8 checks + shared Qdrant
+  error translation), defanged `reset`, `backup`/`restore`, `daemon run`
+  supervisor + `daemon schedule`. **Hygiene:** uv.lock tracked, `.idea/` +
+  `docs-site/` untracked, `[Ss]cripts` gitignore trap fixed (scripts/ was
+  never tracked), GitHub Actions CI, mypy gate, repo-wide ruff format.
 
 - **Memory refocus M-mem-0 → M-mem-4 (2026-07-26).** The identity spine and the
   activation ledger, per [PLAN-MEMORY.md](PLAN-MEMORY.md). **M-mem-0:** a real
@@ -274,4 +332,24 @@ The graph store currently keeps dangling wikilink targets as placeholder nodes (
 
 **The philosophical framing should live somewhere the daemon can read.**
 You and I have talked about why this project matters. Right now that context lives in CLAUDE.md (which only I see) and PROJECT_MANAGEMENT.md (which is gitignored from RAG, ironically). If My Daemon ingests its own vault, you might want to seed it with a short "purpose" note so it can answer questions like "why am I building this" from your own voice rather than mine. Just an idea.
+
+### 2026-07-26 — After the maturity-evaluation fix waves
+
+**What's deliberately still open** (evaluation Arcs 3–4, not started):
+docs refresh (README/roadmap/cli.md still describe the pre-M1 world),
+CONTRIBUTING.md, retiring commit-to-master before collaborators arrive,
+version bump + tags, packaging config templates into the wheel, GUI
+catch-up (session_id/history, themes + dream panels, status bar,
+self-hosted fonts), one real Hermes-host validation, the librarian STATUS
+banner + §L4 rewrite around UUID identity, finishing the theme-loop
+severance, and the `similar()` IDF asymmetry.
+
+**The deepest open design question is unchanged:** seeds dominate the
+candidate pool and seed-picks reinforce nothing (`apply_selection` no-ops
+when seed == selected). Now that the loop *can* close mechanically, decide
+what "picking" should mean — reserve pool slots for expanded candidates,
+reinforce seed retrieval features, or widen the pool with a damped seed
+advantage — before scaling any more learning machinery. Watch
+`daemon analyze` after a week of real use: if the weight distribution is
+still uniform, this is why.
 
