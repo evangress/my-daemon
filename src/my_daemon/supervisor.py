@@ -42,7 +42,8 @@ from collections.abc import AsyncIterator, Callable, Iterable, Sequence
 from dataclasses import dataclass
 from datetime import datetime, time, timedelta
 from pathlib import Path
-from typing import Protocol
+from types import FrameType
+from typing import Any, Protocol
 
 from my_daemon.config import Settings
 from my_daemon.doctor import CheckResult, check_vault, check_vector_store
@@ -68,6 +69,11 @@ __all__ = [
     "systemd_unit_path",
     "task_command",
 ]
+
+#: Whatever `signal.signal` accepts and hands back — a callback, one of the
+#: `SIG_DFL`/`SIG_IGN` constants, or None. Named here so the saved-handler map
+#: can be round-tripped without loosening it to `object`.
+SignalHandler = Callable[[int, FrameType | None], Any] | int | signal.Handlers | None
 
 #: How often the supervisor wakes to check its own timers. Fine-grained enough
 #: that a 5-second debounce is honoured within a second, coarse enough that an
@@ -322,7 +328,7 @@ class Supervisor:
         *,
         resources_factory: Callable[[], Resources] | None = None,
         preflight: Callable[[Settings], list[CheckResult]] | None = None,
-        watcher: Callable[[], AsyncIterator[object]] | None = None,
+        watcher: Callable[[], AsyncIterator[Iterable[object]]] | None = None,
         emit: Callable[[str], None] = print,
         monotonic: Callable[[], float] = _time.monotonic,
         now: Callable[[], datetime] = datetime.now,
@@ -354,7 +360,7 @@ class Supervisor:
         self._heartbeat_seconds = max(0.0, settings.run.heartbeat_minutes * 60.0)
         self._next_heartbeat: float | None = None
         self._skip_reason_logged: str | None = None
-        self._previous_handlers: dict[int, object] = {}
+        self._previous_handlers: dict[int, SignalHandler] = {}
         self._stopping = False
         self._closed = False
 
@@ -569,7 +575,7 @@ class Supervisor:
 
     # -- the loop ----------------------------------------------------------
 
-    def _default_watcher(self) -> AsyncIterator[object]:
+    def _default_watcher(self) -> AsyncIterator[Iterable[object]]:
         """The real thing. Imported here so the module stays importable — and
         the pure components stay testable — without watchfiles present."""
         from watchfiles import awatch

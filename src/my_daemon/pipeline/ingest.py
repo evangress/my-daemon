@@ -11,6 +11,7 @@ from __future__ import annotations
 import hashlib
 import json
 import logging
+from collections.abc import Callable
 from dataclasses import dataclass, field
 from pathlib import Path
 
@@ -125,7 +126,8 @@ def ingest_vault(
     graph_store: GraphStore,
     sparse_embedder: SparseEmbedder | None = None,
     full_rebuild: bool = False,
-    progress: callable | None = None,  # type: ignore[type-arg]
+    # (index, total, relative_path) — a display callback, never load-bearing.
+    progress: Callable[[int, int, str], None] | None = None,
 ) -> IngestStats:
     stats = IngestStats()
 

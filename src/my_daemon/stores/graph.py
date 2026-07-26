@@ -84,7 +84,9 @@ def _pid_alive(pid: int) -> bool | None:
         try:
             import ctypes
 
-            kernel32 = ctypes.windll.kernel32  # type: ignore[attr-defined]
+            # `windll` only exists in typeshed under win32; `unused-ignore`
+            # keeps the gate honest when mypy *is* run for that platform.
+            kernel32 = ctypes.windll.kernel32  # type: ignore[attr-defined, unused-ignore]
             handle = kernel32.OpenProcess(0x1000, False, pid)  # QUERY_LIMITED_INFORMATION
             if not handle:
                 return False if kernel32.GetLastError() == 87 else None  # 87 = no such pid
@@ -338,10 +340,14 @@ class GraphStore:
                     f"graph file is corrupt — run `daemon ingest --full` to rebuild "
                     f"({self.path}: {exc!r})"
                 ) from exc
-        if not isinstance(loaded, nx.Graph):
+        # Specifically a MultiDiGraph, not merely "some graph": the rest of this
+        # class calls multigraph-only API (`out_edges(keys=True)`, keyed
+        # `remove_edge`). A plain Graph would sail past a looser check and then
+        # blow up somewhere far from the file that caused it.
+        if not isinstance(loaded, nx.MultiDiGraph):
             raise GraphCorruptError(
                 f"graph file is corrupt — run `daemon ingest --full` to rebuild "
-                f"({self.path}: unpickled a {type(loaded).__name__}, expected a graph)"
+                f"({self.path}: unpickled a {type(loaded).__name__}, expected a MultiDiGraph)"
             )
         self.graph = loaded
 

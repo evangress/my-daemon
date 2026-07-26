@@ -29,7 +29,7 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Literal
 
-from my_daemon.stores.db import migrate, open_state_db
+from my_daemon.stores.db import last_insert_id, migrate, open_state_db
 
 _MIN_SCHEMA_VERSION = 4
 
@@ -195,7 +195,7 @@ class ActivationLedger:
                     latency_ms,
                 ),
             )
-            query_id = int(cur.lastrowid)
+            query_id = last_insert_id(cur)
             conn.executemany(
                 "INSERT OR REPLACE INTO query_activations "
                 "(query_id, note_uuid, source, strength, raw_score, rank, chunk_id, "

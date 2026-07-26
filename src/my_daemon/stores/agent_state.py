@@ -12,7 +12,7 @@ import sqlite3
 from datetime import UTC, datetime
 from pathlib import Path
 
-from my_daemon.stores.db import migrate, open_state_db
+from my_daemon.stores.db import last_insert_id, migrate, open_state_db
 
 # These tables exist from the baseline migration onward, and also in every
 # pre-ladder database (which sits at user_version 0).
@@ -145,7 +145,7 @@ class AgentStateStore:
                     1 if dry_run else 0,
                 ),
             )
-            return int(cur.lastrowid)
+            return last_insert_id(cur)
 
     def recent_observer_runs(self, limit: int = 10) -> list[dict]:
         with self._connect() as conn:

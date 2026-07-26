@@ -121,7 +121,9 @@ def assign_uuids(
 
     run_id = _new_run_id() if apply else None
     backup_dir = None
-    if apply and backup:
+    # `run_id is not None` is exactly `apply` — spelled this way so the id is
+    # provably present where it is joined onto a path.
+    if run_id is not None and backup:
         backup_dir = _migrations_root(settings) / run_id
         (backup_dir / "files").mkdir(parents=True, exist_ok=True)
     report.run_id = run_id

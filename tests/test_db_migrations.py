@@ -306,3 +306,37 @@ def test_feedback_store_reads_an_unstamped_snapshot_bundle(tmp_path: Path):
 
     assert store.recent()[0]["query"] == "old question"
     assert _user_version(db) == 0  # untouched
+
+
+# ---------------------------------------------------------------------------
+# last_insert_id — the rowid narrowing every store depends on
+# ---------------------------------------------------------------------------
+
+
+def test_last_insert_id_returns_the_rowid_of_an_insert(tmp_path: Path):
+    db = tmp_path / "state.db"
+    conn = dbmod.open_state_db(db)
+    try:
+        cur = conn.execute(
+            "INSERT INTO feedback (timestamp, query, retrieval_summary, answer, latency_ms) "
+            "VALUES ('2026-01-01T00:00:00+00:00', 'q', '{}', 'a', 1)"
+        )
+        assert dbmod.last_insert_id(cur) == 1
+    finally:
+        conn.close()
+
+
+def test_last_insert_id_names_the_problem_when_there_is_no_rowid(tmp_path: Path):
+    """`executemany` leaves `lastrowid` None; say so rather than raise from int()."""
+    db = tmp_path / "state.db"
+    conn = dbmod.open_state_db(db)
+    try:
+        cur = conn.executemany(
+            "INSERT INTO feedback (timestamp, query, retrieval_summary, answer, latency_ms) "
+            "VALUES (?, 'q', '{}', 'a', 1)",
+            [("2026-01-01T00:00:00+00:00",), ("2026-01-02T00:00:00+00:00",)],
+        )
+        with pytest.raises(RuntimeError, match="rowid"):
+            dbmod.last_insert_id(cur)
+    finally:
+        conn.close()

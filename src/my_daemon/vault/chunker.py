@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import hashlib
 import re
+from typing import Any
 
 from langchain_text_splitters import MarkdownHeaderTextSplitter, RecursiveCharacterTextSplitter
 
@@ -38,7 +39,8 @@ def chunk_note(note: Note, max_tokens: int = 512, overlap_tokens: int = 50) -> l
 
     note_uuid = effective_uuid(note)
     header_splitter = MarkdownHeaderTextSplitter(headers_to_split_on=_DEFAULT_HEADER_SPLITS)
-    pieces = header_splitter.split_text(note.body) or []
+    # langchain Documents, or the shim below — read structurally, not by type.
+    pieces: list[Any] = header_splitter.split_text(note.body) or []
 
     if not pieces:
         # No headings at all — treat the whole body as one piece.
@@ -59,7 +61,7 @@ def chunk_note(note: Note, max_tokens: int = 512, overlap_tokens: int = 50) -> l
     index = 0
     for piece in pieces:
         heading_path = _heading_path_from(piece)
-        text = piece.page_content if hasattr(piece, "page_content") else piece.text  # type: ignore[attr-defined]
+        text = piece.page_content if hasattr(piece, "page_content") else piece.text
         text = text.strip()
         if not text:
             continue

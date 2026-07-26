@@ -95,6 +95,22 @@ _M001_FEEDBACK_COLUMNS = {
 }
 
 
+def last_insert_id(cur: sqlite3.Cursor) -> int:
+    """The rowid an ``INSERT`` just produced.
+
+    ``Cursor.lastrowid`` is ``int | None``: it is None after ``executemany``
+    and undefined for anything that is not row-inserting DML. Every caller here
+    has just run a single-row ``execute("INSERT ...")``, so None means the
+    statement did not insert what we thought — say that plainly rather than let
+    ``int(None)`` raise a bare ``TypeError`` from an unrelated-looking line.
+    """
+
+    rowid = cur.lastrowid
+    if rowid is None:
+        raise RuntimeError("expected an INSERT to produce a rowid, got none")
+    return rowid
+
+
 def exec_script(conn: sqlite3.Connection, sql: str) -> None:
     """Run a multi-statement DDL script *without* breaking the caller's transaction.
 

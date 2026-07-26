@@ -26,6 +26,7 @@ import shutil
 import sqlite3
 import urllib.error
 import urllib.request
+from collections.abc import Callable
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
@@ -118,7 +119,7 @@ def create_snapshot(
     *,
     include_qdrant: bool = True,
     qdrant_storage_dir: Path | None = None,
-    on_warning: callable | None = None,
+    on_warning: Callable[[str], None] | None = None,
 ) -> SnapshotBundle:
     """Freeze the live state into a new bundle under ``settings.snapshot.dir``.
 
@@ -235,6 +236,10 @@ def _snapshot_qdrant(
     url = settings.vector_store.qdrant.url
     client = QdrantClient(url=url, check_compatibility=False)
     description = client.create_snapshot(collection_name=collection)
+    if description is None:
+        # Qdrant answered but declined to make one (missing collection, disk
+        # pressure). The caller turns this into a warning and a partial bundle.
+        raise RuntimeError(f"Qdrant did not create a snapshot for collection {collection!r}")
     snapshot_name = description.name
 
     _ensure_dir(dest_dir)
@@ -329,6 +334,9 @@ def _restore_vector_into_side_collection(
 
     from qdrant_client import QdrantClient
 
+    snapshot_file = bundle.qdrant_snapshot
+    if snapshot_file is None:
+        raise RuntimeError(f"snapshot {bundle.id} has no Qdrant payload to restore")
     if settings.vector_store.qdrant.is_embedded:
         raise RuntimeError(
             "embedded Qdrant (vector_store.qdrant.path) cannot recover snapshots; "
@@ -347,7 +355,7 @@ def _restore_vector_into_side_collection(
     # multipart and qdrant_client's surface for it varies by version. The
     # simplest working approach is `recover_snapshot` with a file:// URL,
     # which assumes a shared filesystem (the bundled docker-compose case).
-    location = f"file://{bundle.qdrant_snapshot.resolve()}"
+    location = f"file://{snapshot_file.resolve()}"
     client.recover_snapshot(collection_name=side_collection, location=location)
 
     vector = VectorStore(

@@ -10,7 +10,7 @@ from pathlib import Path
 
 from pydantic import BaseModel, Field
 
-from my_daemon.stores.db import migrate, open_state_db
+from my_daemon.stores.db import last_insert_id, migrate, open_state_db
 
 _MIN_SCHEMA_VERSION = 5
 _DORMANT_AFTER_MISSES = 3
@@ -72,7 +72,7 @@ class ThemeStore:
                 "first_seen_at, last_seen_at, snapshot_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
                 (slug, label, summary, json.dumps(centroid), query_count, now, now, snapshot_id),
             )
-            return int(cur.lastrowid)
+            return last_insert_id(cur)
 
     def set_label(
         self, theme_id: int, *, label: str, summary: str, locked: bool = False

@@ -204,6 +204,16 @@ def _build_agent_state(s: Settings) -> AgentStateStore:
     return AgentStateStore(db_path=s.feedback.db_path)
 
 
+def _store_error_types() -> tuple[type[BaseException], ...]:
+    """`LocalStoreLockedError` plus whatever "store unreachable" looks like today.
+
+    Still a function, not a constant, so ``connection_error_types``' lazy
+    qdrant/httpx imports stay off the CLI startup path.
+    """
+
+    return (LocalStoreLockedError, *connection_error_types())
+
+
 @contextlib.contextmanager
 def _store_errors(s: Settings) -> Iterator[None]:
     """Turn a dead vector store into one actionable line, at the CLI boundary.
@@ -217,7 +227,7 @@ def _store_errors(s: Settings) -> Iterator[None]:
 
     try:
         yield
-    except (LocalStoreLockedError, *connection_error_types()) as exc:
+    except _store_error_types() as exc:
         if isinstance(exc, GraphLockTimeout):
             # `GraphLockTimeout` is a `TimeoutError`, so it lands here — but it
             # names the process holding the graph, and calling that "Qdrant is
@@ -266,7 +276,9 @@ def init(
         console.print(f"[red]Missing {config_example}. Run from the project root.[/red]")
         raise typer.Exit(code=1)
 
-    vault_path = vault or Prompt.ask(
+    # Spelled as a conditional rather than `or` so the prompt's return type is
+    # inferred as `str` instead of picking up this variable's optionality.
+    vault_path = vault if vault else Prompt.ask(
         "Vault path",
         default="~/Documents/Obsidian/MyVault",
     )
@@ -1359,9 +1371,10 @@ def reset(
     notes: list[str] = []
 
     server_up = False
-    if qdrant.is_embedded:
-        if qdrant.path != MEMORY_LOCATION and Path(qdrant.path).exists():
-            targets.insert(0, ("vectors (embedded qdrant)", Path(qdrant.path)))
+    embedded_path = qdrant.path  # non-None is exactly `qdrant.is_embedded`
+    if embedded_path is not None:
+        if embedded_path != MEMORY_LOCATION and Path(embedded_path).exists():
+            targets.insert(0, ("vectors (embedded qdrant)", Path(embedded_path)))
     else:
         server_up = server_reachable(qdrant.url)
         storage = _compose_storage_dir(s)
@@ -1528,7 +1541,7 @@ def _read_bundle_metadata(bundle_dir: Path) -> dict:
 def _list_bundles(root: Path) -> list[tuple[Path, dict | None]]:
     if not root.is_dir():
         return []
-    found = []
+    found: list[tuple[Path, dict | None]] = []
     for child in sorted(root.iterdir()):
         if not child.is_dir():
             continue

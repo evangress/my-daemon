@@ -154,8 +154,7 @@ class VectorStore:
         vectors = info.config.params.vectors
         # Named-vector configs are dicts keyed by name. The old single-slot
         # config is a bare VectorParams.
-        is_named = isinstance(vectors, dict)
-        if not is_named:
+        if not isinstance(vectors, dict):
             return True
         return DENSE_NAME not in vectors
 
@@ -232,8 +231,13 @@ class VectorStore:
 
         if not chunks:
             return
-        if self.hybrid and sparse_vectors is None:
-            raise ValueError("hybrid VectorStore requires sparse_vectors on upsert")
+        # Non-None exactly when we are in hybrid mode, which is what the loop
+        # below branches on.
+        sparse: list[tuple[list[int], list[float]]] | None = None
+        if self.hybrid:
+            if sparse_vectors is None:
+                raise ValueError("hybrid VectorStore requires sparse_vectors on upsert")
+            sparse = sparse_vectors
 
         points = []
         for i, (chunk, vec) in enumerate(zip(chunks, vectors, strict=True)):
@@ -247,9 +251,10 @@ class VectorStore:
                 "wikilinks": chunk.wikilinks,
                 "text": chunk.text[:_CHUNK_TEXT_PREVIEW_LIMIT],
             }
-            if self.hybrid:
-                idx, val = sparse_vectors[i]
-                point_vector: dict = {
+            point_vector: dict | list[float]
+            if sparse is not None:
+                idx, val = sparse[i]
+                point_vector = {
                     DENSE_NAME: vec,
                     SPARSE_NAME: SparseVector(indices=idx, values=val),
                 }

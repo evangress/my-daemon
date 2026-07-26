@@ -112,6 +112,24 @@ def test_a_valid_pickle_of_the_wrong_type_is_corrupt(tmp_path: Path):
         GraphStore(path=path).load()
 
 
+def test_a_plain_graph_pickle_is_corrupt(tmp_path: Path):
+    """A graph, but not a *multi-di*graph.
+
+    Everything downstream calls multigraph-only API (`out_edges(keys=True)`,
+    keyed `remove_edge`). Accepting a plain `Graph` here would defer the
+    failure to somewhere with no mention of the file that caused it.
+    """
+    import networkx as nx
+
+    path = tmp_path / "graph.gpickle"
+    path.write_bytes(pickle.dumps(nx.Graph()))
+
+    with pytest.raises(GraphCorruptError) as excinfo:
+        GraphStore(path=path).load()
+
+    assert "daemon ingest --full" in str(excinfo.value)
+
+
 def test_missing_graph_file_is_still_an_empty_graph(tmp_path: Path):
     store = GraphStore(path=tmp_path / "graph.gpickle")
     store.load()

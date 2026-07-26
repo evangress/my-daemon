@@ -13,7 +13,7 @@ from datetime import UTC, datetime
 from pathlib import Path
 
 from my_daemon.models import FeedbackEvent, FeedbackSignal
-from my_daemon.stores.db import migrate, open_state_db
+from my_daemon.stores.db import last_insert_id, migrate, open_state_db
 
 # The `feedback` table exists from the baseline migration onward, and also in
 # every pre-ladder database (which sits at user_version 0). Asking for 0 is what
@@ -54,7 +54,7 @@ class FeedbackStore:
                     event.signal_captured_at.isoformat() if event.signal_captured_at else None,
                 ),
             )
-            return int(cur.lastrowid)
+            return last_insert_id(cur)
 
     def attach_signal(
         self,
