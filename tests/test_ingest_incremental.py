@@ -79,9 +79,7 @@ def _edge_weight(store: GraphStore, src: str, dst: str) -> float:
     return max(float(d.get("weight", 1.0)) for d in data.values())
 
 
-def test_editing_a_note_keeps_inbound_wikilinks_from_other_notes(
-    settings: Settings, vault: Path
-):
+def test_editing_a_note_keeps_inbound_wikilinks_from_other_notes(settings: Settings, vault: Path):
     """Editing B used to delete A's link to B until A was re-ingested too."""
     store = GraphStore(path=settings.graph.path)
     _ingest(settings, store)
@@ -93,9 +91,7 @@ def test_editing_a_note_keeps_inbound_wikilinks_from_other_notes(
     assert store.graph.has_edge(f"note::{_u('A.md')}", f"note::{_u('B.md')}")
 
 
-def test_editing_a_note_preserves_weights_learned_on_its_own_edges(
-    settings: Settings, vault: Path
-):
+def test_editing_a_note_preserves_weights_learned_on_its_own_edges(settings: Settings, vault: Path):
     store = GraphStore(path=settings.graph.path)
     _ingest(settings, store)
     apply_selection(store, seed_note_uuid=_u("A.md"), selected_note_uuid=_u("B.md"))
@@ -111,9 +107,7 @@ def test_editing_a_note_preserves_weights_learned_on_its_own_edges(
     assert _edge_weight(store, "A.md", "B.md") == reinforced
 
 
-def test_editing_a_note_preserves_weights_learned_on_inbound_edges(
-    settings: Settings, vault: Path
-):
+def test_editing_a_note_preserves_weights_learned_on_inbound_edges(settings: Settings, vault: Path):
     """Editing the *target* of a reinforced edge must not reset it either."""
     store = GraphStore(path=settings.graph.path)
     _ingest(settings, store)
@@ -140,9 +134,7 @@ def test_editing_a_note_still_replaces_its_vectors(settings: Settings, vault: Pa
     assert vector_store.upserted  # and re-added
 
 
-def test_deleting_a_note_still_removes_it_from_the_graph(
-    settings: Settings, vault: Path
-):
+def test_deleting_a_note_still_removes_it_from_the_graph(settings: Settings, vault: Path):
     store = GraphStore(path=settings.graph.path)
     _ingest(settings, store)
 
@@ -152,9 +144,7 @@ def test_deleting_a_note_still_removes_it_from_the_graph(
     assert f"note::{_u('B.md')}" not in store.graph
 
 
-def test_deleting_a_notes_target_currently_loses_the_inbound_edge(
-    settings: Settings, vault: Path
-):
+def test_deleting_a_notes_target_currently_loses_the_inbound_edge(settings: Settings, vault: Path):
     """Documents a *separate* known defect on the deletion path.
 
     Incremental and full ingest diverge here. A full rebuild would leave
@@ -173,13 +163,13 @@ def test_deleting_a_notes_target_currently_loses_the_inbound_edge(
     (vault / "B.md").unlink()
     _ingest(settings, store)
 
-    assert list(store.graph.out_edges(f"note::{_u('A.md')}")) == [(f"note::{_u('A.md')}", "tag::memory")]
+    assert list(store.graph.out_edges(f"note::{_u('A.md')}")) == [
+        (f"note::{_u('A.md')}", "tag::memory")
+    ]
     assert "dangling::B" not in store.graph  # what a full rebuild would have created
 
 
-def test_ingest_note_keeps_inbound_links_when_recapturing(
-    settings: Settings, vault: Path
-):
+def test_ingest_note_keeps_inbound_links_when_recapturing(settings: Settings, vault: Path):
     """The Hermes capture path re-ingests one note repeatedly within a session."""
     from my_daemon.pipeline.ingest import ingest_note
     from my_daemon.vault.parser import parse_note
@@ -221,9 +211,7 @@ def test_ingest_note_preserves_learned_weights(settings: Settings, vault: Path):
     assert _edge_weight(store, "A.md", "B.md") == reinforced
 
 
-def test_removing_a_wikilink_from_a_note_drops_the_edge(
-    settings: Settings, vault: Path
-):
+def test_removing_a_wikilink_from_a_note_drops_the_edge(settings: Settings, vault: Path):
     store = GraphStore(path=settings.graph.path)
     _ingest(settings, store)
 

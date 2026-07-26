@@ -23,6 +23,7 @@ class LLMClient:
     def _client_(self) -> Anthropic:
         if self._client is None:
             from anthropic import Anthropic
+
             if not self.api_key:
                 raise RuntimeError(
                     "ANTHROPIC_API_KEY is not set. Add it to .env or your shell environment."
@@ -50,7 +51,9 @@ class LLMClient:
                 out.append(block.text)
         return "\n".join(out).strip()
 
-    def synthesize_stream(self, query: str, chunks: list[RetrievedChunk], memories=None) -> Iterator[str]:  # noqa: ANN001
+    def synthesize_stream(
+        self, query: str, chunks: list[RetrievedChunk], memories=None
+    ) -> Iterator[str]:  # noqa: ANN001
         """Yield text deltas as they arrive. Use for live-updating UIs."""
         client = self._client_()
         with client.messages.stream(**self._build_kwargs(query, chunks, memories)) as stream:

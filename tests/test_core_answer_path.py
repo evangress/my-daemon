@@ -88,9 +88,7 @@ def core(tmp_path: Path, vault_root: Path):
 
 
 def test_log_answer_writes_a_feedback_row(core):
-    event_id = core.log_answer(
-        query="q", answer="an answer", latency_ms=12, retrieval=_result()
-    )
+    event_id = core.log_answer(query="q", answer="an answer", latency_ms=12, retrieval=_result())
 
     event = core.feedback.get(event_id)
     assert event is not None
@@ -159,9 +157,7 @@ def test_ask_stream_passes_recalled_memories_to_the_model(core, monkeypatch):
 
 
 def test_ask_stream_on_an_empty_retrieval_yields_nothing(core, monkeypatch):
-    monkeypatch.setattr(
-        core.orchestrator, "retrieve", lambda q, **kw: RetrievalResult(query=q)
-    )
+    monkeypatch.setattr(core.orchestrator, "retrieve", lambda q, **kw: RetrievalResult(query=q))
 
     stream = core.ask_stream("q", surface="gui")
 
@@ -177,9 +173,7 @@ def test_ask_stream_on_an_empty_retrieval_yields_nothing(core, monkeypatch):
 def test_a_direct_click_reinforces_even_with_hermes_write_back_off(core):
     """`hermes.allow_write_back` gates *capture*, not a button the user pressed."""
     assert core.s.hermes.allow_write_back is False
-    event_id = core.log_answer(
-        query="q", answer="a", latency_ms=1, retrieval=_result()
-    )
+    event_id = core.log_answer(query="q", answer="a", latency_ms=1, retrieval=_result())
 
     result = core.endorse(event_id, rank=1, require_write_back=False)
 
@@ -188,9 +182,7 @@ def test_a_direct_click_reinforces_even_with_hermes_write_back_off(core):
 
 def test_ambient_endorsement_still_respects_hermes_write_back(core):
     """Hermes' implicit soft-reinforcement must stay gated."""
-    event_id = core.log_answer(
-        query="q", answer="a", latency_ms=1, retrieval=_result()
-    )
+    event_id = core.log_answer(query="q", answer="a", latency_ms=1, retrieval=_result())
 
     result = core.endorse(event_id, rank=1)
 
@@ -200,9 +192,7 @@ def test_ambient_endorsement_still_respects_hermes_write_back(core):
 
 def test_reinforcement_can_be_switched_off_entirely(core):
     core.s.feedback.reinforce_enabled = False
-    event_id = core.log_answer(
-        query="q", answer="a", latency_ms=1, retrieval=_result()
-    )
+    event_id = core.log_answer(query="q", answer="a", latency_ms=1, retrieval=_result())
 
     result = core.endorse(event_id, rank=1, require_write_back=False)
 

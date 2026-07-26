@@ -368,7 +368,9 @@ class GraphStore:
         """
 
         self.path.parent.mkdir(parents=True, exist_ok=True)
-        tmp_fd, tmp_name = tempfile.mkstemp(prefix=".graph-", suffix=".tmp", dir=str(self.path.parent))
+        tmp_fd, tmp_name = tempfile.mkstemp(
+            prefix=".graph-", suffix=".tmp", dir=str(self.path.parent)
+        )
         try:
             with os.fdopen(tmp_fd, "wb") as fh:
                 pickle.dump(self.graph, fh)
@@ -449,15 +451,11 @@ class GraphStore:
         desired: dict[tuple[str, str], str] = {
             (_note_node(u), "wikilink"): u for u in note.wikilink_uuids
         }
-        desired.update(
-            {(_dangling_node(t), "wikilink"): t for t in note.dangling_wikilinks}
-        )
+        desired.update({(_dangling_node(t), "wikilink"): t for t in note.dangling_wikilinks})
         desired.update({(_tag_node(tag), "tag"): tag for tag in note.tags})
 
         existing: dict[tuple[str, str], list] = {}
-        for _src, dst, key, edata in list(
-            self.graph.out_edges(node, keys=True, data=True)
-        ):
+        for _src, dst, key, edata in list(self.graph.out_edges(node, keys=True, data=True)):
             kind = edata.get("kind")
             if kind not in ("wikilink", "tag"):
                 continue  # not ours to manage — leave any other edge kind alone
@@ -549,9 +547,7 @@ class GraphStore:
             # a reinforced edge cancels out any weaker parallel siblings.
             def _edge_cost(_u: str, _v: str, edata: dict) -> float:
                 weights = [
-                    float(d.get("weight", 1.0))
-                    for d in edata.values()
-                    if isinstance(d, dict)
+                    float(d.get("weight", 1.0)) for d in edata.values() if isinstance(d, dict)
                 ] or [float(edata.get("weight", 1.0))]
                 return 1.0 / max(max(weights), 0.1)
 
@@ -563,7 +559,9 @@ class GraphStore:
                 )
             except nx.NodeNotFound:
                 weighted_dist = {start: 0.0}
-            distances: dict[str, float] = {n: float(weighted_dist.get(n, hop_seen[n])) for n in hop_seen}
+            distances: dict[str, float] = {
+                n: float(weighted_dist.get(n, hop_seen[n])) for n in hop_seen
+            }
         else:
             distances = {n: float(d) for n, d in hop_seen.items()}
 
@@ -597,20 +595,26 @@ class GraphStore:
             return None
 
     def stats(self) -> GraphStats:
-        notes = [n for n, d in self.graph.nodes(data=True) if d.get("type") == "note" and not d.get("dangling")]
+        notes = [
+            n
+            for n, d in self.graph.nodes(data=True)
+            if d.get("type") == "note" and not d.get("dangling")
+        ]
         tag_nodes = [n for n, d in self.graph.nodes(data=True) if d.get("type") == "tag"]
         try:
             pr = nx.pagerank(self.graph) if self.graph.number_of_nodes() else {}
         except nx.PowerIterationFailedConvergence:
             pr = {}
         top_pr = sorted(
-            ((n.removeprefix("note::"), s) for n, s in pr.items() if self.graph.nodes[n].get("type") == "note"),
+            (
+                (n.removeprefix("note::"), s)
+                for n, s in pr.items()
+                if self.graph.nodes[n].get("type") == "note"
+            ),
             key=lambda x: x[1],
             reverse=True,
         )[:10]
-        tag_counts = Counter(
-            t.removeprefix("tag::") for t in tag_nodes
-        )
+        tag_counts = Counter(t.removeprefix("tag::") for t in tag_nodes)
         # rank tags by note-degree
         tag_degree = sorted(
             (

@@ -57,8 +57,9 @@ class FakeStats:
 class FakeResources:
     """Stands in for the real store wiring; counts every call."""
 
-    def __init__(self, *, ingest_error: Exception | None = None,
-                 consolidate_error: Exception | None = None) -> None:
+    def __init__(
+        self, *, ingest_error: Exception | None = None, consolidate_error: Exception | None = None
+    ) -> None:
         self.ingest_calls = 0
         self.consolidate_calls = 0
         self.closed = 0
@@ -228,9 +229,7 @@ def test_the_daemons_own_agent_folder_never_triggers_a_reingest(change_filter, t
     a letter should not schedule an ingest at 03:00 to discover that.
     """
     assert change_filter.accepts(tmp_path / "vault" / "Agent" / "observer-2026-07-26.md") is False
-    assert change_filter.accepts(
-        tmp_path / "vault" / "Agent" / "backups" / "note.123.md"
-    ) is False
+    assert change_filter.accepts(tmp_path / "vault" / "Agent" / "backups" / "note.123.md") is False
 
 
 def test_the_agent_folder_is_excluded_even_when_dropped_from_exclude_dirs(tmp_path: Path):
@@ -347,9 +346,7 @@ def test_start_ignores_passing_checks(settings: Settings):
         Recorder(),
         failures=[],
     )
-    sup.preflight = lambda _s: [
-        r for r in [CheckResult("vault", PASS, "fine")] if r.failed
-    ]
+    sup.preflight = lambda _s: [r for r in [CheckResult("vault", PASS, "fine")] if r.failed]
 
     sup.start()  # does not raise
 
@@ -765,7 +762,11 @@ def test_the_loop_ingests_a_watched_change_and_stops_on_a_signal(settings: Setti
         sup.request_stop(signal.SIGTERM, None)
 
     sup = _supervisor(
-        settings, resources, emit, watcher=_watcher, tick_seconds=0.0,
+        settings,
+        resources,
+        emit,
+        watcher=_watcher,
+        tick_seconds=0.0,
     )
 
     asyncio.run(sup.run())
@@ -813,9 +814,7 @@ def test_daemon_run_once_reports_the_ingest(settings: Settings, monkeypatch: pyt
     resources = FakeResources()
     monkeypatch.setattr("my_daemon.cli._load", lambda: settings)
     monkeypatch.setattr("my_daemon.supervisor.preflight", lambda _s: [])
-    monkeypatch.setattr(
-        "my_daemon.supervisor.build_resources", lambda _s: resources.as_resources()
-    )
+    monkeypatch.setattr("my_daemon.supervisor.build_resources", lambda _s: resources.as_resources())
 
     result = runner.invoke(app, ["run", "--once"])
 
@@ -829,14 +828,14 @@ def test_daemon_run_refuses_with_the_doctor_hint_when_the_preflight_fails(
 ):
     resources = FakeResources()
     failure = CheckResult(
-        "vector store", FAIL, "no answer from http://localhost:6333",
+        "vector store",
+        FAIL,
+        "no answer from http://localhost:6333",
         hint="Is `docker compose up -d` running?",
     )
     monkeypatch.setattr("my_daemon.cli._load", lambda: settings)
     monkeypatch.setattr("my_daemon.supervisor.preflight", lambda _s: [failure])
-    monkeypatch.setattr(
-        "my_daemon.supervisor.build_resources", lambda _s: resources.as_resources()
-    )
+    monkeypatch.setattr("my_daemon.supervisor.build_resources", lambda _s: resources.as_resources())
 
     result = runner.invoke(app, ["run", "--once"])
 

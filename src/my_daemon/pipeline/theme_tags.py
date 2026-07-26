@@ -66,9 +66,7 @@ def apply_decision(
     record = registry.get(proposal.note_uuid)
     if record is None:
         themes.decide(proposal_id, "accepted", "note not in registry")
-        return WriteResult(
-            path=settings.vault.path, changed=False, reason="note not in registry"
-        )
+        return WriteResult(path=settings.vault.path, changed=False, reason="note not in registry")
 
     vault_root = settings.vault.path.expanduser().resolve()
     result = add_frontmatter_list_values_textual(

@@ -44,7 +44,9 @@ def test_apply_selection_reinforces_direct_wikilink(tmp_path: Path, vault_root: 
     assert result.path[-1] == f"note::{_u('Pullman Daemons.md')}"
 
     # The wikilink edge from Designing AI Memory → Pullman Daemons should be > 1.0.
-    edge_data = store.graph[f"note::{_u('Designing AI Memory.md')}"][f"note::{_u('Pullman Daemons.md')}"]
+    edge_data = store.graph[f"note::{_u('Designing AI Memory.md')}"][
+        f"note::{_u('Pullman Daemons.md')}"
+    ]
     weights = [d["weight"] for d in edge_data.values()]
     assert max(weights) > 1.0
     # Stamp set.
@@ -76,7 +78,9 @@ def test_apply_selection_respects_ceiling(tmp_path: Path, vault_root: Path) -> N
             selected_note_uuid=_u("Pullman Daemons.md"),
         )
 
-    edge_data = store.graph[f"note::{_u('Designing AI Memory.md')}"][f"note::{_u('Pullman Daemons.md')}"]
+    edge_data = store.graph[f"note::{_u('Designing AI Memory.md')}"][
+        f"note::{_u('Pullman Daemons.md')}"
+    ]
     for d in edge_data.values():
         assert d["weight"] <= DEFAULT_CEILING + 1e-6
 
@@ -109,7 +113,9 @@ def test_decay_unused_edges_pulls_toward_baseline(tmp_path: Path, vault_root: Pa
         seed_note_uuid=_u("Designing AI Memory.md"),
         selected_note_uuid=_u("Pullman Daemons.md"),
     )
-    edge_data = store.graph[f"note::{_u('Designing AI Memory.md')}"][f"note::{_u('Pullman Daemons.md')}"]
+    edge_data = store.graph[f"note::{_u('Designing AI Memory.md')}"][
+        f"note::{_u('Pullman Daemons.md')}"
+    ]
     pre_weights = {k: d["weight"] for k, d in edge_data.items()}
     assert all(w > 1.0 for w in pre_weights.values())
 

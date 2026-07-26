@@ -17,9 +17,7 @@ B = "bbbbbbbb-0000-4000-8000-000000000002"
 
 
 def _chunk(note_uuid: str, chunk_id: str) -> Chunk:
-    return Chunk(
-        id=chunk_id, note_uuid=note_uuid, note_path="N.md", text="body", chunk_index=0
-    )
+    return Chunk(id=chunk_id, note_uuid=note_uuid, note_path="N.md", text="body", chunk_index=0)
 
 
 def _result() -> RetrievalResult:
@@ -121,7 +119,10 @@ def _orchestrator(listeners) -> RetrievalOrchestrator:  # noqa: ANN001
     settings = Settings()
     settings.embeddings.hybrid = False
     return RetrievalOrchestrator(
-        settings, _FakeEmbedder(), _FakeVectorStore(), _FakeGraphStore(),
+        settings,
+        _FakeEmbedder(),
+        _FakeVectorStore(),
+        _FakeGraphStore(),
         listeners=listeners,
     )
 

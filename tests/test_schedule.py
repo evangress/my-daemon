@@ -83,9 +83,7 @@ def test_the_unit_has_no_companion_timer():
     assert "OnCalendar" not in systemd_unit(EXE, CFG)
 
 
-def test_the_unit_path_follows_xdg_config_home(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-):
+def test_the_unit_path_follows_xdg_config_home(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
     monkeypatch.setenv("XDG_CONFIG_HOME", str(tmp_path / "cfg"))
 
     assert systemd_unit_path() == tmp_path / "cfg" / "systemd" / "user" / "my-daemon.service"
@@ -150,8 +148,10 @@ def test_the_daemon_executable_is_not_derived_from_a_resolved_interpreter():
     interpreter*, so `Path(sys.executable).resolve().with_name("daemon")`
     yields `/usr/bin/daemon` — a path that does not exist. The generated unit
     installed cleanly and would have failed at every boot."""
-    resolved_sibling = Path(sys.executable).resolve().with_name(
-        "daemon.exe" if sys.platform == "win32" else "daemon"
+    resolved_sibling = (
+        Path(sys.executable)
+        .resolve()
+        .with_name("daemon.exe" if sys.platform == "win32" else "daemon")
     )
 
     assert daemon_executable().is_file()
@@ -180,8 +180,9 @@ def test_a_unit_naming_a_real_binary_does_not(settings: Settings, tmp_path: Path
 # ---------------------------------------------------------------------------
 
 
-def test_linux_produces_a_systemd_unit(settings: Settings, tmp_path: Path,
-                                       monkeypatch: pytest.MonkeyPatch):
+def test_linux_produces_a_systemd_unit(
+    settings: Settings, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+):
     monkeypatch.setenv("XDG_CONFIG_HOME", str(tmp_path / "cfg"))
 
     unit = build_schedule_unit(settings, platform="linux", exe=EXE)
@@ -252,8 +253,9 @@ def test_schedule_install_dry_run_writes_nothing(linux_cli: Path):
     assert "dry-run" in result.output.lower()
 
 
-def test_schedule_install_never_runs_systemctl_itself(linux_cli: Path,
-                                                      monkeypatch: pytest.MonkeyPatch):
+def test_schedule_install_never_runs_systemctl_itself(
+    linux_cli: Path, monkeypatch: pytest.MonkeyPatch
+):
     """Enabling a unit is the user's decision, made with their eyes open."""
     import subprocess
 

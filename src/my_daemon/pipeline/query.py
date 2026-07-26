@@ -97,7 +97,10 @@ class QueryEngine:
         self.ledger = ActivationLedger(db_path=settings.feedback.db_path)
         self.registry = NoteRegistry(db_path=settings.feedback.db_path)
         self.orchestrator = RetrievalOrchestrator(
-            settings, embedder, vector_store, graph_store,
+            settings,
+            embedder,
+            vector_store,
+            graph_store,
             sparse_embedder=sparse_embedder,
             listeners=[ActivationRecorder(self.ledger)],
         )

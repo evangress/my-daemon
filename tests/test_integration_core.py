@@ -161,14 +161,25 @@ def test_recall_shape_and_feedback_id(tmp_path: Path, vault_root: Path) -> None:
         )
     )
     core.engine.ask = lambda q, synthesize=False, surface=None: QueryResponse(  # type: ignore[method-assign]
-        answer="", retrieval=_fake_retrieval(), feedback_event_id=eid, latency_ms=5,
+        answer="",
+        retrieval=_fake_retrieval(),
+        feedback_event_id=eid,
+        latency_ms=5,
     )
 
     data = core.recall("what is a daemon")
     assert data["feedback_event_id"] == eid
     assert data["candidates"], "expected at least one candidate"
     top = data["candidates"][0]
-    assert {"rank", "chunk_id", "note_path", "heading_path", "score", "preview", "seed_note_path"} <= top.keys()
+    assert {
+        "rank",
+        "chunk_id",
+        "note_path",
+        "heading_path",
+        "score",
+        "preview",
+        "seed_note_path",
+    } <= top.keys()
     assert top["rank"] == 1
     assert top["note_path"] == "Pullman Daemons.md"
 
@@ -178,7 +189,10 @@ def test_recall_block_is_cited_and_budget_capped(tmp_path: Path, vault_root: Pat
     settings = _settings(tmp_path, vault)
     core = _core(settings, vault)
     core.engine.ask = lambda q, synthesize=False, surface=None: QueryResponse(  # type: ignore[method-assign]
-        answer="", retrieval=_fake_retrieval(two=True), feedback_event_id=1, latency_ms=5,
+        answer="",
+        retrieval=_fake_retrieval(two=True),
+        feedback_event_id=1,
+        latency_ms=5,
     )
 
     block = core.recall_block("what is a daemon", budget_chars=4000)

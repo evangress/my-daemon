@@ -24,7 +24,9 @@ def build_context_block(chunks: list[RetrievedChunk]) -> str:
         heading = " › ".join(rc.chunk.heading_path) if rc.chunk.heading_path else "(no heading)"
         score = rc.combined_score
         provenance = (
-            f"vector={rc.vector_score:.3f}" if rc.vector_score is not None else f"graph_distance={rc.graph_distance:.2f}"
+            f"vector={rc.vector_score:.3f}"
+            if rc.vector_score is not None
+            else f"graph_distance={rc.graph_distance:.2f}"
         )
         parts.append(
             f"[{i}] {rc.chunk.note_path} › {heading}  (score={score:.3f}, {provenance})\n{rc.chunk.text.strip()}"
@@ -41,7 +43,7 @@ def build_memory_block(memories) -> str:  # noqa: ANN001 — avoids an import cy
     for m in memories:
         shared = ", ".join(m.shared_notes) or "(no shared notes)"
         lines.append(
-            f"- {m.ts.date().isoformat()}: \"{m.text}\"  "
+            f'- {m.ts.date().isoformat()}: "{m.text}"  '
             f"(same notes: {shared}; similarity {m.score:.2f})"
         )
     return "Earlier, you asked:\n" + "\n".join(lines)

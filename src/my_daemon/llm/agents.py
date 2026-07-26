@@ -53,9 +53,9 @@ class LetterTheme:
 
 @dataclass
 class LinkSuggestion:
-    target: str       # target note title
-    anchor: str       # exact substring of the source body to wrap as [[target|anchor]]
-    confidence: float # 0..1 LLM-rated
+    target: str  # target note title
+    anchor: str  # exact substring of the source body to wrap as [[target|anchor]]
+    confidence: float  # 0..1 LLM-rated
     reason: str = ""
 
 
@@ -161,7 +161,10 @@ def extract_note_observations(
         "Respond with ONLY the JSON object described in the system prompt."
     )
     raw = _call(
-        client, system=_EXTRACT_SYSTEM, user=user, model=_model_for(client, model),
+        client,
+        system=_EXTRACT_SYSTEM,
+        user=user,
+        model=_model_for(client, model),
         max_tokens=1200,
     )
     data = _coerce_json(raw)
@@ -247,7 +250,10 @@ def propose_links(
         + "\n\nRespond with ONLY the JSON array described in the system prompt."
     )
     raw = _call(
-        client, system=_LINK_SYSTEM, user=user, model=_model_for(client, model),
+        client,
+        system=_LINK_SYSTEM,
+        user=user,
+        model=_model_for(client, model),
         max_tokens=1200,
     )
     data = _coerce_json(raw)
@@ -317,9 +323,7 @@ def update_memory(
     recent_chats = answered_only(recent_chats)
     chat_blocks: list[str] = []
     for ev in recent_chats:
-        chat_blocks.append(
-            f"- Q: {ev.query.strip()[:300]}\n  A: {(ev.answer or '').strip()[:400]}"
-        )
+        chat_blocks.append(f"- Q: {ev.query.strip()[:300]}\n  A: {(ev.answer or '').strip()[:400]}")
 
     user_parts: list[str] = [
         f"Theme to maintain: **{theme}**",
@@ -339,8 +343,11 @@ def update_memory(
         "Rewrite the memory file body now. Markdown only.",
     ]
     return _call(
-        client, system=_REFLECT_SYSTEM, user="\n".join(user_parts),
-        model=_model_for(client, model), max_tokens=2000,
+        client,
+        system=_REFLECT_SYSTEM,
+        user="\n".join(user_parts),
+        model=_model_for(client, model),
+        max_tokens=2000,
     )
 
 
@@ -391,8 +398,7 @@ def _render_bridging(report: StructuralReport) -> str:
     if not report.bridging_notes:
         return "(no notes with notable betweenness yet)"
     return "\n".join(
-        f"- {b.note_path}  (betweenness {b.betweenness:.4f})"
-        for b in report.bridging_notes
+        f"- {b.note_path}  (betweenness {b.betweenness:.4f})" for b in report.bridging_notes
     )
 
 
@@ -400,8 +406,7 @@ def _render_bridges(report: StructuralReport) -> str:
     if not report.bridge_edges:
         return "(no load-bearing note↔note links)"
     return "\n".join(
-        f"- {e.src} ↔ {e.dst}  ({e.kind}, weight {e.weight:.2f})"
-        for e in report.bridge_edges
+        f"- {e.src} ↔ {e.dst}  ({e.kind}, weight {e.weight:.2f})" for e in report.bridge_edges
     )
 
 
@@ -409,8 +414,7 @@ def _render_warm(report: StructuralReport) -> str:
     if not report.warm_edges:
         return "(no reinforced edges yet — everything is at baseline weight)"
     return "\n".join(
-        f"- {e.src} → {e.dst}  ({e.kind}, weight {e.weight:.2f})"
-        for e in report.warm_edges
+        f"- {e.src} → {e.dst}  ({e.kind}, weight {e.weight:.2f})" for e in report.warm_edges
     )
 
 
@@ -418,8 +422,7 @@ def _render_dangling(report: StructuralReport) -> str:
     if not report.dangling_targets:
         return "(no dangling wikilink targets)"
     return "\n".join(
-        f"- {d.target}  (referenced by {d.incoming_links} note(s))"
-        for d in report.dangling_targets
+        f"- {d.target}  (referenced by {d.incoming_links} note(s))" for d in report.dangling_targets
     )
 
 
@@ -435,8 +438,7 @@ def _render_evolution(evolution: WeightEvolutionReport | None) -> str:
     ]
     for d in evolution.top_edges[:8]:
         lines.append(
-            f"  - {d.src} → {d.dst}  ({d.kind}): {d.before:.2f} → {d.after:.2f} "
-            f"(Δ {d.delta:+.2f})"
+            f"  - {d.src} → {d.dst}  ({d.kind}): {d.before:.2f} → {d.after:.2f} (Δ {d.delta:+.2f})"
         )
     if evolution.top_notes:
         lines.append("Top notes by aggregate shift:")
@@ -478,8 +480,7 @@ def _render_themes(themes: list[LetterTheme], *, churn: float | None = None) -> 
     lines: list[str] = []
     if churn is not None:
         lines.append(
-            f"Theme churn: {churn:.2f} (0 = the same themes as last run, "
-            "1 = nothing carried over)."
+            f"Theme churn: {churn:.2f} (0 = the same themes as last run, 1 = nothing carried over)."
         )
     for t in themes:
         age = "new this run" if t.is_new else "recurring"

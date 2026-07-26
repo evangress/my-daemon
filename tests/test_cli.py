@@ -371,9 +371,7 @@ def _wikilink_weights(path: Path) -> list[float]:
     return [d["weight"] for d in edge.values()]
 
 
-def test_select_reinforces_the_path_to_the_picked_note(
-    settings: Settings, vault_graph: GraphStore
-):
+def test_select_reinforces_the_path_to_the_picked_note(settings: Settings, vault_graph: GraphStore):
     """The bug: `select` passed a `selected_note_path=` kwarg `apply_selection`
     no longer has, so every invocation died with a TypeError."""
     feedback_id = _log_two_candidate_query(settings)
@@ -412,9 +410,7 @@ def test_select_reports_the_reinforced_path(settings: Settings, vault_graph: Gra
     assert f"{DESIGNING} → {PULLMAN}" in _squash(result.output)
 
 
-def test_selecting_the_seed_itself_reinforces_nothing(
-    settings: Settings, vault_graph: GraphStore
-):
+def test_selecting_the_seed_itself_reinforces_nothing(settings: Settings, vault_graph: GraphStore):
     feedback_id = _log_two_candidate_query(settings)
 
     result = runner.invoke(app, ["select", str(feedback_id), "1"])

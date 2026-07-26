@@ -94,9 +94,7 @@ class FeedbackStore:
     def get(self, event_id: int) -> FeedbackEvent | None:
         """Return one event by id, or None if it's been pruned away."""
         with self._connect() as conn:
-            row = conn.execute(
-                "SELECT * FROM feedback WHERE id = ?", (event_id,)
-            ).fetchone()
+            row = conn.execute("SELECT * FROM feedback WHERE id = ?", (event_id,)).fetchone()
             return _row_to_event(row) if row else None
 
     def recent(self, limit: int = 20) -> list[dict]:

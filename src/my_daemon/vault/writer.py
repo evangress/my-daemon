@@ -502,7 +502,7 @@ def insert_wikilinks(
             if _in_any_span(m.start(), spans):
                 continue
             insertion = f"[[{target}|{m.group(0)}]]"
-            body = body[: m.start()] + insertion + body[m.end():]
+            body = body[: m.start()] + insertion + body[m.end() :]
             break  # first match only — strict per plan
 
     if body == original_body:
@@ -511,7 +511,9 @@ def insert_wikilinks(
     snap = snapshot(note_path, vault_root=vault_root, agent_folder=agent_folder)
     post.content = body
     _atomic_write_text(note_path, _serialize(post, had_frontmatter=had_frontmatter))
-    return WriteResult(path=note_path, changed=True, reason=f"inserted {len(links)} wikilink(s)", snapshot=snap)
+    return WriteResult(
+        path=note_path, changed=True, reason=f"inserted {len(links)} wikilink(s)", snapshot=snap
+    )
 
 
 def add_tags(
@@ -538,5 +540,3 @@ def add_tags(
         agent_folder=agent_folder,
         grace_minutes=grace_minutes,
     )
-
-

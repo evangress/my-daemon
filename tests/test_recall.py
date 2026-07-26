@@ -66,9 +66,7 @@ def _ask(ledger: ActivationLedger, text: str, notes, *, surface="cli", ts=None) 
 # ---------------------------------------------------------------------------
 
 
-def test_a_reworded_question_surfaces_the_earlier_one(
-    ledger, registry, settings
-):
+def test_a_reworded_question_surfaces_the_earlier_one(ledger, registry, settings):
     _ask(ledger, "why do I keep losing things I meant to remember", [A, B])
     now = _ask(ledger, "what makes something stick", [A, B])
 
@@ -143,9 +141,7 @@ def test_recall_can_be_switched_off(ledger, registry, settings):
     assert recall_related(ledger, registry, query_id=now, settings=settings) == []
 
 
-def test_a_deleted_note_still_resolves_to_its_last_known_path(
-    ledger, registry, settings
-):
+def test_a_deleted_note_still_resolves_to_its_last_known_path(ledger, registry, settings):
     """The ledger outlives the note; a memory of it must still be readable."""
     _ask(ledger, "earlier", [A, B])
     now = _ask(ledger, "later", [A, B])

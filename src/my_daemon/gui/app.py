@@ -38,9 +38,7 @@ def _configure_file_logging() -> Path:
     path = _shared_log_path()
     path.parent.mkdir(parents=True, exist_ok=True)
     handler = RotatingFileHandler(path, maxBytes=1_000_000, backupCount=3, encoding="utf-8")
-    handler.setFormatter(
-        logging.Formatter("%(asctime)s %(levelname)s %(name)s: %(message)s")
-    )
+    handler.setFormatter(logging.Formatter("%(asctime)s %(levelname)s %(name)s: %(message)s"))
     root = logging.getLogger()
     # Avoid duplicate handlers when launch_chat is somehow called twice in-process.
     if not any(getattr(h, "baseFilename", None) == str(path) for h in root.handlers):
@@ -49,14 +47,15 @@ def _configure_file_logging() -> Path:
         root.setLevel(logging.INFO)
     return path
 
+
 # Brand palette (OKLCH). Source: my-daemon-astro-website/BRAND.md § 2.
 # A question (gold) calls a daemon (violet) which speaks back (cyan).
-VIOLET = "oklch(72% 0.20 305)"   # the daemon — wordmark dot, primary CTA
-CYAN = "oklch(78% 0.14 195)"     # synthesis / reply — daemon bubble accent
-GOLD = "oklch(82% 0.155 75)"     # the human spark — user bubble accent, italic emphasis
+VIOLET = "oklch(72% 0.20 305)"  # the daemon — wordmark dot, primary CTA
+CYAN = "oklch(78% 0.14 195)"  # synthesis / reply — daemon bubble accent
+GOLD = "oklch(82% 0.155 75)"  # the human spark — user bubble accent, italic emphasis
 # Surfaces — deep midnight indigo, slightly tinted as they rise.
 BG = "oklch(14% 0.025 282)"
-INK = "oklch(92% 0.018 90)"      # warm near-white body text
+INK = "oklch(92% 0.018 90)"  # warm near-white body text
 INK_MUTE = "oklch(92% 0.018 90 / 0.70)"
 RULE = "oklch(60% 0.05 285 / 0.20)"  # hairline borders
 
@@ -135,8 +134,7 @@ def _render_sources(
                 heading = html.escape(" › ".join(entry.get("heading_path") or []))
                 preview = html.escape(preview_by_id.get(entry.get("chunk_id", ""), ""))
                 ui.html(
-                    f'<span class="source-rank">#{i}</span>'
-                    f'<span class="source-path">{path}</span>'
+                    f'<span class="source-rank">#{i}</span><span class="source-path">{path}</span>'
                 )
                 if heading:
                     ui.html(f'<div class="source-heading">› {heading}</div>')
@@ -171,16 +169,16 @@ def _render_sources(
             status.content = f'<div class="sources-status">{msg}</div>'
         except Exception as exc:
             log.exception("candidate selection failed")
-            status.content = (
-                f'<div class="sources-status">(error: {html.escape(str(exc))})</div>'
-            )
+            status.content = f'<div class="sources-status">(error: {html.escape(str(exc))})</div>'
 
     for i, entry in enumerate(ranked, start=1):
         # Capture i and entry by default-arg to dodge the late-binding closure pitfall.
         cards[i - 1].on("click", lambda _e, r=i, x=entry: _pick(r, x))
 
 
-async def _stream_into_label(label: ui.markdown, generator: Iterator[str], accumulator: list[str]) -> None:
+async def _stream_into_label(
+    label: ui.markdown, generator: Iterator[str], accumulator: list[str]
+) -> None:
     """Drain a sync text generator into a NiceGUI label without blocking the event loop."""
     queue: asyncio.Queue[str | None] = asyncio.Queue()
     loop = asyncio.get_running_loop()
@@ -496,17 +494,13 @@ def _mount_ui(ctx: _DaemonContext) -> None:
     with ui.column().classes("w-full max-w-3xl mx-auto px-6 py-10 gap-5"):
         # Header — wordmark on the left, mono eyebrow vault label on the right.
         with ui.row().classes("items-baseline w-full justify-between"):
-            ui.html(
-                '<span class="wordmark"><span class="wordmark__dot"></span>My Daemon</span>'
-            )
-            ui.html(
-                f'<span class="eyebrow">vault · {ctx.settings.vault.path.name}</span>'
-            )
+            ui.html('<span class="wordmark"><span class="wordmark__dot"></span>My Daemon</span>')
+            ui.html(f'<span class="eyebrow">vault · {ctx.settings.vault.path.name}</span>')
 
         # A whisper, not a shout. Italic Fraunces at low opacity is the brand's default tone.
-        ui.html(
-            'Ask, and I will walk the vault with you<span class="accent">.</span>'
-        ).classes("epigraph")
+        ui.html('Ask, and I will walk the vault with you<span class="accent">.</span>').classes(
+            "epigraph"
+        )
 
         chat_column = ui.column().classes("w-full gap-3 pt-4")
 
@@ -552,9 +546,7 @@ def _mount_ui(ctx: _DaemonContext) -> None:
             if stream.memories and ctx.settings.memory.show_to_user:
                 _render_memories(chat_column, stream.memories)
             if stream.feedback_event_id is not None:
-                _render_sources(
-                    ctx, chat_column, stream.retrieval, stream.feedback_event_id
-                )
+                _render_sources(ctx, chat_column, stream.retrieval, stream.feedback_event_id)
         except Exception as exc:
             log.exception("chat send failed")
             daemon_label.content = f"_(daemon error: {exc})_"

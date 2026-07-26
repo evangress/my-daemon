@@ -139,28 +139,28 @@ _LAUNCH_GUI_VBS = (
     "\r\n"
     "Option Explicit\r\n"
     "Dim shell, fso, root, exePath, logDir, logPath, cmd, exitCode\r\n"
-    "Set fso = CreateObject(\"Scripting.FileSystemObject\")\r\n"
+    'Set fso = CreateObject("Scripting.FileSystemObject")\r\n'
     "root = fso.GetParentFolderName(WScript.ScriptFullName)\r\n"
-    "exePath = root & \"\\.venv\\Scripts\\daemon.exe\"\r\n"
+    'exePath = root & "\\.venv\\Scripts\\daemon.exe"\r\n'
     "If Not fso.FileExists(exePath) Then\r\n"
-    "    MsgBox \".venv\\Scripts\\daemon.exe not found.\" & vbCrLf & _\r\n"
-    "        \"Run setup.bat first to bootstrap the project.\", _\r\n"
-    "        vbCritical, \"My Daemon\"\r\n"
+    '    MsgBox ".venv\\Scripts\\daemon.exe not found." & vbCrLf & _\r\n'
+    '        "Run setup.bat first to bootstrap the project.", _\r\n'
+    '        vbCritical, "My Daemon"\r\n'
     "    WScript.Quit 1\r\n"
     "End If\r\n"
-    "Set shell = CreateObject(\"WScript.Shell\")\r\n"
+    'Set shell = CreateObject("WScript.Shell")\r\n'
     "shell.CurrentDirectory = root\r\n"
-    "logDir = shell.ExpandEnvironmentStrings(\"%LOCALAPPDATA%\") & \"\\my-daemon\"\r\n"
+    'logDir = shell.ExpandEnvironmentStrings("%LOCALAPPDATA%") & "\\my-daemon"\r\n'
     "If Not fso.FolderExists(logDir) Then fso.CreateFolder(logDir)\r\n"
-    "logPath = logDir & \"\\daemon.log\"\r\n"
+    'logPath = logDir & "\\daemon.log"\r\n'
     "' cmd /c lets us redirect stdout+stderr. Without this, any import-time\r\n"
     "' Python error vanishes (the window is hidden).\r\n"
-    "cmd = \"cmd /c \"\"\" & exePath & \"\"\" chat 1>>\"\"\" & logPath & \"\"\" 2>&1\"\r\n"
+    'cmd = "cmd /c """ & exePath & """ chat 1>>""" & logPath & """ 2>&1"\r\n'
     "' WindowStyle = 0 (hidden), Wait = True so we can react to a fast crash.\r\n"
     "exitCode = shell.Run(cmd, 0, True)\r\n"
     "If exitCode <> 0 Then\r\n"
-    "    MsgBox \"My Daemon exited with code \" & exitCode & \".\" & vbCrLf & _\r\n"
-    "        \"Log: \" & logPath, vbExclamation, \"My Daemon\"\r\n"
+    '    MsgBox "My Daemon exited with code " & exitCode & "." & vbCrLf & _\r\n'
+    '        "Log: " & logPath, vbExclamation, "My Daemon"\r\n'
     "End If\r\n"
 )
 
@@ -256,7 +256,7 @@ _LAUNCH_GUI_SH = (
     "set -e\n"
     'SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"\n'
     'cd "$SCRIPT_DIR"\n'
-    'if [ ! -x .venv/bin/daemon ]; then\n'
+    "if [ ! -x .venv/bin/daemon ]; then\n"
     '  echo "[ERROR] .venv/bin/daemon not found. Run python setup.py first." >&2\n'
     "  exit 1\n"
     "fi\n"

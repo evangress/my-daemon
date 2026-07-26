@@ -88,8 +88,13 @@ class RetrievalOrchestrator:
             used += cost
 
         result = RetrievalResult(query=query, seeds=seeds, expanded=expanded, ranked=kept)
-        self._notify(result, surface=surface, session_id=session_id,
-                     started_at=started_at, latency_ms=int((time.perf_counter() - t0) * 1000))
+        self._notify(
+            result,
+            surface=surface,
+            session_id=session_id,
+            started_at=started_at,
+            latency_ms=int((time.perf_counter() - t0) * 1000),
+        )
         return result
 
     def _notify(

@@ -36,9 +36,7 @@ def vault(tmp_path: Path) -> Path:
 
 
 def _set(note: Path, vault: Path, key: str = "uuid", value: str = UUID, **kw):
-    return set_frontmatter_key_textual(
-        note, key, value, vault_root=vault, grace_minutes=0, **kw
-    )
+    return set_frontmatter_key_textual(note, key, value, vault_root=vault, grace_minutes=0, **kw)
 
 
 # ---------------------------------------------------------------------------
@@ -73,9 +71,7 @@ def test_writing_a_key_preserves_lf_line_endings(vault: Path):
 
     _set(note, vault)
 
-    assert note.read_bytes() == (
-        f"---\ntitle: Hi\nuuid: {UUID}\n---\n\n# Hi\n".encode()
-    )
+    assert note.read_bytes() == (f"---\ntitle: Hi\nuuid: {UUID}\n---\n\n# Hi\n".encode())
 
 
 # ---------------------------------------------------------------------------
@@ -113,8 +109,7 @@ def test_key_order_and_quoting_style_survive(vault: Path):
     _set(note, vault)
 
     assert note.read_text() == (
-        "---\nzebra: 'single quoted'\nalpha: \"double quoted\"\n"
-        f"uuid: {UUID}\n---\n\nbody\n"
+        f"---\nzebra: 'single quoted'\nalpha: \"double quoted\"\nuuid: {UUID}\n---\n\nbody\n"
     )
 
 
@@ -307,9 +302,7 @@ def test_removing_an_absent_key_is_a_no_op(vault: Path):
     note = _write(vault / "n.md", "---\ntitle: Hi\n---\n\nbody\n")
     before = note.read_bytes()
 
-    result = remove_frontmatter_key_textual(
-        note, "uuid", vault_root=vault, grace_minutes=0
-    )
+    result = remove_frontmatter_key_textual(note, "uuid", vault_root=vault, grace_minutes=0)
 
     assert result.changed is False
     assert note.read_bytes() == before

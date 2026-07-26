@@ -155,21 +155,15 @@ class FakeVectorStore:
         self.renamed.append((note_uuid, rel_path))
 
     def upsert(self, chunks, vectors, sparse_vectors=None) -> None:  # noqa: ANN001
-        self.payloads.extend(
-            {"note_uuid": c.note_uuid, "note_path": c.note_path} for c in chunks
-        )
+        self.payloads.extend({"note_uuid": c.note_uuid, "note_path": c.note_path} for c in chunks)
 
 
 @pytest.fixture
 def vault(tmp_path: Path) -> Path:
     root = tmp_path / "vault"
     root.mkdir()
-    (root / "A.md").write_text(
-        f"---\nuuid: {UUID_A}\n---\n\n# A\n\nSee [[B]].\n", encoding="utf-8"
-    )
-    (root / "B.md").write_text(
-        f"---\nuuid: {UUID_B}\n---\n\n# B\n\nDaemons.\n", encoding="utf-8"
-    )
+    (root / "A.md").write_text(f"---\nuuid: {UUID_A}\n---\n\n# A\n\nSee [[B]].\n", encoding="utf-8")
+    (root / "B.md").write_text(f"---\nuuid: {UUID_B}\n---\n\n# B\n\nDaemons.\n", encoding="utf-8")
     return root
 
 
@@ -216,9 +210,7 @@ def test_renaming_a_note_costs_no_embedding(settings: Settings, vault: Path):
 
     assert embedder.encoded == []  # nothing re-embedded
     assert (UUID_A, "Archive/A.md") in vectors.renamed
-    assert NoteRegistry(db_path=settings.feedback.db_path).get(UUID_A).rel_path == (
-        "Archive/A.md"
-    )
+    assert NoteRegistry(db_path=settings.feedback.db_path).get(UUID_A).rel_path == ("Archive/A.md")
 
 
 def test_renaming_a_note_preserves_its_learned_weights(settings: Settings, vault: Path):
@@ -245,9 +237,7 @@ def test_renaming_a_note_preserves_its_learned_weights(settings: Settings, vault
     assert after == weight
 
 
-def test_an_unstamped_note_still_ingests_on_a_derived_identity(
-    settings: Settings, vault: Path
-):
+def test_an_unstamped_note_still_ingests_on_a_derived_identity(settings: Settings, vault: Path):
     (vault / "C.md").write_text("# C\n\nNo uuid here.\n", encoding="utf-8")
     store = GraphStore(path=settings.graph.path)
 
@@ -258,9 +248,7 @@ def test_an_unstamped_note_still_ingests_on_a_derived_identity(
     assert record.in_frontmatter is False
 
 
-def test_deleting_a_note_soft_deletes_its_registry_row(
-    settings: Settings, vault: Path
-):
+def test_deleting_a_note_soft_deletes_its_registry_row(settings: Settings, vault: Path):
     store = GraphStore(path=settings.graph.path)
     ingest_vault(settings, FakeEmbedder(), FakeVectorStore(), store)
 
@@ -292,9 +280,7 @@ def test_a_frontmatter_only_edit_reaches_the_graph(settings: Settings, vault: Pa
     assert store.graph.has_edge(f"note::{UUID_A}", "tag::solitude")
 
 
-def test_a_frontmatter_only_edit_refreshes_the_registry(
-    settings: Settings, vault: Path
-):
+def test_a_frontmatter_only_edit_refreshes_the_registry(settings: Settings, vault: Path):
     store = GraphStore(path=settings.graph.path)
     ingest_vault(settings, FakeEmbedder(), FakeVectorStore(), store)
 
@@ -324,9 +310,7 @@ def test_a_frontmatter_only_edit_costs_no_embedding(settings: Settings, vault: P
     assert stats.notes_new_or_updated == 0
 
 
-def test_a_frontmatter_only_edit_preserves_learned_weights(
-    settings: Settings, vault: Path
-):
+def test_a_frontmatter_only_edit_preserves_learned_weights(settings: Settings, vault: Path):
     from my_daemon.retrieval.weights import apply_selection
 
     store = GraphStore(path=settings.graph.path)

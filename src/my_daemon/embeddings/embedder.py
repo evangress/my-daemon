@@ -79,7 +79,11 @@ class Embedder:
         """
         self._model = self._load(local_files_only=False)
         self._dim = self._dimension_of(self._model)
-        return self.cache_folder if self.cache_folder is not None else Path.home() / ".cache" / "huggingface"
+        return (
+            self.cache_folder
+            if self.cache_folder is not None
+            else Path.home() / ".cache" / "huggingface"
+        )
 
     @property
     def dimension(self) -> int:

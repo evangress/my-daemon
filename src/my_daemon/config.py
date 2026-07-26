@@ -226,7 +226,7 @@ class HermesConfig(BaseModel):
     # grounded, cited context, not an answer composed for it (PLAN-HERMES §4).
     recall_synthesize_default: bool = False
     recall_top_k: int = 8
-    allow_write_back: bool = False          # gates endorse + remember (both faces)
+    allow_write_back: bool = False  # gates endorse + remember (both faces)
     # --- MCP server (Path B, optional portability) ------------------------
     mcp_enabled: bool = False
     mcp_transport: Literal["stdio", "http"] = "stdio"

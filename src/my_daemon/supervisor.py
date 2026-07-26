@@ -300,9 +300,7 @@ def build_resources(settings: Settings) -> Resources:
         )
 
     def _consolidate() -> object:
-        return run_observe(
-            settings, state, stores.feedback_store, stores.graph_store, stores.llm
-        )
+        return run_observe(settings, state, stores.feedback_store, stores.graph_store, stores.llm)
 
     return Resources(ingest=_ingest, consolidate=_consolidate, close=stores.vector_store.close)
 
@@ -396,9 +394,7 @@ class Supervisor:
     def _banner(self) -> None:
         s = self.settings
         self._emit(f"watching {s.vault.path}")
-        self._emit(
-            f"debounce {s.run.debounce_seconds:g}s of quiet before each incremental ingest"
-        )
+        self._emit(f"debounce {s.run.debounce_seconds:g}s of quiet before each incremental ingest")
         if self.next_consolidate_at is not None:
             self._emit(
                 f"nightly consolidate at {s.run.consolidate_at} — "

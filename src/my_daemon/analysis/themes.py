@@ -134,9 +134,7 @@ def cluster_fingerprints(
         if len(members) < min_cluster_size:
             continue
         centroid = _centroid([fingerprints[i] for i in members])
-        ranked = sorted(
-            members, key=lambda i: cosine(fingerprints[i], centroid), reverse=True
-        )
+        ranked = sorted(members, key=lambda i: cosine(fingerprints[i], centroid), reverse=True)
         clusters.append(
             FingerprintCluster(
                 query_ids=[query_ids[i] for i in members],

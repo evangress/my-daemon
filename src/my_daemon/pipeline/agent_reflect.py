@@ -108,9 +108,7 @@ def _compose_file(theme: str, new_body: str, *, model_used: str, n_notes: int, n
     return frontmatter.dumps(post).replace(new_body, preamble + new_body) + "\n"
 
 
-def _append_rolling(
-    vault_root: Path, agent_folder: str, line: str
-) -> Path:
+def _append_rolling(vault_root: Path, agent_folder: str, line: str) -> Path:
     path = vault_root / agent_folder / "memory-rolling.md"
     path.parent.mkdir(parents=True, exist_ok=True)
     today = date.today().isoformat()
@@ -140,9 +138,7 @@ def run_reflect(
     vault_root = settings.vault.path
     agent_folder = settings.agent.folder_name
 
-    themes = (
-        [only_theme] if only_theme else list(settings.agent.reflect_themes)
-    )
+    themes = [only_theme] if only_theme else list(settings.agent.reflect_themes)
     notes = _recent_notes(settings, settings.agent.reflect_lookback_days)
     chats = _recent_chats(feedback, limit=20)
     sig = _source_hash(notes, chats)
@@ -174,12 +170,16 @@ def run_reflect(
 
         if memory_path.is_file():
             snapshot(memory_path, vault_root=vault_root, agent_folder=agent_folder)
-        file_text = _compose_file(theme, new_body, model_used=model, n_notes=len(notes), n_chats=len(chats))
+        file_text = _compose_file(
+            theme, new_body, model_used=model, n_notes=len(notes), n_chats=len(chats)
+        )
         write_atomic(memory_path, file_text)
 
         state.record_reflect_run(theme, source_notes_hash=sig, source_chat_count=len(chats))
         stats.themes_processed += 1
-        summary_lines.append(f"- **{theme}**: refreshed against {len(notes)} notes, {len(chats)} chats.")
+        summary_lines.append(
+            f"- **{theme}**: refreshed against {len(notes)} notes, {len(chats)} chats."
+        )
 
     if summary_lines and not dry_run:
         stats.rolling_journal_path = _append_rolling(

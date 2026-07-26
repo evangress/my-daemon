@@ -96,9 +96,7 @@ def _resolve_bundle(
     if snapshot_id is not None:
         bundle = get_snapshot(settings, snapshot_id)
         if bundle is None:
-            raise FileNotFoundError(
-                f"no snapshot with id {snapshot_id} in {settings.snapshot.dir}"
-            )
+            raise FileNotFoundError(f"no snapshot with id {snapshot_id} in {settings.snapshot.dir}")
         if progress:
             progress(f"using existing snapshot {bundle.id}")
         return bundle
@@ -106,7 +104,9 @@ def _resolve_bundle(
         progress("creating snapshot…")
     warnings: list[str] = []
     bundle = create_snapshot(
-        settings, include_qdrant=include_qdrant, on_warning=warnings.append,
+        settings,
+        include_qdrant=include_qdrant,
+        on_warning=warnings.append,
     )
     if progress:
         for w in warnings:
@@ -218,9 +218,7 @@ def _first_paragraph(body: str, *, max_chars: int = 280) -> str:
     return "(empty letter)"
 
 
-def _write_rolling_index(
-    vault_root: Path, agent_folder: str, *, window: int
-) -> Path:
+def _write_rolling_index(vault_root: Path, agent_folder: str, *, window: int) -> Path:
     """(Re)render ``observer.md`` to point at the most-recent ``window`` letters."""
 
     folder = vault_root / agent_folder
@@ -284,7 +282,10 @@ def run_observe(
 
     moment = now or datetime.now(UTC)
     bundle = _resolve_bundle(
-        settings, snapshot_id, include_qdrant=include_qdrant, progress=progress,
+        settings,
+        snapshot_id,
+        include_qdrant=include_qdrant,
+        progress=progress,
     )
 
     cfg = settings.agent
@@ -315,7 +316,9 @@ def run_observe(
         )
 
     evolution = simulate_evolution(
-        bundle, lookback_days=cfg.observer_lookback_days, now=moment,
+        bundle,
+        lookback_days=cfg.observer_lookback_days,
+        now=moment,
     )
     if progress:
         progress(
@@ -354,7 +357,8 @@ def run_observe(
     agent_folder = cfg.folder_name
     today_letter_path = _letter_path_for_today(vault_root, agent_folder)
     prior_letters = _load_prior_letters(
-        vault_root, agent_folder,
+        vault_root,
+        agent_folder,
         limit=cfg.observer_prior_letters,
         exclude=today_letter_path,
     )
@@ -391,7 +395,9 @@ def run_observe(
         )
         letter_written_path = today_letter_path
         _write_rolling_index(
-            vault_root, agent_folder, window=cfg.observer_index_window,
+            vault_root,
+            agent_folder,
+            window=cfg.observer_index_window,
         )
         if progress:
             progress(f"wrote {today_letter_path}")
@@ -468,7 +474,9 @@ def _cluster_themes(
 
         store = ThemeStore(db_path=settings.feedback.db_path)
         result = reconcile_themes(
-            store, clusters, snapshot_id=snapshot_id,
+            store,
+            clusters,
+            snapshot_id=snapshot_id,
             match_threshold=cons.theme_match_threshold,
         )
 
@@ -514,9 +522,7 @@ def _cluster_themes(
                 "left unnamed this run (max_new_themes_per_run)"
             )
         if result.churn > 0.5:
-            stats.notes.append(
-                f"theme churn {result.churn:.2f} — themes are not settled yet"
-            )
+            stats.notes.append(f"theme churn {result.churn:.2f} — themes are not settled yet")
         return result, letter_themes
     except Exception as exc:  # noqa: BLE001
         stats.errors.append(f"theme clustering failed: {exc!r}")

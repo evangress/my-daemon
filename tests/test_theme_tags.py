@@ -53,8 +53,10 @@ def themes(settings: Settings) -> ThemeStore:
 
 def _theme(themes: ThemeStore, *, status="accepted") -> int:
     theme_id = themes.create(
-        slug="why-projects-stall", label="Why projects stall",
-        centroid={A: 0.9, B: 0.4}, snapshot_id="s1",
+        slug="why-projects-stall",
+        label="Why projects stall",
+        centroid={A: 0.9, B: 0.4},
+        snapshot_id="s1",
     )
     themes.set_notes(theme_id, {A: 0.9, B: 0.4})
     themes.set_status(theme_id, status)
@@ -147,9 +149,7 @@ def test_rejecting_writes_nothing(themes, registry, settings, vault):
     apply_decision(settings, themes, registry, proposal.id, "rejected", grace_minutes=0)
 
     assert (vault / "A.md").read_bytes() == before
-    assert themes.pending_proposals() == [
-        p for p in themes.pending_proposals() if p.note_uuid == B
-    ]
+    assert themes.pending_proposals() == [p for p in themes.pending_proposals() if p.note_uuid == B]
 
 
 def test_a_decided_proposal_leaves_the_pending_queue(themes, registry, settings):
@@ -163,16 +163,12 @@ def test_a_decided_proposal_leaves_the_pending_queue(themes, registry, settings)
 
 
 def test_a_note_the_daemon_may_not_write_records_why(themes, registry, settings, vault):
-    (vault / "A.md").write_text(
-        "---\ndaemon: ignore\n---\n\n# A\n", encoding="utf-8"
-    )
+    (vault / "A.md").write_text("---\ndaemon: ignore\n---\n\n# A\n", encoding="utf-8")
     _theme(themes)
     propose_theme_tags(themes)
     proposal = next(p for p in themes.pending_proposals() if p.note_uuid == A)
 
-    result = apply_decision(
-        settings, themes, registry, proposal.id, "accepted", grace_minutes=0
-    )
+    result = apply_decision(settings, themes, registry, proposal.id, "accepted", grace_minutes=0)
 
     assert result.changed is False
     assert "ignore" in result.reason
@@ -197,9 +193,7 @@ def test_theme_tag_edges_are_excluded_from_clustering():
 # ---------------------------------------------------------------------------
 
 
-def test_accepting_a_theme_queues_its_tag_proposals(
-    themes, registry, settings, monkeypatch
-):
+def test_accepting_a_theme_queues_its_tag_proposals(themes, registry, settings, monkeypatch):
     from typer.testing import CliRunner
 
     from my_daemon.cli import app
@@ -227,9 +221,7 @@ def test_accepting_a_theme_locks_its_label(themes, registry, settings, monkeypat
     assert themes.get(theme_id).label == "Mine"
 
 
-def test_review_accept_all_writes_every_pending_tag(
-    themes, registry, settings, vault, monkeypatch
-):
+def test_review_accept_all_writes_every_pending_tag(themes, registry, settings, vault, monkeypatch):
     from typer.testing import CliRunner
 
     from my_daemon.cli import app
@@ -246,9 +238,7 @@ def test_review_accept_all_writes_every_pending_tag(
     assert themes.pending_proposals() == []
 
 
-def test_review_reject_all_writes_nothing(
-    themes, registry, settings, vault, monkeypatch
-):
+def test_review_reject_all_writes_nothing(themes, registry, settings, vault, monkeypatch):
     from typer.testing import CliRunner
 
     from my_daemon.cli import app

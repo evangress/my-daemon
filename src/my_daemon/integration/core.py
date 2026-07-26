@@ -99,7 +99,12 @@ class DaemonCore:
         self.ledger = ActivationLedger(db_path=settings.feedback.db_path)
         self.llm = llm_client
         self.engine = QueryEngine(
-            settings, embedder, vector_store, graph_store, feedback_store, llm_client,
+            settings,
+            embedder,
+            vector_store,
+            graph_store,
+            feedback_store,
+            llm_client,
             sparse_embedder=sparse_embedder,
             surface=HERMES_RECALL_SURFACE,
         )
@@ -285,7 +290,9 @@ class DaemonCore:
             }
 
         dists = self.graph.neighbors_within(
-            note_uuid, depth, weighted=True,
+            note_uuid,
+            depth,
+            weighted=True,
             exclude_tag_prefixes=(THEME_TAG_PREFIX,),
         )
         # Resolve back to paths: the registry knows them, and the graph node
@@ -378,7 +385,10 @@ class DaemonCore:
         """
 
         if not self.s.feedback.reinforce_enabled:
-            return {"ok": False, "reason": "reinforcement disabled (feedback.reinforce_enabled=false)"}
+            return {
+                "ok": False,
+                "reason": "reinforcement disabled (feedback.reinforce_enabled=false)",
+            }
         if require_write_back and not self.write_enabled:
             return {"ok": False, "reason": "write-back disabled (hermes.allow_write_back=false)"}
         event = self.feedback.get(feedback_event_id)
@@ -400,7 +410,9 @@ class DaemonCore:
             # overwritten by this click (and vice versa).
             with self.graph.transaction():
                 result = apply_selection(
-                    self.graph, seed_note_uuid=seed_note, selected_note_uuid=selected_note,
+                    self.graph,
+                    seed_note_uuid=seed_note,
+                    selected_note_uuid=selected_note,
                 )
             self.feedback.attach_signal(
                 feedback_event_id,
@@ -469,7 +481,11 @@ class DaemonCore:
         note = parse_note(path, self.s.vault.path)
         with self._write_lock:
             n_chunks = ingest_note(
-                self.s, self.embedder, self.vector_store, self.graph, note,
+                self.s,
+                self.embedder,
+                self.vector_store,
+                self.graph,
+                note,
                 sparse_embedder=self.sparse_embedder,
             )
 

@@ -48,9 +48,7 @@ def recall_related(
         return []
 
     since = (
-        datetime.now(UTC) - timedelta(days=memory.lookback_days)
-        if memory.lookback_days
-        else None
+        datetime.now(UTC) - timedelta(days=memory.lookback_days) if memory.lookback_days else None
     )
     hits = ledger.similar(
         probe,

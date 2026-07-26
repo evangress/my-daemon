@@ -80,8 +80,7 @@ def _schema_fingerprint(path: Path) -> set[tuple[str, str]]:
     """(name, normalized sql) for every table and index, for structural equality."""
     conn = sqlite3.connect(path)
     rows = conn.execute(
-        "SELECT name, sql FROM sqlite_master "
-        "WHERE sql IS NOT NULL AND name NOT LIKE 'sqlite_%'"
+        "SELECT name, sql FROM sqlite_master WHERE sql IS NOT NULL AND name NOT LIKE 'sqlite_%'"
     ).fetchall()
     conn.close()
     return {(name, " ".join(sql.split())) for name, sql in rows}
@@ -179,9 +178,7 @@ def test_baseline_adds_selection_columns_to_a_pre_selection_db(tmp_path: Path):
 
     dbmod.migrate(db)
 
-    assert {"selected_rank", "selected_chunk_id", "selected_note_path"} <= _columns(
-        db, "feedback"
-    )
+    assert {"selected_rank", "selected_chunk_id", "selected_note_path"} <= _columns(db, "feedback")
 
 
 def test_failed_migration_rolls_back_and_leaves_the_earlier_version(

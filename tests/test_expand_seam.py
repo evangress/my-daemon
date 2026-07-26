@@ -118,9 +118,7 @@ def _seed_from(chunks_by_uuid: dict[str, list], note_uuid: str) -> RetrievedChun
 
 
 def _expand(vault_root: Path, tmp_path: Path, *, reinforcements: int) -> list[RetrievedChunk]:
-    store, payloads, chunks_by_uuid = _vault_graph_and_payloads(
-        vault_root, tmp_path / "g.gpickle"
-    )
+    store, payloads, chunks_by_uuid = _vault_graph_and_payloads(vault_root, tmp_path / "g.gpickle")
     for _ in range(reinforcements):
         apply_selection(store, seed_note_uuid=DESIGNING, selected_note_uuid=PULLMAN)
 
@@ -175,9 +173,7 @@ def test_the_fractional_distance_flows_into_the_decayed_score(tmp_path: Path, va
     assert by_note[PULLMAN].combined_score > by_note[SOCRATIC].combined_score
 
 
-def test_expansion_still_carries_provenance_after_reinforcement(
-    tmp_path: Path, vault_root: Path
-):
+def test_expansion_still_carries_provenance_after_reinforcement(tmp_path: Path, vault_root: Path):
     """Seed attribution survives the float path — `daemon select` depends on it."""
     _store, _payloads, chunks_by_uuid = _vault_graph_and_payloads(
         vault_root, tmp_path / "unused.gpickle"

@@ -119,9 +119,7 @@ def test_config_check_names_the_file_that_resolved(isolated_env: Path, vault_roo
     assert settings.vault.path == vault_root
 
 
-def test_doctor_exits_zero_on_a_healthy_vault_and_says_so(
-    isolated_env: Path, vault_root: Path
-):
+def test_doctor_exits_zero_on_a_healthy_vault_and_says_so(isolated_env: Path, vault_root: Path):
     _write_config(isolated_env, vault_root)
 
     result = runner.invoke(app, ["doctor"])
@@ -267,9 +265,7 @@ def test_collection_dim_is_read_without_loading_the_model(
     assert "384" in result.detail
 
 
-def test_a_dim_mismatch_is_a_hard_failure(
-    settings: Settings, monkeypatch: pytest.MonkeyPatch
-):
+def test_a_dim_mismatch_is_a_hard_failure(settings: Settings, monkeypatch: pytest.MonkeyPatch):
     _make_collection(settings, dim=384)
     monkeypatch.setattr(doctor, "expected_embedding_dim", lambda _s: 768)
 
@@ -310,9 +306,7 @@ def test_an_unknowable_dim_is_reported_not_guessed(
 
 
 def test_expected_dim_comes_from_the_hub_cache_layout(tmp_path: Path):
-    snapshot = (
-        tmp_path / "models--BAAI--bge-small-en-v1.5" / "snapshots" / "abc123"
-    )
+    snapshot = tmp_path / "models--BAAI--bge-small-en-v1.5" / "snapshots" / "abc123"
     (snapshot / "1_Pooling").mkdir(parents=True)
     (snapshot / "1_Pooling" / "config.json").write_text(
         json.dumps({"word_embedding_dimension": 384}), encoding="utf-8"
@@ -327,9 +321,7 @@ def test_expected_dim_comes_from_the_hub_cache_layout(tmp_path: Path):
 def test_expected_dim_falls_back_to_hidden_size(tmp_path: Path):
     model_dir = tmp_path / "BAAI_bge-small-en-v1.5"
     model_dir.mkdir(parents=True)
-    (model_dir / "config.json").write_text(
-        json.dumps({"hidden_size": 768}), encoding="utf-8"
-    )
+    (model_dir / "config.json").write_text(json.dumps({"hidden_size": 768}), encoding="utf-8")
 
     found = doctor.find_cached_model(tmp_path, "BAAI/bge-small-en-v1.5")
 
@@ -353,9 +345,7 @@ def test_a_warm_cache_passes(settings: Settings):
         / "abc123"
     )
     snapshot.mkdir(parents=True)
-    (snapshot / "config.json").write_text(
-        json.dumps({"hidden_size": 384}), encoding="utf-8"
-    )
+    (snapshot / "config.json").write_text(json.dumps({"hidden_size": 384}), encoding="utf-8")
 
     result = doctor.check_model_cache(settings)
 
@@ -521,9 +511,7 @@ def test_warnings_alone_do_not_fail_the_run(settings: Settings):
 # ---------------------------------------------------------------------------
 
 
-def test_query_translates_a_refused_connection(
-    monkeypatch: pytest.MonkeyPatch, settings: Settings
-):
+def test_query_translates_a_refused_connection(monkeypatch: pytest.MonkeyPatch, settings: Settings):
     settings.vector_store.qdrant.path = None
     settings.vector_store.qdrant.url = DEAD_URL
     monkeypatch.setattr("my_daemon.cli._load", lambda: settings)
@@ -541,9 +529,7 @@ def test_query_translates_a_refused_connection(
     assert "Traceback" not in result.output
 
 
-def test_search_translates_the_same_error(
-    monkeypatch: pytest.MonkeyPatch, settings: Settings
-):
+def test_search_translates_the_same_error(monkeypatch: pytest.MonkeyPatch, settings: Settings):
     settings.vector_store.qdrant.path = None
     settings.vector_store.qdrant.url = DEAD_URL
     monkeypatch.setattr("my_daemon.cli._load", lambda: settings)
@@ -559,9 +545,7 @@ def test_search_translates_the_same_error(
     assert "docker compose up -d" in _squash(result.output)
 
 
-def test_ingest_translates_an_embedded_lock(
-    monkeypatch: pytest.MonkeyPatch, settings: Settings
-):
+def test_ingest_translates_an_embedded_lock(monkeypatch: pytest.MonkeyPatch, settings: Settings):
     from my_daemon.stores.vector import LocalStoreLockedError
 
     monkeypatch.setattr("my_daemon.cli._load", lambda: settings)

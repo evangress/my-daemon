@@ -30,16 +30,16 @@ DEFAULT_HALF_LIFE_DAYS = 30
 
 @dataclass
 class ReinforcementResult:
-    path: list[str]            # node ids on the reinforced path (start → end)
-    edges_reinforced: int      # count of (u, v) edge instances bumped
-    total_delta: float         # sum of weight increments applied
+    path: list[str]  # node ids on the reinforced path (start → end)
+    edges_reinforced: int  # count of (u, v) edge instances bumped
+    total_delta: float  # sum of weight increments applied
 
 
 @dataclass
 class DecayResult:
     edges_visited: int
-    edges_decayed: int         # only those whose weight changed by > epsilon
-    total_delta: float         # sum of |weight - new_weight| over decayed edges
+    edges_decayed: int  # only those whose weight changed by > epsilon
+    total_delta: float  # sum of |weight - new_weight| over decayed edges
 
 
 def apply_selection(
@@ -72,7 +72,7 @@ def apply_selection(
     total_delta = 0.0
 
     for hop_index, (u, v) in enumerate(zip(path[:-1], path[1:], strict=True)):
-        bump = alpha * (hop_decay ** hop_index)
+        bump = alpha * (hop_decay**hop_index)
         # The graph is a MultiDiGraph: there can be parallel edges (e.g. a tag
         # edge AND a wikilink between the same nodes if a note both names and
         # tags another), and the original direction may be either u→v or v→u

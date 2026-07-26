@@ -20,7 +20,9 @@ import pytest
 from my_daemon.models import THEME_TAG_PREFIX, Note, is_daemon_authored_tag
 from my_daemon.stores.graph import GraphStore
 
-UUIDS = {name: f"{chr(97 + i) * 8}-0000-4000-8000-00000000000{i}" for i, name in enumerate("ABCDEFGH")}
+UUIDS = {
+    name: f"{chr(97 + i) * 8}-0000-4000-8000-00000000000{i}" for i, name in enumerate("ABCDEFGH")
+}
 
 
 def _note(name: str, *, tags=None, links=None) -> Note:
@@ -108,8 +110,7 @@ def test_a_reinforced_theme_tag_edge_is_not_reported_as_warm(
     report = compute_report(theme_glued_graph, warm_threshold=1.5)
 
     assert not any(
-        is_daemon_authored_tag(e.src) or is_daemon_authored_tag(e.dst)
-        for e in report.warm_edges
+        is_daemon_authored_tag(e.src) or is_daemon_authored_tag(e.dst) for e in report.warm_edges
     )
 
 
@@ -145,8 +146,7 @@ def test_the_linker_never_proposes_a_daemon_authored_tag(tmp_path: Path):
     store = GraphStore(path=tmp_path / "g.gpickle")
     subject = _note("A", links=["B", "C", "D", "E"])
     neighbours = [
-        _note(name, tags=[f"{THEME_TAG_PREFIX}x", "philosophy"])
-        for name in ("B", "C", "D", "E")
+        _note(name, tags=[f"{THEME_TAG_PREFIX}x", "philosophy"]) for name in ("B", "C", "D", "E")
     ]
     store.add_note(subject, ["a1"])
     for n in neighbours:

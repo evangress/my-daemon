@@ -64,9 +64,7 @@ class AgentStateStore:
 
     # ---- extract runs -----------------------------------------------------
 
-    def record_extract_run(
-        self, note_path: str, *, note_mtime: float, summary_hash: str
-    ) -> None:
+    def record_extract_run(self, note_path: str, *, note_mtime: float, summary_hash: str) -> None:
         with self._connect() as conn:
             conn.execute(
                 """

@@ -92,9 +92,7 @@ class FakeLLM:
 def _settings(tmp_path: Path, vault: Path) -> Settings:
     s = Settings()
     s.vault.path = vault
-    s.graph = GraphConfig(
-        path=tmp_path / "graph.gpickle", manifest_path=tmp_path / "manifest.json"
-    )
+    s.graph = GraphConfig(path=tmp_path / "graph.gpickle", manifest_path=tmp_path / "manifest.json")
     s.feedback = FeedbackConfig(db_path=tmp_path / "state.db")
     s.hermes = HermesConfig(provider_enabled=True, allow_write_back=False, recall_top_k=8)
     return s
@@ -148,9 +146,7 @@ def test_prefetch_writes_the_ambient_surface(tmp_path: Path, vault_root: Path) -
     assert [r["text"] for r in rows] == ["what is a daemon"]
 
 
-def test_recall_tool_writes_the_intentional_surface(
-    tmp_path: Path, vault_root: Path
-) -> None:
+def test_recall_tool_writes_the_intentional_surface(tmp_path: Path, vault_root: Path) -> None:
     provider, core = _provider(tmp_path, vault_root)
 
     provider.handle_tool_call("mydaemon_recall", {"query": "what is a daemon"})
@@ -159,9 +155,7 @@ def test_recall_tool_writes_the_intentional_surface(
     assert [r["surface"] for r in rows] == ["hermes_recall"]
 
 
-def test_direct_recall_still_defaults_to_intentional(
-    tmp_path: Path, vault_root: Path
-) -> None:
+def test_direct_recall_still_defaults_to_intentional(tmp_path: Path, vault_root: Path) -> None:
     """Backward compatibility: a caller that names no surface gets today's."""
     core = _core(_settings(tmp_path, vault_root))
 
@@ -186,9 +180,7 @@ def _both_paths(tmp_path: Path, vault_root: Path) -> DaemonCore:
     return core
 
 
-def test_ambient_rows_are_excluded_from_clustering_input(
-    tmp_path: Path, vault_root: Path
-) -> None:
+def test_ambient_rows_are_excluded_from_clustering_input(tmp_path: Path, vault_root: Path) -> None:
     from my_daemon.analysis.themes import cluster_fingerprints
 
     core = _both_paths(tmp_path, vault_root)
@@ -224,9 +216,7 @@ def test_ambient_rows_are_excluded_from_fingerprint_recall(
     )
     assert [h.text for h in intentional_only] == []
 
-    everything = core.ledger.similar(
-        probe, exclude_query_id=by_text["the deliberate question"]
-    )
+    everything = core.ledger.similar(probe, exclude_query_id=by_text["the deliberate question"])
     assert [h.text for h in everything] == ["an ambient turn"]
 
 

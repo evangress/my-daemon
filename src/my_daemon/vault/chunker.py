@@ -67,9 +67,7 @@ def chunk_note(note: Note, max_tokens: int = 512, overlap_tokens: int = 50) -> l
             continue
 
         sub_texts = (
-            [text]
-            if _approx_token_count(text) <= max_tokens
-            else size_splitter.split_text(text)
+            [text] if _approx_token_count(text) <= max_tokens else size_splitter.split_text(text)
         )
 
         for sub in sub_texts:

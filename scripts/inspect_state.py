@@ -17,7 +17,9 @@ def main() -> None:
 
     try:
         embedder = Embedder(s.embeddings.model)
-        vec = VectorStore(s.vector_store.qdrant.url, s.vector_store.qdrant.collection, dim=embedder.dimension)
+        vec = VectorStore(
+            s.vector_store.qdrant.url, s.vector_store.qdrant.collection, dim=embedder.dimension
+        )
         print(f"vector_chunks={vec.count()}")
     except Exception as exc:
         print(f"vector store unavailable: {exc}")

@@ -28,9 +28,7 @@ def _note(vault: Path, text: str) -> Path:
 
 
 def _add(note: Path, vault: Path, values, key: str = "tags"):
-    return add_frontmatter_list_values_textual(
-        note, key, values, vault_root=vault, grace_minutes=0
-    )
+    return add_frontmatter_list_values_textual(note, key, values, vault_root=vault, grace_minutes=0)
 
 
 def test_flow_style_stays_flow_style(vault: Path):
@@ -38,9 +36,7 @@ def test_flow_style_stays_flow_style(vault: Path):
 
     _add(note, vault, ["theme/forgetting"])
 
-    assert note.read_text() == (
-        "---\ntags: [memory, philosophy, theme/forgetting]\n---\n\nbody\n"
-    )
+    assert note.read_text() == ("---\ntags: [memory, philosophy, theme/forgetting]\n---\n\nbody\n")
 
 
 def test_block_style_stays_block_style(vault: Path):

@@ -209,9 +209,7 @@ def test_an_unresolved_link_lands_in_the_dangling_namespace(tmp_path: Path):
     """
     store = _store(tmp_path)
 
-    store.update_note(
-        _note("A.md", dangling_wikilinks=["Someday"]), chunk_ids=["a1"]
-    )
+    store.update_note(_note("A.md", dangling_wikilinks=["Someday"]), chunk_ids=["a1"])
 
     assert store.graph.nodes["dangling::Someday"]["dangling"] is True
     assert store.graph.has_edge(f"note::{_uuid('A.md')}", "dangling::Someday")
@@ -220,9 +218,7 @@ def test_an_unresolved_link_lands_in_the_dangling_namespace(tmp_path: Path):
 def test_resolving_a_dangling_link_drops_the_placeholder_edge(tmp_path: Path):
     """Once the target exists the reader resolves it, so the diff moves the edge."""
     store = _store(tmp_path)
-    store.update_note(
-        _note("A.md", dangling_wikilinks=["B"]), chunk_ids=["a1"]
-    )
+    store.update_note(_note("A.md", dangling_wikilinks=["B"]), chunk_ids=["a1"])
     assert store.graph.has_edge(f"note::{_uuid('A.md')}", "dangling::B")
 
     store.add_note(_note("B.md"), chunk_ids=["b1"])

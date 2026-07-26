@@ -33,7 +33,9 @@ class VaultReader:
         for p in self.vault_root.rglob("*.md"):
             if any(part.startswith(".") for part in p.relative_to(self.vault_root).parts[:-1]):
                 continue
-            if any(part.lower() in self.exclude_dirs for part in p.relative_to(self.vault_root).parts):
+            if any(
+                part.lower() in self.exclude_dirs for part in p.relative_to(self.vault_root).parts
+            ):
                 continue
             files.append(p)
         return sorted(files)

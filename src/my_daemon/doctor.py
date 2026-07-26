@@ -189,7 +189,10 @@ def dim_from_model_dir(model_dir: Path) -> int | None:
     """
 
     pooling = model_dir / "1_Pooling" / "config.json"
-    for path, key in ((pooling, "word_embedding_dimension"), (model_dir / "config.json", "hidden_size")):
+    for path, key in (
+        (pooling, "word_embedding_dimension"),
+        (model_dir / "config.json", "hidden_size"),
+    ):
         if not path.is_file():
             continue
         try:
@@ -262,9 +265,7 @@ def check_vault(settings: Settings) -> CheckResult:
         )
     excluded = set(settings.vault.exclude_dirs)
     count = sum(
-        1
-        for md in path.rglob("*.md")
-        if not (excluded & set(md.relative_to(path).parts[:-1]))
+        1 for md in path.rglob("*.md") if not (excluded & set(md.relative_to(path).parts[:-1]))
     )
     detail = f"{path} — {count} markdown files"
     if count == 0:
@@ -390,7 +391,9 @@ def check_collection(settings: Settings, store: VectorStore | None) -> CheckResu
             f"'{collection}' has dense dim {found}, but {settings.embeddings.model} emits {expected}",
             hint="run `daemon reset` then `daemon ingest --full` to rebuild at the new dimension.",
         )
-    return CheckResult("collection", PASS, f"'{collection}' — dense dim {found} matches the embedder")
+    return CheckResult(
+        "collection", PASS, f"'{collection}' — dense dim {found} matches the embedder"
+    )
 
 
 def check_api_key(settings: Settings) -> CheckResult:

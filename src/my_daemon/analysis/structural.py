@@ -84,8 +84,7 @@ def compute_report(
     undirected = g.to_undirected(as_view=False)  # mutable view for algorithms
 
     note_nodes = {
-        n for n, d in g.nodes(data=True)
-        if d.get("type") == "note" and not d.get("dangling")
+        n for n, d in g.nodes(data=True) if d.get("type") == "note" and not d.get("dangling")
     }
     tag_nodes = {n for n, d in g.nodes(data=True) if d.get("type") == "tag"}
     # Daemon-authored tags are this report's own past conclusions. They stay in
@@ -93,8 +92,7 @@ def compute_report(
     # evidence — the letter is written in the same consolidate run that mints
     # them, so citing one would be the daemon quoting itself.
     daemon_tag_nodes = {
-        n for n in tag_nodes
-        if is_daemon_authored_tag(str(g.nodes[n].get("title", "")))
+        n for n in tag_nodes if is_daemon_authored_tag(str(g.nodes[n].get("title", "")))
     }
     # Communities only: betweenness, bridges and orphans measure the graph's
     # real shape, and a tag the user accepted is part of that shape.
@@ -104,8 +102,7 @@ def compute_report(
         else undirected
     )
     dangling_nodes = {
-        n for n, d in g.nodes(data=True)
-        if d.get("type") == "note" and d.get("dangling")
+        n for n, d in g.nodes(data=True) if d.get("type") == "note" and d.get("dangling")
     }
 
     communities = _louvain_communities(g, community_projection, max_communities=max_communities)
@@ -167,9 +164,7 @@ def _louvain_communities(
             continue
         tag_counts = Counter(
             tag
-            for tag in (
-                n.removeprefix(_TAG_PREFIX) for n in comm if n.startswith(_TAG_PREFIX)
-            )
+            for tag in (n.removeprefix(_TAG_PREFIX) for n in comm if n.startswith(_TAG_PREFIX))
             # Belt and braces: the projection already excludes these, but this
             # Counter feeds the observer prompt directly.
             if not is_daemon_authored_tag(tag)
@@ -319,9 +314,7 @@ def _warm_edges(
     return ranked[:limit]
 
 
-def _summarize_parallel_edges(
-    g: nx.MultiDiGraph, u: str, v: str
-) -> tuple[str, float]:
+def _summarize_parallel_edges(g: nx.MultiDiGraph, u: str, v: str) -> tuple[str, float]:
     """Collapse parallel edges between u and v into one (kind, max_weight) pair.
 
     ``nx.bridges`` returns undirected pairs; the underlying MultiDiGraph may
@@ -417,8 +410,10 @@ def simulate_evolution(
             replayed += 1
 
         edge_deltas, note_deltas = _diff_graphs(
-            snapshot_graph, shadow.graph,
-            max_edges=max_edges, max_notes=max_notes,
+            snapshot_graph,
+            shadow.graph,
+            max_edges=max_edges,
+            max_notes=max_notes,
         )
     finally:
         handle.close()

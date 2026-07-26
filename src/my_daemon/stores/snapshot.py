@@ -258,7 +258,9 @@ def _snapshot_qdrant(
     try:
         urllib.request.urlretrieve(download_url, dest_file)  # noqa: S310 — trusted url
     except urllib.error.URLError as exc:
-        raise RuntimeError(f"could not download Qdrant snapshot from {download_url}: {exc}") from exc
+        raise RuntimeError(
+            f"could not download Qdrant snapshot from {download_url}: {exc}"
+        ) from exc
     return dest_file, snapshot_name
 
 
@@ -313,9 +315,7 @@ def open_readonly(
         if settings is None:
             raise ValueError("restore_vector=True requires the active Settings")
         if bundle.qdrant_snapshot is None or bundle.qdrant_collection is None:
-            raise RuntimeError(
-                f"snapshot {bundle.id} has no Qdrant payload to restore"
-            )
+            raise RuntimeError(f"snapshot {bundle.id} has no Qdrant payload to restore")
         handle.vector, handle._side_collection = _restore_vector_into_side_collection(
             settings, bundle
         )

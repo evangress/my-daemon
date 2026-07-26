@@ -314,9 +314,7 @@ def test_restore_refuses_an_unknown_bundle_version(settings: Settings):
     assert "version" in _squash(result.output)
 
 
-def test_restore_refuses_a_directory_that_is_not_a_bundle(
-    settings: Settings, tmp_path: Path
-):
+def test_restore_refuses_a_directory_that_is_not_a_bundle(settings: Settings, tmp_path: Path):
     stray = tmp_path / "holiday-photos"
     stray.mkdir()
 

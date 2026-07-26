@@ -278,9 +278,13 @@ def init(
 
     # Spelled as a conditional rather than `or` so the prompt's return type is
     # inferred as `str` instead of picking up this variable's optionality.
-    vault_path = vault if vault else Prompt.ask(
-        "Vault path",
-        default="~/Documents/Obsidian/MyVault",
+    vault_path = (
+        vault
+        if vault
+        else Prompt.ask(
+            "Vault path",
+            default="~/Documents/Obsidian/MyVault",
+        )
     )
     dest.mkdir(parents=True, exist_ok=True)
     text = config_example.read_text(encoding="utf-8")
@@ -293,9 +297,7 @@ def init(
         console.print(f"[green]Wrote {env_path} — add your ANTHROPIC_API_KEY there.[/green]")
 
     if user:
-        console.print(
-            f"Relative paths in that file (./data/…) now resolve under {dest}."
-        )
+        console.print(f"Relative paths in that file (./data/…) now resolve under {dest}.")
 
 
 @app.command()
@@ -317,8 +319,13 @@ def ingest(
         graph_store = _build_graph_store(s)
 
         stats = ingest_vault(
-            s, embedder, vector_store, graph_store,
-            sparse_embedder=sparse_embedder, full_rebuild=full, progress=_progress,
+            s,
+            embedder,
+            vector_store,
+            graph_store,
+            sparse_embedder=sparse_embedder,
+            full_rebuild=full,
+            progress=_progress,
         )
 
     table = Table(title="Ingest summary")
@@ -349,8 +356,12 @@ def _run_query(text: str, *, no_synthesize: bool = False, verbose: bool = False)
     with _store_errors(s):
         stores = build_stores(s)
         engine = QueryEngine(
-            s, stores.embedder, stores.vector_store, stores.graph_store,
-            stores.feedback_store, stores.llm,
+            s,
+            stores.embedder,
+            stores.vector_store,
+            stores.graph_store,
+            stores.feedback_store,
+            stores.llm,
             sparse_embedder=stores.sparse_embedder,
         )
         response = engine.ask(text, synthesize=not no_synthesize)
@@ -366,7 +377,9 @@ def _run_query(text: str, *, no_synthesize: bool = False, verbose: bool = False)
     for i, rc in enumerate(response.retrieval.ranked, start=1):
         heading = " › ".join(rc.chunk.heading_path) if rc.chunk.heading_path else "—"
         preview = rc.chunk.text.strip().replace("\n", " ")[:80]
-        table.add_row(str(i), f"{rc.combined_score:.3f}", f"{rc.chunk.note_path}\n› {heading}", preview)
+        table.add_row(
+            str(i), f"{rc.combined_score:.3f}", f"{rc.chunk.note_path}\n› {heading}", preview
+        )
     console.print(table)
 
     if response.memories and s.memory.show_to_user:
@@ -394,7 +407,9 @@ def _run_query(text: str, *, no_synthesize: bool = False, verbose: bool = False)
 @app.command()
 def query(
     text: str = typer.Argument(..., help="The question to ask your daemon."),
-    no_synthesize: bool = typer.Option(False, "--no-llm", help="Skip LLM synthesis; show ranked context only."),
+    no_synthesize: bool = typer.Option(
+        False, "--no-llm", help="Skip LLM synthesis; show ranked context only."
+    ),
     verbose: bool = typer.Option(False, "-v", "--verbose"),
 ) -> None:
     """Ask the daemon a question."""
@@ -404,7 +419,9 @@ def query(
 @app.command()
 def ask(
     text: str = typer.Argument(..., help="The question to ask your daemon."),
-    no_synthesize: bool = typer.Option(False, "--no-llm", help="Skip LLM synthesis; show ranked context only."),
+    no_synthesize: bool = typer.Option(
+        False, "--no-llm", help="Skip LLM synthesis; show ranked context only."
+    ),
     verbose: bool = typer.Option(False, "-v", "--verbose"),
 ) -> None:
     """Alias for query."""
@@ -413,8 +430,12 @@ def ask(
 
 @app.command()
 def select(
-    feedback_id: int = typer.Argument(..., help="The feedback event id returned by `daemon query -v`."),
-    rank: int = typer.Argument(..., help="Which candidate to select (1-based, matching the table)."),
+    feedback_id: int = typer.Argument(
+        ..., help="The feedback event id returned by `daemon query -v`."
+    ),
+    rank: int = typer.Argument(
+        ..., help="Which candidate to select (1-based, matching the table)."
+    ),
 ) -> None:
     """Record that the user picked candidate #rank for a past query.
 
@@ -528,7 +549,11 @@ def status() -> None:
     console.print(table)
 
 
-_STATUS_STYLE = {PASS: "[green]pass[/green]", WARN: "[yellow]warn[/yellow]", FAIL: "[red]FAIL[/red]"}
+_STATUS_STYLE = {
+    PASS: "[green]pass[/green]",
+    WARN: "[yellow]warn[/yellow]",
+    FAIL: "[red]FAIL[/red]",
+}
 
 
 def _print_checks(results: list[CheckResult]) -> None:
@@ -659,9 +684,7 @@ def schedule_show() -> None:
 
 @schedule_app.command("install")
 def schedule_install(
-    dry_run: bool = typer.Option(
-        False, "--dry-run", help="Print the unit instead of writing it."
-    ),
+    dry_run: bool = typer.Option(False, "--dry-run", help="Print the unit instead of writing it."),
 ) -> None:
     """Write the scheduler unit, and print the commands that activate it.
 
@@ -761,9 +784,15 @@ def setup() -> None:
 
 @app.command()
 def extract(
-    all_: bool = typer.Option(False, "--all", help="Process every eligible note, not just changed ones."),
-    note: str | None = typer.Option(None, "--note", help="Vault-relative path; restrict to one note."),
-    dry_run: bool = typer.Option(False, "--dry-run", help="List what would be processed; touch nothing."),
+    all_: bool = typer.Option(
+        False, "--all", help="Process every eligible note, not just changed ones."
+    ),
+    note: str | None = typer.Option(
+        None, "--note", help="Vault-relative path; restrict to one note."
+    ),
+    dry_run: bool = typer.Option(
+        False, "--dry-run", help="List what would be processed; touch nothing."
+    ),
     verbose: bool = typer.Option(False, "-v", "--verbose"),
 ) -> None:
     """Write an `## Agent Notes` section into recently-changed notes (the daily extractor)."""
@@ -782,7 +811,9 @@ def extract(
         if verbose:
             console.log(f"[{i + 1}/{total}] {rel_path}")
 
-    stats = run_extract(s, state, llm, all_=all_, only_note=note, dry_run=dry_run, progress=_progress)
+    stats = run_extract(
+        s, state, llm, all_=all_, only_note=note, dry_run=dry_run, progress=_progress
+    )
 
     table = Table(title=f"daemon extract {'(dry-run)' if dry_run else ''}".strip())
     table.add_column("metric")
@@ -798,9 +829,13 @@ def extract(
 
 @app.command()
 def link(
-    note: str | None = typer.Option(None, "--note", help="Vault-relative path; restrict to one note."),
+    note: str | None = typer.Option(
+        None, "--note", help="Vault-relative path; restrict to one note."
+    ),
     dry_run: bool = typer.Option(False, "--dry-run", help="Show what would change; touch nothing."),
-    no_llm: bool = typer.Option(False, "--no-llm", help="Skip the LLM second-opinion on suggestions."),
+    no_llm: bool = typer.Option(
+        False, "--no-llm", help="Skip the LLM second-opinion on suggestions."
+    ),
     verbose: bool = typer.Option(False, "-v", "--verbose"),
 ) -> None:
     """Auto-link / tag notes; write lower-confidence suggestions to Agent/link-suggestions-*.md."""
@@ -824,8 +859,15 @@ def link(
             console.log(f"[{i + 1}/{total}] {rel_path}")
 
     stats = run_link(
-        s, state, embedder, vector_store, graph_store, llm,
-        only_note=note, dry_run=dry_run, progress=_progress,
+        s,
+        state,
+        embedder,
+        vector_store,
+        graph_store,
+        llm,
+        only_note=note,
+        dry_run=dry_run,
+        progress=_progress,
     )
 
     table = Table(title=f"daemon link {'(dry-run)' if dry_run else ''}".strip())
@@ -844,7 +886,9 @@ def link(
 
 @app.command()
 def reflect(
-    theme: str | None = typer.Option(None, "--theme", help="Restrict to one theme; default is all configured."),
+    theme: str | None = typer.Option(
+        None, "--theme", help="Restrict to one theme; default is all configured."
+    ),
     dry_run: bool = typer.Option(False, "--dry-run", help="Run the LLM but don't write any files."),
     verbose: bool = typer.Option(False, "-v", "--verbose"),
 ) -> None:
@@ -865,7 +909,9 @@ def reflect(
         if verbose:
             console.log(f"[{i + 1}/{total}] theme: {theme_name}")
 
-    stats = run_reflect(s, state, feedback, llm, only_theme=theme, dry_run=dry_run, progress=_progress)
+    stats = run_reflect(
+        s, state, feedback, llm, only_theme=theme, dry_run=dry_run, progress=_progress
+    )
 
     table = Table(title=f"daemon reflect {'(dry-run)' if dry_run else ''}".strip())
     table.add_column("metric")
@@ -889,13 +935,17 @@ def models_download() -> None:
     s = _load()
     embedder = _build_embedder(s)
     cache = embedder.download()
-    console.print(f"[green]Dense model '{s.embeddings.model}' ready in {cache} (dim={embedder.dimension})[/green]")
+    console.print(
+        f"[green]Dense model '{s.embeddings.model}' ready in {cache} (dim={embedder.dimension})[/green]"
+    )
 
     if s.embeddings.hybrid:
         sparse = _build_sparse_embedder(s)
         assert sparse is not None  # hybrid=True guarantees a builder result
         sparse_cache = sparse.download()
-        console.print(f"[green]Sparse model '{s.embeddings.sparse_model}' ready in {sparse_cache}[/green]")
+        console.print(
+            f"[green]Sparse model '{s.embeddings.sparse_model}' ready in {sparse_cache}[/green]"
+        )
 
 
 @snapshot_app.command("create")
@@ -944,7 +994,9 @@ def snapshot_list() -> None:
 
 @snapshot_app.command("delete")
 def snapshot_delete(
-    snapshot_id: str = typer.Argument(..., help="The snapshot id (timestamp form, e.g. 2026-05-17T03-00-00Z)."),
+    snapshot_id: str = typer.Argument(
+        ..., help="The snapshot id (timestamp form, e.g. 2026-05-17T03-00-00Z)."
+    ),
 ) -> None:
     """Remove one bundle directory. The server-side Qdrant snapshot is left alone."""
     s = _load()
@@ -958,7 +1010,9 @@ def snapshot_delete(
 
 @app.command()
 def analyze(
-    snapshot_id: str = typer.Argument(..., help="The snapshot id to analyze (from `daemon snapshot list`)."),
+    snapshot_id: str = typer.Argument(
+        ..., help="The snapshot id to analyze (from `daemon snapshot list`)."
+    ),
     lookback_days: int | None = typer.Option(
         None,
         "--lookback-days",
@@ -1008,7 +1062,9 @@ def analyze(
     if not no_simulate:
         evolution = simulate_evolution(
             bundle,
-            lookback_days=lookback_days if lookback_days is not None else cfg.simulate_lookback_days,
+            lookback_days=lookback_days
+            if lookback_days is not None
+            else cfg.simulate_lookback_days,
         )
 
     _print_structural(structural)
@@ -1090,8 +1146,13 @@ def _print_evolution(report) -> None:  # noqa: ANN001 — local helper, pydantic
         et.add_column("Δ", justify="right")
         for d in report.top_edges:
             et.add_row(
-                d.src, "→", d.dst, d.kind,
-                f"{d.before:.3f}", f"{d.after:.3f}", f"{d.delta:+.3f}",
+                d.src,
+                "→",
+                d.dst,
+                d.kind,
+                f"{d.before:.3f}",
+                f"{d.after:.3f}",
+                f"{d.delta:+.3f}",
             )
         console.print(et)
 
@@ -1168,7 +1229,11 @@ def consolidate(
 
     try:
         stats = run_observe(
-            s, state, feedback_store, graph_store, llm,
+            s,
+            state,
+            feedback_store,
+            graph_store,
+            llm,
             snapshot_id=snapshot_id,
             dry_run=dry_run,
             include_qdrant=not no_qdrant,
@@ -1211,22 +1276,29 @@ def hermes_doctor() -> None:
     available = provider.is_available()
 
     agent_dir = s.vault.path / s.agent.folder_name
-    letters = (
-        sorted(p.name for p in agent_dir.glob("observer-*.md")) if agent_dir.is_dir() else []
-    )
+    letters = sorted(p.name for p in agent_dir.glob("observer-*.md")) if agent_dir.is_dir() else []
 
     table = Table(title="Hermes provider doctor")
     table.add_column("check")
     table.add_column("value")
-    table.add_row("hermes ABC importable", "yes (in a Hermes venv)" if HERMES_AVAILABLE else "no (standalone)")
+    table.add_row(
+        "hermes ABC importable", "yes (in a Hermes venv)" if HERMES_AVAILABLE else "no (standalone)"
+    )
     table.add_row("provider_enabled", str(s.hermes.provider_enabled))
-    table.add_row("vault exists", "yes" if s.vault.path.expanduser().exists() else f"NO ({s.vault.path})")
-    table.add_row("is_available()", "[green]ready[/green]" if available else "[yellow]inactive[/yellow]")
+    table.add_row(
+        "vault exists", "yes" if s.vault.path.expanduser().exists() else f"NO ({s.vault.path})"
+    )
+    table.add_row(
+        "is_available()", "[green]ready[/green]" if available else "[yellow]inactive[/yellow]"
+    )
     table.add_row("allow_write_back", str(s.hermes.allow_write_back))
     table.add_row("capture_folder", s.hermes.capture_folder)
     table.add_row("capture_requires_confirmation", str(s.hermes.capture_requires_confirmation))
     table.add_row("recall_top_k", str(s.hermes.recall_top_k))
-    table.add_row("observer letters (dreams)", str(len(letters)) + (f" — latest {letters[-1]}" if letters else ""))
+    table.add_row(
+        "observer letters (dreams)",
+        str(len(letters)) + (f" — latest {letters[-1]}" if letters else ""),
+    )
     console.print(table)
 
     if not available:
@@ -1568,7 +1640,9 @@ def backup(
     dest: Path | None = typer.Argument(  # noqa: B008
         None, help="Where to write the bundle. Default: backup.dir."
     ),
-    show_list: bool = typer.Option(False, "--list", help="List existing bundles instead of writing one."),
+    show_list: bool = typer.Option(
+        False, "--list", help="List existing bundles instead of writing one."
+    ),
 ) -> None:
     """Copy the state the vault cannot regenerate into a timestamped bundle.
 
@@ -1728,17 +1802,13 @@ def migrate_db() -> None:
     applied = db_migrate(db_path)
 
     if not applied:
-        console.print(
-            f"[green]Already at schema v{before}[/green] — nothing to apply."
-        )
+        console.print(f"[green]Already at schema v{before}[/green] — nothing to apply.")
         return
 
     names = {version: name for version, name, _ in DB_MIGRATIONS}
     for version in applied:
         console.print(f"  [cyan]v{version}[/cyan]  {names.get(version, '?')}")
-    console.print(
-        f"[green]Migrated[/green] {db_path} from v{before} to v{DB_SCHEMA_VERSION}."
-    )
+    console.print(f"[green]Migrated[/green] {db_path} from v{before} to v{DB_SCHEMA_VERSION}.")
 
 
 @migrate_app.command("status")
@@ -1771,7 +1841,9 @@ def migrate_status() -> None:
 
 @app.command()
 def activations(
-    query_id: int | None = typer.Argument(None, help="Ledger query id. Omit to list recent queries."),
+    query_id: int | None = typer.Argument(
+        None, help="Ledger query id. Omit to list recent queries."
+    ),
 ) -> None:
     """Show which notes fired for a query, and how strongly."""
     s = _load()
@@ -1787,8 +1859,11 @@ def activations(
         table.add_column("query")
         for row in ledger.recent(limit=20):
             table.add_row(
-                str(row["id"]), row["ts"][:19], row["surface"],
-                str(row["activation_count"]), row["text"][:60],
+                str(row["id"]),
+                row["ts"][:19],
+                row["surface"],
+                str(row["activation_count"]),
+                row["text"][:60],
             )
         console.print(table)
         return
@@ -1805,8 +1880,10 @@ def activations(
     table.add_column("rank", justify="right")
     for r in rows:
         table.add_row(
-            paths.get(r.note_uuid, r.note_uuid), r.source,
-            f"{r.strength:.3f}", str(r.rank or ""),
+            paths.get(r.note_uuid, r.note_uuid),
+            r.source,
+            f"{r.strength:.3f}",
+            str(r.rank or ""),
         )
     console.print(table)
 
@@ -1857,8 +1934,12 @@ def themes_list() -> None:
     for theme in all_themes:
         style = {"accepted": "green", "dormant": "dim", "rejected": "red"}.get(theme.status, "")
         table.add_row(
-            str(theme.id), theme.label, theme.status,
-            str(theme.query_count), str(theme.runs_seen), style=style,
+            str(theme.id),
+            theme.label,
+            theme.status,
+            str(theme.query_count),
+            str(theme.runs_seen),
+            style=style,
         )
     console.print(table)
 
@@ -1922,7 +2003,11 @@ def themes_review(
             decision = "accepted" if answer == "y" else "rejected"
 
         result = apply_decision(
-            s, store, registry, proposal.id, decision,
+            s,
+            store,
+            registry,
+            proposal.id,
+            decision,
             grace_minutes=s.agent.write_grace_minutes,
         )
         mark = "[green]✓[/green]" if result.changed else "[dim]·[/dim]"
@@ -1932,7 +2017,9 @@ def themes_review(
 @migrate_app.command("backfill-activations")
 def migrate_backfill_activations(
     apply: bool = typer.Option(False, "--apply", help="Actually write. Dry-run otherwise."),
-    days: int | None = typer.Option(None, "--days", help="Only feedback rows from the last N days."),
+    days: int | None = typer.Option(
+        None, "--days", help="Only feedback rows from the last N days."
+    ),
 ) -> None:
     """Recover an activation ledger from the historical feedback log."""
     from datetime import UTC, datetime, timedelta
@@ -1968,10 +2055,16 @@ def migrate_backfill_activations(
 @migrate_app.command("assign-uuids")
 def migrate_assign_uuids(
     apply: bool = typer.Option(False, "--apply", help="Actually write. Dry-run otherwise."),
-    path_glob: str | None = typer.Option(None, "--path-glob", help="Scope to matching notes, e.g. 'Projects/**'."),
+    path_glob: str | None = typer.Option(
+        None, "--path-glob", help="Scope to matching notes, e.g. 'Projects/**'."
+    ),
     limit: int | None = typer.Option(None, "--limit", help="Stop after N notes."),
-    grace_minutes: int = typer.Option(2, "--grace-minutes", help="Skip notes modified this recently."),
-    no_backup: bool = typer.Option(False, "--no-backup", help="Skip the batch backup. Not recommended."),
+    grace_minutes: int = typer.Option(
+        2, "--grace-minutes", help="Skip notes modified this recently."
+    ),
+    no_backup: bool = typer.Option(
+        False, "--no-backup", help="Skip the batch backup. Not recommended."
+    ),
 ) -> None:
     """Stamp a stable `uuid:` into every note's frontmatter."""
     s = _load()
@@ -2031,15 +2124,15 @@ def migrate_list_runs() -> None:
 def migrate_rollback_uuids(
     run_id: str = typer.Argument(..., help="Run id from `daemon migrate list-runs`."),
     mode: str = typer.Option("key-removal", "--mode", help="key-removal | restore"),
-    force: bool = typer.Option(False, "--force", help="restore mode: overwrite files edited since."),
+    force: bool = typer.Option(
+        False, "--force", help="restore mode: overwrite files edited since."
+    ),
     grace_minutes: int = typer.Option(2, "--grace-minutes"),
 ) -> None:
     """Undo an `assign-uuids` run."""
     s = _load()
     try:
-        report = rollback_uuids(
-            s, run_id, mode=mode, force=force, grace_minutes=grace_minutes
-        )
+        report = rollback_uuids(s, run_id, mode=mode, force=force, grace_minutes=grace_minutes)
     except FileNotFoundError as exc:
         console.print(f"[red]{exc}[/red]")
         raise typer.Exit(code=1) from exc

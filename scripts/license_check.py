@@ -104,7 +104,6 @@ _LICENSE_TABLE: dict[str, Status] = {
     "MS-PL": Status.COMPATIBLE,
     "MICROSOFT PUBLIC LICENSE (MS-PL)": Status.COMPATIBLE,
     "OPENSSL": Status.COMPATIBLE,  # advertising clause; permissive
-
     # --- Category B: weak copyleft (allowed, binary-only redistribution caveat) ---
     "MPL-2.0": Status.COMPATIBLE,
     "MOZILLA PUBLIC LICENSE 2.0 (MPL 2.0)": Status.COMPATIBLE,
@@ -118,7 +117,6 @@ _LICENSE_TABLE: dict[str, Status] = {
     "EPL-2.0": Status.COMPATIBLE,
     "ECLIPSE PUBLIC LICENSE 1.0 (EPL-1.0)": Status.COMPATIBLE,
     "ECLIPSE PUBLIC LICENSE 2.0 (EPL-2.0)": Status.COMPATIBLE,
-
     # --- Category X: strong copyleft, network copyleft, source-available, proprietary ---
     "GPL-2.0-ONLY": Status.INCOMPATIBLE,
     "GPL-2.0-OR-LATER": Status.INCOMPATIBLE,
@@ -207,14 +205,15 @@ def _classify_package(name: str, version: str, raw: str) -> PkgResult:
     for tok, status in decisions:
         if status is Status.INCOMPATIBLE:
             return PkgResult(name, version, raw, tokens, Status.INCOMPATIBLE, tok)
-    return PkgResult(name, version, raw, tokens, Status.UNKNOWN, decisions[0][0] if decisions else "")
+    return PkgResult(
+        name, version, raw, tokens, Status.UNKNOWN, decisions[0][0] if decisions else ""
+    )
 
 
 def _run_pip_licenses() -> list[dict]:
     if shutil.which("pip-licenses") is None:
         print(
-            "error: 'pip-licenses' is not installed.\n"
-            "  install it with:  pip install pip-licenses",
+            "error: 'pip-licenses' is not installed.\n  install it with:  pip install pip-licenses",
             file=sys.stderr,
         )
         sys.exit(127)
@@ -326,7 +325,9 @@ def _render_markdown(payload: dict) -> str:
     lines.append("")
 
     if not incompatible and not unknown:
-        lines.append("All dependencies are compatible with the project license. No action required.")
+        lines.append(
+            "All dependencies are compatible with the project license. No action required."
+        )
         lines.append("")
         return "\n".join(lines)
 
@@ -383,18 +384,30 @@ def _write_md(text: str, path: Path) -> None:
 
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
-    parser.add_argument("--strict", action="store_true",
-                        help="Exit non-zero on UNKNOWN as well as INCOMPATIBLE.")
-    parser.add_argument("--json", action="store_true",
-                        help="Emit the log payload to stdout instead of the human-readable summary.")
-    parser.add_argument("--log", type=Path, default=DEFAULT_LOG_PATH, metavar="PATH",
-                        help=f"Write JSON log to PATH (default: {DEFAULT_LOG_PATH}).")
-    parser.add_argument("--no-log", action="store_true",
-                        help="Skip writing the JSON log file.")
-    parser.add_argument("--md", type=Path, default=DEFAULT_MD_PATH, metavar="PATH",
-                        help=f"Write markdown summary to PATH (default: {DEFAULT_MD_PATH}).")
-    parser.add_argument("--no-md", action="store_true",
-                        help="Skip writing the markdown summary.")
+    parser.add_argument(
+        "--strict", action="store_true", help="Exit non-zero on UNKNOWN as well as INCOMPATIBLE."
+    )
+    parser.add_argument(
+        "--json",
+        action="store_true",
+        help="Emit the log payload to stdout instead of the human-readable summary.",
+    )
+    parser.add_argument(
+        "--log",
+        type=Path,
+        default=DEFAULT_LOG_PATH,
+        metavar="PATH",
+        help=f"Write JSON log to PATH (default: {DEFAULT_LOG_PATH}).",
+    )
+    parser.add_argument("--no-log", action="store_true", help="Skip writing the JSON log file.")
+    parser.add_argument(
+        "--md",
+        type=Path,
+        default=DEFAULT_MD_PATH,
+        metavar="PATH",
+        help=f"Write markdown summary to PATH (default: {DEFAULT_MD_PATH}).",
+    )
+    parser.add_argument("--no-md", action="store_true", help="Skip writing the markdown summary.")
     args = parser.parse_args()
 
     raw = _run_pip_licenses()

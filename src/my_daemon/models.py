@@ -198,7 +198,7 @@ class CommunitySummary(BaseModel):
 
     community_id: int
     size: int
-    members: list[str] = Field(default_factory=list)         # note rel-paths, capped
+    members: list[str] = Field(default_factory=list)  # note rel-paths, capped
     top_tags: list[tuple[str, int]] = Field(default_factory=list)
 
 
@@ -214,7 +214,7 @@ class BridgeEdge(BaseModel):
 
     src: str
     dst: str
-    kind: str        # wikilink / tag / mixed if more than one parallel edge
+    kind: str  # wikilink / tag / mixed if more than one parallel edge
     weight: float
 
 
@@ -288,6 +288,6 @@ class WeightEvolutionReport(BaseModel):
     generated_at: datetime
     lookback_days: int
     events_replayed: int
-    events_skipped: int      # selections without enough info to replay (no seed path, etc.)
+    events_skipped: int  # selections without enough info to replay (no seed path, etc.)
     top_edges: list[EdgeWeightDelta] = Field(default_factory=list)
     top_notes: list[NoteWeightDelta] = Field(default_factory=list)

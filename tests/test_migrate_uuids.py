@@ -121,18 +121,14 @@ def test_re_running_is_idempotent(settings: Settings, vault: Path):
 
 
 def test_an_existing_uuid_is_adopted_not_replaced(settings: Settings, vault: Path):
-    (vault / "A.md").write_text(
-        f"---\nuuid: {FOREIGN}\n---\n\n# A\n", encoding="utf-8"
-    )
+    (vault / "A.md").write_text(f"---\nuuid: {FOREIGN}\n---\n\n# A\n", encoding="utf-8")
 
     _run(settings, apply=True)
 
     assert _uuid_of(vault / "A.md") == FOREIGN
 
 
-def test_a_foreign_id_key_is_stamped_under_our_key_and_left_alone(
-    settings: Settings, vault: Path
-):
+def test_a_foreign_id_key_is_stamped_under_our_key_and_left_alone(settings: Settings, vault: Path):
     (vault / "A.md").write_text(f"---\nid: {FOREIGN}\n---\n\n# A\n", encoding="utf-8")
 
     _run(settings, apply=True)
@@ -163,12 +159,8 @@ def test_a_path_glob_scopes_the_run(settings: Settings, vault: Path):
 # ---------------------------------------------------------------------------
 
 
-def test_a_daemon_ignore_note_gets_a_path_derived_fallback(
-    settings: Settings, vault: Path
-):
-    (vault / "A.md").write_text(
-        "---\ndaemon: ignore\n---\n\n# A\n", encoding="utf-8"
-    )
+def test_a_daemon_ignore_note_gets_a_path_derived_fallback(settings: Settings, vault: Path):
+    (vault / "A.md").write_text("---\ndaemon: ignore\n---\n\n# A\n", encoding="utf-8")
 
     _run(settings, apply=True)
 
@@ -179,21 +171,15 @@ def test_a_daemon_ignore_note_gets_a_path_derived_fallback(
     assert record.in_frontmatter is False
 
 
-def test_the_report_counts_notes_left_on_a_fragile_identity(
-    settings: Settings, vault: Path
-):
-    (vault / "A.md").write_text(
-        "---\ndaemon: ignore\n---\n\n# A\n", encoding="utf-8"
-    )
+def test_the_report_counts_notes_left_on_a_fragile_identity(settings: Settings, vault: Path):
+    (vault / "A.md").write_text("---\ndaemon: ignore\n---\n\n# A\n", encoding="utf-8")
 
     report = _run(settings, apply=True)
 
     assert report.fallback == 1
 
 
-def test_the_agent_folder_is_skipped_when_the_config_excludes_it(
-    settings: Settings, vault: Path
-):
+def test_the_agent_folder_is_skipped_when_the_config_excludes_it(settings: Settings, vault: Path):
     """Scope follows `exclude_dirs` — stamping notes ingest never sees is pointless."""
     assert "Agent" in settings.vault.exclude_dirs  # the shipped default
     (vault / "Agent").mkdir()
@@ -204,9 +190,7 @@ def test_the_agent_folder_is_skipped_when_the_config_excludes_it(
     assert [e.rel_path for e in report.entries] == ["A.md", "B.md"]
 
 
-def test_the_agent_folder_is_stamped_when_the_config_includes_it(
-    settings: Settings, vault: Path
-):
+def test_the_agent_folder_is_stamped_when_the_config_includes_it(settings: Settings, vault: Path):
     """The writer's agent-folder gate must not veto what discovery selected."""
     settings.vault.exclude_dirs = [".obsidian", ".trash", "templates"]
     (vault / "Agent").mkdir()
@@ -217,9 +201,7 @@ def test_the_agent_folder_is_stamped_when_the_config_includes_it(
     assert _uuid_of(vault / "Agent" / "observer-2026-07-26.md") is not None
 
 
-def test_the_migrations_backup_directory_is_never_scanned(
-    settings: Settings, vault: Path
-):
+def test_the_migrations_backup_directory_is_never_scanned(settings: Settings, vault: Path):
     """Belt and braces: backups must be invisible even if Agent is ingestible."""
     settings.vault.exclude_dirs = [".obsidian", ".trash", "templates"]
     _run(settings, apply=True)
@@ -258,9 +240,7 @@ def test_runs_can_be_listed(settings: Settings):
     assert list_migration_runs(settings) == [report.run_id]
 
 
-def test_key_removal_rollback_restores_the_original_bytes(
-    settings: Settings, vault: Path
-):
+def test_key_removal_rollback_restores_the_original_bytes(settings: Settings, vault: Path):
     before = {p.name: p.read_bytes() for p in vault.glob("*.md")}
     report = _run(settings, apply=True)
 
@@ -292,9 +272,7 @@ def test_rollback_clears_the_registry_rows(settings: Settings, vault: Path):
     assert NoteRegistry(db_path=settings.feedback.db_path).coverage().total == 0
 
 
-def test_restore_mode_refuses_a_file_edited_since_the_migration(
-    settings: Settings, vault: Path
-):
+def test_restore_mode_refuses_a_file_edited_since_the_migration(settings: Settings, vault: Path):
     report = _run(settings, apply=True)
     (vault / "B.md").write_text("# B\n\nEDITED SINCE\n", encoding="utf-8")
 
@@ -309,9 +287,7 @@ def test_restore_mode_overwrites_when_forced(settings: Settings, vault: Path):
     report = _run(settings, apply=True)
     (vault / "B.md").write_text("# B\n\nEDITED SINCE\n", encoding="utf-8")
 
-    rollback_uuids(
-        settings, report.run_id, mode="restore", force=True, grace_minutes=0
-    )
+    rollback_uuids(settings, report.run_id, mode="restore", force=True, grace_minutes=0)
 
     assert (vault / "B.md").read_bytes() == original
 

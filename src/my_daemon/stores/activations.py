@@ -33,9 +33,7 @@ from my_daemon.stores.db import last_insert_id, migrate, open_state_db
 
 _MIN_SCHEMA_VERSION = 4
 
-Source = Literal[
-    "vector_seed", "graph_expansion", "keyword", "recall_injected", "selected"
-]
+Source = Literal["vector_seed", "graph_expansion", "keyword", "recall_injected", "selected"]
 
 # How much each kind of evidence is worth. A user-confirmed pick outweighs a
 # search hit; an ambient recall injection counts for least.
@@ -228,9 +226,7 @@ class ActivationLedger:
 
     def get(self, query_uid: str) -> dict | None:
         with self._connect() as conn:
-            row = conn.execute(
-                "SELECT * FROM queries WHERE query_uid = ?", (query_uid,)
-            ).fetchone()
+            row = conn.execute("SELECT * FROM queries WHERE query_uid = ?", (query_uid,)).fetchone()
         return dict(row) if row else None
 
     def activations_for(self, query_id: int) -> list[ActivationRow]:
@@ -285,9 +281,7 @@ class ActivationLedger:
     def _weight_and_normalize(self, raw: Mapping[str, float]) -> dict[str, float]:
         total = max(self.total_queries(), 1)
         df = self.note_df(raw.keys())
-        weighted = {
-            u: v * math.log(1 + total / (1 + df.get(u, 0))) for u, v in raw.items()
-        }
+        weighted = {u: v * math.log(1 + total / (1 + df.get(u, 0))) for u, v in raw.items()}
         magnitude = math.sqrt(sum(v * v for v in weighted.values()))
         if magnitude == 0:
             return {}
@@ -319,9 +313,7 @@ class ActivationLedger:
             terms = dict(probe)
         else:
             df = self.note_df(probe.keys())
-            terms = {
-                u: w for u, w in probe.items() if df.get(u, 0) / total <= max_df_ratio
-            }
+            terms = {u: w for u, w in probe.items() if df.get(u, 0) / total <= max_df_ratio}
         if not terms:
             return []
 
@@ -427,8 +419,7 @@ class ActivationLedger:
                     (limit,),
                 ).fetchall()
             return [
-                (r["note_uuid"], int(r["query_count"]), float(r["total_strength"]))
-                for r in rows
+                (r["note_uuid"], int(r["query_count"]), float(r["total_strength"])) for r in rows
             ]
         with self._connect() as conn:
             rows = conn.execute(
@@ -472,7 +463,5 @@ class ActivationLedger:
                     "UPDATE queries SET fingerprint_json = ? WHERE id = ?",
                     (json.dumps(top), query_id),
                 )
-                conn.execute(
-                    "DELETE FROM query_activations WHERE query_id = ?", (query_id,)
-                )
+                conn.execute("DELETE FROM query_activations WHERE query_id = ?", (query_id,))
         return len(ids)

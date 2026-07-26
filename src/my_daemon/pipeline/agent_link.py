@@ -87,7 +87,11 @@ def _gather_link_candidates(
             break
         cand = path_to_note[path]
         is_apply = score >= apply_cosine
-        if is_apply and apply_requires_substring and not _title_appears_in_body(cand.title, note.body):
+        if (
+            is_apply
+            and apply_requires_substring
+            and not _title_appears_in_body(cand.title, note.body)
+        ):
             is_apply = False
         if is_apply and len(auto) < max_per_note:
             auto.append((cand, score))
@@ -171,11 +175,7 @@ def run_link(
     # The graph is keyed by identity, so tag gathering needs a uuid-keyed map.
     uuid_to_note: dict[str, Note] = {effective_uuid(n): n for n in all_notes}
 
-    candidates = (
-        [path_to_note[only_note]]
-        if only_note and only_note in path_to_note
-        else all_notes
-    )
+    candidates = [path_to_note[only_note]] if only_note and only_note in path_to_note else all_notes
     stats.notes_scanned = len(candidates)
 
     suggestion_blocks: list[str] = []
@@ -185,20 +185,27 @@ def run_link(
             progress(i, len(candidates), note.relative_path)
         try:
             auto, suggest = _gather_link_candidates(
-                note, embedder, vector_store, path_to_note,
+                note,
+                embedder,
+                vector_store,
+                path_to_note,
                 suggest_cosine=settings.agent.link_suggest_cosine,
                 apply_cosine=settings.agent.link_apply_cosine,
                 apply_requires_substring=settings.agent.link_apply_requires_title_substring,
                 max_per_note=settings.agent.link_max_per_note,
             )
             tag_adds = _gather_tag_candidates(
-                note, graph_store, uuid_to_note,
+                note,
+                graph_store,
+                uuid_to_note,
                 min_neighbor_count=settings.agent.tag_apply_min_neighbor_count,
             )
 
             llm_opinions: list[LinkSuggestion] | None = None
             if suggest and llm is not None:
-                cand_pairs = [(c, c.body[:200]) for c, _ in suggest[: settings.agent.link_max_per_note * 2]]
+                cand_pairs = [
+                    (c, c.body[:200]) for c, _ in suggest[: settings.agent.link_max_per_note * 2]
+                ]
                 try:
                     llm_opinions = propose_links(llm, note, cand_pairs)
                 except Exception as exc:
@@ -208,8 +215,10 @@ def run_link(
             if not dry_run and auto:
                 links = [(cand.title, cand.title) for cand, _ in auto]
                 result = insert_wikilinks(
-                    Path(note.path), links,
-                    vault_root=vault_root, agent_folder=agent_folder,
+                    Path(note.path),
+                    links,
+                    vault_root=vault_root,
+                    agent_folder=agent_folder,
                     grace_minutes=settings.agent.write_grace_minutes,
                 )
                 if result.changed:
@@ -217,8 +226,10 @@ def run_link(
 
             if not dry_run and tag_adds:
                 tag_result = add_tags(
-                    Path(note.path), tag_adds,
-                    vault_root=vault_root, agent_folder=agent_folder,
+                    Path(note.path),
+                    tag_adds,
+                    vault_root=vault_root,
+                    agent_folder=agent_folder,
                     grace_minutes=settings.agent.write_grace_minutes,
                 )
                 if tag_result.changed:

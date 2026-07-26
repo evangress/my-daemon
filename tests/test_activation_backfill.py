@@ -126,7 +126,11 @@ def test_an_unresolvable_note_is_dropped_and_counted(db: Path, registry: NoteReg
 def test_a_high_drop_rate_is_surfaced(db: Path, registry: NoteRegistry):
     """Partial fingerprints look less similar to everything than they should."""
     feedback = FeedbackStore(db_path=db)
-    _log(feedback, "q", [_row("Gone.md"), _row("AlsoGone.md", chunk_id="c2"), _row("A.md", chunk_id="c3")])
+    _log(
+        feedback,
+        "q",
+        [_row("Gone.md"), _row("AlsoGone.md", chunk_id="c2"), _row("A.md", chunk_id="c3")],
+    )
 
     report = backfill_activations(db, registry, dry_run=False)
 
@@ -155,9 +159,7 @@ def test_re_running_does_not_duplicate(db: Path, registry: NoteRegistry):
     assert ActivationLedger(db_path=db).total_queries() == 1
 
 
-def test_a_query_with_no_resolvable_notes_is_skipped_entirely(
-    db: Path, registry: NoteRegistry
-):
+def test_a_query_with_no_resolvable_notes_is_skipped_entirely(db: Path, registry: NoteRegistry):
     feedback = FeedbackStore(db_path=db)
     _log(feedback, "q", [_row("Gone.md")])
 

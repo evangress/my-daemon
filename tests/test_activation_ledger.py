@@ -27,9 +27,7 @@ def _record(ledger: ActivationLedger, text: str, notes, *, surface="cli", ts=Non
         text=text,
         surface=surface,
         ts=ts or datetime(2026, 7, 26, 12, 0, tzinfo=UTC),
-        activations=[
-            Activation(note_uuid=u, source=src, rank=rank) for u, src, rank in notes
-        ],
+        activations=[Activation(note_uuid=u, source=src, rank=rank) for u, src, rank in notes],
     )
 
 
@@ -45,9 +43,7 @@ def test_recording_a_query_returns_its_row_id(ledger: ActivationLedger):
 
 
 def test_activations_are_readable_back(ledger: ActivationLedger):
-    query_id = _record(
-        ledger, "q", [(A, "vector_seed", 1), (B, "graph_expansion", 2)]
-    )
+    query_id = _record(ledger, "q", [(A, "vector_seed", 1), (B, "graph_expansion", 2)])
 
     rows = ledger.activations_for(query_id)
 
@@ -110,7 +106,9 @@ def test_a_note_in_every_query_is_damped_by_idf(ledger: ActivationLedger):
 
 
 def test_a_reworded_query_matches_on_activations_not_words(ledger: ActivationLedger):
-    first = _record(ledger, "what did I think about forgetting", [(A, "vector_seed", 1), (B, "vector_seed", 2)])
+    first = _record(
+        ledger, "what did I think about forgetting", [(A, "vector_seed", 1), (B, "vector_seed", 2)]
+    )
     _record(ledger, "noise", [(C, "vector_seed", 1)])
     probe = {A: 0.8, B: 0.6}
 

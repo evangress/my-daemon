@@ -260,7 +260,9 @@ class VectorStore:
                 }
             else:
                 point_vector = vec
-            points.append(PointStruct(id=_stable_point_id(chunk.id), vector=point_vector, payload=payload))
+            points.append(
+                PointStruct(id=_stable_point_id(chunk.id), vector=point_vector, payload=payload)
+            )
         self._client_().upsert(collection_name=self.collection, points=points)
 
     def search(self, vector: list[float], top_k: int = 8) -> list[dict]:
@@ -334,9 +336,7 @@ class VectorStore:
             collection_name=self.collection,
             points_selector=FilterSelector(
                 filter=Filter(
-                    must=[
-                        FieldCondition(key="note_uuid", match=MatchValue(value=note_uuid))
-                    ]
+                    must=[FieldCondition(key="note_uuid", match=MatchValue(value=note_uuid))]
                 )
             ),
             wait=True,

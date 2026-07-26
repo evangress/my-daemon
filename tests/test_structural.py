@@ -90,18 +90,14 @@ def test_compute_report_dangling_targets_sorted_by_indegree(
         assert t.incoming_links >= 1
 
 
-def test_compute_report_warm_edges_initially_empty(
-    tmp_path: Path, vault_root: Path
-) -> None:
+def test_compute_report_warm_edges_initially_empty(tmp_path: Path, vault_root: Path) -> None:
     """A fresh graph has every edge at weight 1.0, below the warm threshold."""
     store = _vault_graph(vault_root, tmp_path / "g.gpickle")
     report = compute_report(store)
     assert report.warm_edges == []
 
 
-def test_compute_report_warm_edges_surface_reinforcement(
-    tmp_path: Path, vault_root: Path
-) -> None:
+def test_compute_report_warm_edges_surface_reinforcement(tmp_path: Path, vault_root: Path) -> None:
     """After several reinforcements an edge exceeds the warm threshold."""
     store = _vault_graph(vault_root, tmp_path / "g.gpickle")
     for _ in range(4):
@@ -113,10 +109,10 @@ def test_compute_report_warm_edges_surface_reinforcement(
 
     report = compute_report(store, warm_threshold=1.5)
     paths = {(e.src, e.dst) for e in report.warm_edges}
-    assert (
-        ("Designing AI Memory.md", "Pullman Daemons.md") in paths
-        or ("Pullman Daemons.md", "Designing AI Memory.md") in paths
-    )
+    assert ("Designing AI Memory.md", "Pullman Daemons.md") in paths or (
+        "Pullman Daemons.md",
+        "Designing AI Memory.md",
+    ) in paths
 
 
 def test_compute_report_finds_philosophy_cluster(tmp_path: Path, vault_root: Path) -> None:
@@ -217,9 +213,7 @@ def _seed_live_for_simulation(settings: Settings, vault_root: Path) -> int:
     return event_id
 
 
-def test_simulate_evolution_replays_seeded_event(
-    tmp_path: Path, vault_root: Path
-) -> None:
+def test_simulate_evolution_replays_seeded_event(tmp_path: Path, vault_root: Path) -> None:
     settings = _build_settings(tmp_path, vault_root)
     _seed_live_for_simulation(settings, vault_root)
 
@@ -257,9 +251,7 @@ def test_simulate_evolution_handles_no_events(tmp_path: Path, vault_root: Path) 
     assert report.top_notes == []
 
 
-def test_simulate_evolution_does_not_mutate_snapshot(
-    tmp_path: Path, vault_root: Path
-) -> None:
+def test_simulate_evolution_does_not_mutate_snapshot(tmp_path: Path, vault_root: Path) -> None:
     """The replay runs on a deep copy; the snapshot pickle is byte-identical after."""
     settings = _build_settings(tmp_path, vault_root)
     _seed_live_for_simulation(settings, vault_root)
@@ -272,9 +264,7 @@ def test_simulate_evolution_does_not_mutate_snapshot(
     assert pre == post
 
 
-def test_simulate_evolution_skips_pre_lookback_events(
-    tmp_path: Path, vault_root: Path
-) -> None:
+def test_simulate_evolution_skips_pre_lookback_events(tmp_path: Path, vault_root: Path) -> None:
     """Events older than the lookback window are filtered out by the SQL cutoff."""
     settings = _build_settings(tmp_path, vault_root)
     graph = _vault_graph(vault_root, settings.graph.path)
@@ -301,8 +291,11 @@ def test_simulate_evolution_skips_pre_lookback_events(
         )
     )
     feedback.attach_signal(
-        old_id, "candidate_selected",
-        selected_rank=1, selected_chunk_id="x", selected_note_uuid=_u("Pullman Daemons.md"),
+        old_id,
+        "candidate_selected",
+        selected_rank=1,
+        selected_chunk_id="x",
+        selected_note_uuid=_u("Pullman Daemons.md"),
     )
 
     bundle = create_snapshot(settings, include_qdrant=False)

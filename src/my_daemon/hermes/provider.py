@@ -199,7 +199,9 @@ class MyDaemonProvider(_MemoryProviderBase):  # type: ignore[misc,valid-type]
             return
         sid = session_id or self._session_id
         thread = threading.Thread(
-            target=self._sync_turn_worker, args=(user, assistant, sid), daemon=True,
+            target=self._sync_turn_worker,
+            args=(user, assistant, sid),
+            daemon=True,
         )
         with self._pending_lock:
             self._pending.append(thread)
@@ -387,7 +389,9 @@ class MyDaemonProvider(_MemoryProviderBase):  # type: ignore[misc,valid-type]
         args = arguments or {}
         if name == "mydaemon_recall":
             data = self._core.recall(
-                args["query"], top_k=args.get("top_k"), synthesize=False,
+                args["query"],
+                top_k=args.get("top_k"),
+                synthesize=False,
             )
             return json.dumps(data, default=str)
         if name == "mydaemon_dream":

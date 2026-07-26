@@ -33,7 +33,9 @@ def expand_from_seeds(
         # produce a *smaller* distance and ride in with a higher decayed score.
         # Hop budget still enforced inside the call.
         neighbors = graph_store.neighbors_within(
-            seed.chunk.note_uuid, depth=depth, weighted=True,
+            seed.chunk.note_uuid,
+            depth=depth,
+            weighted=True,
             exclude_tag_prefixes=exclude_tag_prefixes,
         )
         for neighbor_uuid, distance in neighbors.items():
@@ -62,7 +64,7 @@ def expand_from_seeds(
                     tags=list(p.get("tags") or []),
                     wikilinks=list(p.get("wikilinks") or []),
                 )
-                score = seed_score * (decay ** distance)
+                score = seed_score * (decay**distance)
                 existing = out.get(chunk.id)
                 if existing is None or score > existing.combined_score:
                     out[chunk.id] = RetrievedChunk(

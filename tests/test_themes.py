@@ -139,9 +139,7 @@ def test_a_returning_cluster_reuses_its_theme_id_and_label(
     assert all(themes.get(t).label == "Named By Human" for t, _ in second.matched)
 
 
-def test_a_returning_cluster_needs_no_llm_call(
-    ledger: ActivationLedger, themes: ThemeStore
-):
+def test_a_returning_cluster_needs_no_llm_call(ledger: ActivationLedger, themes: ThemeStore):
     """Only unmatched clusters get named — steady state is zero calls a night."""
     _two_populations(ledger)
     clusters = cluster_fingerprints(ledger, min_cluster_size=3)
@@ -173,9 +171,7 @@ def test_a_theme_that_stops_appearing_goes_dormant_not_deleted(
     assert all_themes and all(t.status == "dormant" for t in all_themes)
 
 
-def test_a_dormant_theme_revives_if_it_comes_back(
-    ledger: ActivationLedger, themes: ThemeStore
-):
+def test_a_dormant_theme_revives_if_it_comes_back(ledger: ActivationLedger, themes: ThemeStore):
     _two_populations(ledger)
     clusters = cluster_fingerprints(ledger, min_cluster_size=3)
     reconcile_themes(themes, clusters, snapshot_id="s1")
@@ -263,6 +259,10 @@ def test_clustering_can_be_switched_off(tmp_path: Path):
     settings.consolidation.cluster_themes = False
 
     assert agent_observe._cluster_themes(
-        settings, object(), "s1", dry_run=False, progress=None,
+        settings,
+        object(),
+        "s1",
+        dry_run=False,
+        progress=None,
         stats=agent_observe.ObserveStats(snapshot_id="s1"),
     ) == (None, [])

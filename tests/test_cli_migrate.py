@@ -105,9 +105,7 @@ def test_assign_uuids_is_a_dry_run_by_default(vault_settings):
 def test_assign_uuids_apply_stamps_the_vault(vault_settings):
     _settings, vault = vault_settings
 
-    result = runner.invoke(
-        app, ["migrate", "assign-uuids", "--apply", "--grace-minutes", "0"]
-    )
+    result = runner.invoke(app, ["migrate", "assign-uuids", "--apply", "--grace-minutes", "0"])
 
     assert result.exit_code == 0, result.output
     assert _uuid_line(vault / "A.md") is not None
@@ -129,9 +127,7 @@ def test_rollback_removes_the_stamped_key(vault_settings):
 
     run_id = list_migration_runs(_settings)[0]
 
-    result = runner.invoke(
-        app, ["migrate", "rollback-uuids", run_id, "--grace-minutes", "0"]
-    )
+    result = runner.invoke(app, ["migrate", "rollback-uuids", run_id, "--grace-minutes", "0"])
 
     assert result.exit_code == 0, result.output
     assert _uuid_line(vault / "A.md") is None

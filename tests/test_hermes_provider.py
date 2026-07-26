@@ -63,7 +63,9 @@ class StubCore:
         self.endorsed.append((feedback_event_id, rank))
         return {"ok": True}
 
-    def remember(self, text, *, title=None, tags=None, source="hermes", confirmed=False, session_id=None) -> dict:
+    def remember(
+        self, text, *, title=None, tags=None, source="hermes", confirmed=False, session_id=None
+    ) -> dict:
         self.remembered.append({"text": text, "source": source, "session_id": session_id})
         return {"ok": True}
 
@@ -95,7 +97,9 @@ def test_is_available_respects_enabled_and_vault(tmp_path: Path, monkeypatch) ->
     import my_daemon.hermes.provider as prov_mod
 
     monkeypatch.setattr(
-        prov_mod, "build_core", lambda *a, **k: (_ for _ in ()).throw(AssertionError("built core")),
+        prov_mod,
+        "build_core",
+        lambda *a, **k: (_ for _ in ()).throw(AssertionError("built core")),
     )
 
     provider = MyDaemonProvider(settings=_settings(tmp_path, enabled=True))

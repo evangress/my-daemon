@@ -271,7 +271,11 @@ def ingest_note(
     if chunks:
         vector_store.ensure_collection()
         vectors = embedder.encode([c.text for c in chunks])
-        sparse = sparse_embedder.encode([c.text for c in chunks]) if sparse_embedder is not None else None
+        sparse = (
+            sparse_embedder.encode([c.text for c in chunks])
+            if sparse_embedder is not None
+            else None
+        )
         vector_store.upsert(chunks, vectors, sparse_vectors=sparse)
 
     # Differential, for the same reason as `ingest_vault` — this path runs

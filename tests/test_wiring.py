@@ -32,8 +32,14 @@ def test_build_stores_returns_every_collaborator(settings: Settings):
     stores = build_stores(settings, load_graph=False, embedder=_FakeEmbedder())
 
     for name in (
-        "settings", "embedder", "vector_store", "graph_store",
-        "feedback_store", "registry", "ledger", "llm",
+        "settings",
+        "embedder",
+        "vector_store",
+        "graph_store",
+        "feedback_store",
+        "registry",
+        "ledger",
+        "llm",
     ):
         assert getattr(stores, name) is not None, name
 
@@ -41,18 +47,16 @@ def test_build_stores_returns_every_collaborator(settings: Settings):
 def test_the_sparse_embedder_follows_the_hybrid_flag(settings: Settings):
     settings.embeddings.hybrid = False
 
-    assert build_stores(settings, load_graph=False, embedder=_FakeEmbedder()).sparse_embedder is None
+    assert (
+        build_stores(settings, load_graph=False, embedder=_FakeEmbedder()).sparse_embedder is None
+    )
 
 
 def test_stores_share_one_state_database(settings: Settings):
     """Feedback, registry and ledger must not fan out into separate files."""
     stores = build_stores(settings, load_graph=False, embedder=_FakeEmbedder())
 
-    assert (
-        stores.feedback_store.db_path
-        == stores.registry.db_path
-        == stores.ledger.db_path
-    )
+    assert stores.feedback_store.db_path == stores.registry.db_path == stores.ledger.db_path
 
 
 def test_the_orchestrator_records_activations_by_default(settings: Settings):

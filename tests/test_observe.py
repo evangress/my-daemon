@@ -114,8 +114,11 @@ def _populate_live_state(settings: Settings, vault_root: Path) -> None:
         )
     )
     feedback.attach_signal(
-        eid, "candidate_selected",
-        selected_rank=1, selected_chunk_id="stub", selected_note_uuid=_u("Pullman Daemons.md"),
+        eid,
+        "candidate_selected",
+        selected_rank=1,
+        selected_chunk_id="stub",
+        selected_note_uuid=_u("Pullman Daemons.md"),
     )
 
 
@@ -165,8 +168,14 @@ def test_observe_writes_letter_and_index(
     llm = _build_stub_llm(settings)
 
     stats = run_observe(
-        settings, state, feedback, graph, llm,
-        snapshot_id=None, dry_run=False, include_qdrant=False,
+        settings,
+        state,
+        feedback,
+        graph,
+        llm,
+        snapshot_id=None,
+        dry_run=False,
+        include_qdrant=False,
     )
 
     assert stats.letter_path is not None and stats.letter_path.is_file()
@@ -204,8 +213,14 @@ def test_observe_dry_run_writes_nothing(
     pre = settings.graph.path.read_bytes()
 
     stats = run_observe(
-        settings, state, feedback, graph, llm,
-        snapshot_id=None, dry_run=True, include_qdrant=False,
+        settings,
+        state,
+        feedback,
+        graph,
+        llm,
+        snapshot_id=None,
+        dry_run=True,
+        include_qdrant=False,
     )
 
     assert stats.letter_path is None
@@ -223,9 +238,7 @@ def test_observe_dry_run_writes_nothing(
     assert runs[0]["snapshot_id"] == stats.snapshot_id
 
 
-def test_observe_decays_live_graph(
-    tmp_path: Path, vault_root: Path, stub_letter: dict
-) -> None:
+def test_observe_decays_live_graph(tmp_path: Path, vault_root: Path, stub_letter: dict) -> None:
     vault = _tmp_vault(tmp_path, vault_root)
     settings = _build_settings(tmp_path, vault)
     _populate_live_state(settings, vault)
@@ -234,23 +247,38 @@ def test_observe_decays_live_graph(
     feedback = FeedbackStore(db_path=settings.feedback.db_path)
     graph = GraphStore(path=settings.graph.path)
     graph.load()
-    pre_edge = next(iter(graph.graph[f"note::{_u('Designing AI Memory.md')}"][
-        f"note::{_u('Pullman Daemons.md')}"].values()))
+    pre_edge = next(
+        iter(
+            graph.graph[f"note::{_u('Designing AI Memory.md')}"][
+                f"note::{_u('Pullman Daemons.md')}"
+            ].values()
+        )
+    )
     pre_weight = pre_edge["weight"]
     assert pre_weight > 1.0  # populated_live_state reinforced it
 
     llm = _build_stub_llm(settings)
     stats = run_observe(
-        settings, state, feedback, graph, llm,
-        dry_run=False, include_qdrant=False,
+        settings,
+        state,
+        feedback,
+        graph,
+        llm,
+        dry_run=False,
+        include_qdrant=False,
     )
 
     assert stats.edges_decayed >= 1
     # Reload from disk to confirm decay actually persisted.
     reloaded = GraphStore(path=settings.graph.path)
     reloaded.load()
-    post_edge = next(iter(reloaded.graph[f"note::{_u('Designing AI Memory.md')}"][
-        f"note::{_u('Pullman Daemons.md')}"].values()))
+    post_edge = next(
+        iter(
+            reloaded.graph[f"note::{_u('Designing AI Memory.md')}"][
+                f"note::{_u('Pullman Daemons.md')}"
+            ].values()
+        )
+    )
     assert post_edge["weight"] < pre_weight
 
 
@@ -272,8 +300,14 @@ def test_observe_reuses_existing_snapshot(
     llm = _build_stub_llm(settings)
 
     stats = run_observe(
-        settings, state, feedback, graph, llm,
-        snapshot_id=bundle.id, dry_run=False, include_qdrant=False,
+        settings,
+        state,
+        feedback,
+        graph,
+        llm,
+        snapshot_id=bundle.id,
+        dry_run=False,
+        include_qdrant=False,
     )
 
     assert stats.snapshot_id == bundle.id
@@ -296,8 +330,13 @@ def test_observe_missing_snapshot_raises(
 
     with pytest.raises(FileNotFoundError):
         run_observe(
-            settings, state, feedback, graph, llm,
-            snapshot_id="2099-01-01T00-00-00Z", include_qdrant=False,
+            settings,
+            state,
+            feedback,
+            graph,
+            llm,
+            snapshot_id="2099-01-01T00-00-00Z",
+            include_qdrant=False,
         )
 
 
@@ -391,7 +430,13 @@ def test_observe_passes_named_themes_into_the_letter(
     llm = _build_stub_llm(settings)
 
     stats = run_observe(
-        settings, state, feedback, graph, llm, dry_run=False, include_qdrant=False,
+        settings,
+        state,
+        feedback,
+        graph,
+        llm,
+        dry_run=False,
+        include_qdrant=False,
     )
 
     assert stats.themes_seen == 1
@@ -435,8 +480,13 @@ def test_observe_clusters_and_names_before_writing_the_letter(
     graph.load()
 
     run_observe(
-        settings, state, feedback, graph, _build_stub_llm(settings),
-        dry_run=False, include_qdrant=False,
+        settings,
+        state,
+        feedback,
+        graph,
+        _build_stub_llm(settings),
+        dry_run=False,
+        include_qdrant=False,
     )
 
     assert stub_themes == ["cluster", "name", "letter"]
@@ -553,8 +603,13 @@ def test_observe_dry_run_mints_no_themes(
     graph.load()
 
     stats = run_observe(
-        settings, state, feedback, graph, _build_stub_llm(settings),
-        dry_run=True, include_qdrant=False,
+        settings,
+        state,
+        feedback,
+        graph,
+        _build_stub_llm(settings),
+        dry_run=True,
+        include_qdrant=False,
     )
 
     assert stats.letter_path is None

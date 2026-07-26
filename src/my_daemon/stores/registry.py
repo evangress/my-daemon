@@ -149,8 +149,7 @@ class NoteRegistry:
     def by_path(self, rel_path: str) -> NoteRecord | None:
         with self._connect() as conn:
             row = conn.execute(
-                f"SELECT {_COLUMNS} FROM notes "
-                "WHERE rel_path = ? AND deleted_at IS NULL",
+                f"SELECT {_COLUMNS} FROM notes WHERE rel_path = ? AND deleted_at IS NULL",
                 (rel_path,),
             ).fetchone()
         return _to_record(row) if row else None
@@ -158,8 +157,7 @@ class NoteRegistry:
     def live(self) -> list[NoteRecord]:
         with self._connect() as conn:
             rows = conn.execute(
-                f"SELECT {_COLUMNS} FROM notes WHERE deleted_at IS NULL "
-                "ORDER BY rel_path"
+                f"SELECT {_COLUMNS} FROM notes WHERE deleted_at IS NULL ORDER BY rel_path"
             ).fetchall()
         return [_to_record(r) for r in rows]
 
@@ -180,8 +178,7 @@ class NoteRegistry:
     def coverage(self) -> RegistryCoverage:
         with self._connect() as conn:
             rows = conn.execute(
-                "SELECT uuid_source, in_frontmatter, status FROM notes "
-                "WHERE deleted_at IS NULL"
+                "SELECT uuid_source, in_frontmatter, status FROM notes WHERE deleted_at IS NULL"
             ).fetchall()
 
         coverage = RegistryCoverage(total=len(rows))

@@ -74,9 +74,7 @@ class ThemeStore:
             )
             return last_insert_id(cur)
 
-    def set_label(
-        self, theme_id: int, *, label: str, summary: str, locked: bool = False
-    ) -> None:
+    def set_label(self, theme_id: int, *, label: str, summary: str, locked: bool = False) -> None:
         """Rename a theme — unless the user has locked it.
 
         Once accepted, a label is the user's. The observer may keep finding the
@@ -156,8 +154,7 @@ class ThemeStore:
     def notes_for(self, theme_id: int) -> dict[str, float]:
         with self._connect() as conn:
             rows = conn.execute(
-                "SELECT note_uuid, weight FROM theme_notes WHERE theme_id = ? "
-                "ORDER BY weight DESC",
+                "SELECT note_uuid, weight FROM theme_notes WHERE theme_id = ? ORDER BY weight DESC",
                 (theme_id,),
             ).fetchall()
         return {r["note_uuid"]: float(r["weight"]) for r in rows}
@@ -176,14 +173,11 @@ class ThemeStore:
     def pending_proposals(self, *, limit: int = 100) -> list[TagProposal]:
         with self._connect() as conn:
             rows = conn.execute(
-                "SELECT * FROM theme_tag_proposals WHERE decided_at IS NULL "
-                "ORDER BY id LIMIT ?",
+                "SELECT * FROM theme_tag_proposals WHERE decided_at IS NULL ORDER BY id LIMIT ?",
                 (limit,),
             ).fetchall()
         return [
-            TagProposal(
-                id=r["id"], theme_id=r["theme_id"], note_uuid=r["note_uuid"], tag=r["tag"]
-            )
+            TagProposal(id=r["id"], theme_id=r["theme_id"], note_uuid=r["note_uuid"], tag=r["tag"])
             for r in rows
         ]
 

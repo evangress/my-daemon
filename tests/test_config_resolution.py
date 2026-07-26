@@ -90,9 +90,7 @@ def test_an_explicit_path_is_the_only_candidate(tmp_path: Path):
     assert config_search_paths(tmp_path / "typo.yaml") == [tmp_path / "typo.yaml"]
 
 
-def test_env_var_is_the_only_candidate_when_set(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-):
+def test_env_var_is_the_only_candidate_when_set(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
     monkeypatch.setenv("MY_DAEMON_CONFIG", str(tmp_path / "chosen.yaml"))
 
     assert config_search_paths() == [tmp_path / "chosen.yaml"]

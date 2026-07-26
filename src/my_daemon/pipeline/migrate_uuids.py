@@ -111,9 +111,7 @@ def assign_uuids(
 
     if path_glob:
         paths = [
-            p
-            for p in paths
-            if fnmatch.fnmatch(p.relative_to(vault_root).as_posix(), path_glob)
+            p for p in paths if fnmatch.fnmatch(p.relative_to(vault_root).as_posix(), path_glob)
         ]
 
     report = UuidMigrationReport(dry_run=not apply)
@@ -158,9 +156,7 @@ def assign_uuids(
             action = "reassigned_duplicate"
         claimed[resolved] = rel_path
 
-        entry = UuidAssignment(
-            rel_path=rel_path, uuid=resolved, action=action, uuid_source=source
-        )
+        entry = UuidAssignment(rel_path=rel_path, uuid=resolved, action=action, uuid_source=source)
 
         if action == "adopted":
             # Already carries our key with this value — nothing to write.
