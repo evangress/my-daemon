@@ -2,14 +2,8 @@
 # Virtualenv
 # http://iamzed.com/2009/05/07/a-primer-on-virtualenv/
 .Python
-[Bb]in
-[Ii]nclude
-[Ll]ib
-[Ll]ib64
-[Ll]ocal
-[Ss]cripts
 pyvenv.cfg
-.venv
+.venv/
 pip-selfcheck.json
 
 ### Python template
@@ -191,3 +185,6 @@ launch-setup.bat
 # uv writes this when invoked; project uses pyproject.toml as the source of truth.
 uv.lock
 
+
+# Local state backups (daemon backup)
+backups/

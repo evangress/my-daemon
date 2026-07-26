@@ -273,6 +273,18 @@ class SnapshotConfig(BaseModel):
     retention_days: int = 14
 
 
+class BackupConfig(BaseModel):
+    """Where `daemon backup` writes, and where `daemon restore` looks.
+
+    Deliberately *outside* ``./data``: a backup that lives inside the tree
+    `daemon reset` clears is not a backup. Vectors are never included — they
+    are re-derivable from the vault with `daemon ingest --full`, and excluding
+    them is what keeps a bundle small enough to actually be taken often.
+    """
+
+    dir: Path = Path("./backups")
+
+
 class ConsolidationConfig(BaseModel):
     # --- Emergent themes (M-mem-7) --------------------------------------
     cluster_themes: bool = True
@@ -329,6 +341,7 @@ class Settings(BaseSettings):
     memory: MemoryConfig = Field(default_factory=MemoryConfig)
     feedback: FeedbackConfig = Field(default_factory=FeedbackConfig)
     snapshot: SnapshotConfig = Field(default_factory=SnapshotConfig)
+    backup: BackupConfig = Field(default_factory=BackupConfig)
     consolidation: ConsolidationConfig = Field(default_factory=ConsolidationConfig)
     logging: LoggingConfig = Field(default_factory=LoggingConfig)
     agent: AgentConfig = Field(default_factory=AgentConfig)

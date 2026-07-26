@@ -113,6 +113,59 @@ Vector-only debug path: no graph expansion, no LLM. Useful for sanity-checking
 the embedding model and seeing what the dense+sparse fusion is returning
 before the expander touches it.
 
+## Health
+
+### `daemon doctor`
+
+```
+daemon doctor
+```
+
+Preflights every moving part and prints one row per check with a remediation
+hint on anything that is not passing. Exits **1** if any hard check fails;
+warnings alone exit 0.
+
+The checks run in dependency order, so the first failure is usually the cause
+of the ones below it:
+
+| # | Check | Fails when | Warns when |
+|---|---|---|---|
+| 1 | **config** | no `config.yaml` in any searched location (the hint lists each one) | — |
+| 2 | **vault** | `vault.path` is missing or is not a directory | it exists but holds no `.md` files |
+| 3 | **vector store** | server mode: nothing answers at `qdrant.url`; embedded mode: the folder cannot be opened, or another process holds it | — |
+| 4 | **collection** | the collection's dense dimension does not match the embedder's | the collection does not exist yet (run `daemon ingest`), or the store was unreachable |
+| 5 | **api key** | — | `ANTHROPIC_API_KEY` is unset. Retrieval still works; synthesis (`query`/`ask`) and `extract`/`reflect`/`consolidate` do not |
+| 6 | **model cache** | — | the configured embedding model is not in `embeddings.cache_folder` — the first ingest will download ~130MB |
+| 7 | **state db** | the file is at a schema *newer* than this build | it is behind (run `daemon migrate db`) |
+| 8 | **graph** | `graph.gpickle` exists but will not load (`GraphCorruptError`) | it does not exist yet |
+
+Two things it deliberately does **not** do: it never loads the embedding model
+(the expected dimension is read from the model's own `1_Pooling/config.json`
+in the cache, and reported as *not verified* when the cache is cold), and it
+never keeps the embedded store's exclusive folder lock after the check — so
+`doctor` cannot break the command you run next.
+
+Missing config is reported as a finding rather than an exit path, so
+`daemon doctor` is the one command that still says something useful when
+nothing is configured.
+
+### Inline preflights
+
+`query`, `ask`, `search` and `ingest` catch the vector-store connection
+failure at the CLI boundary and print the same one-liner `doctor` would,
+instead of an `[Errno 111]` traceback out of the middle of retrieval:
+
+```
+Cannot reach the vector store at http://localhost:6333 (…).
+Is `docker compose up -d` running at http://localhost:6333? Start it, or switch
+vector_store.qdrant to an embedded 'path' (no Docker needed).
+Run `daemon doctor` for the full preflight.
+```
+
+Embedded mode gets the "already open in another process" message instead. The
+translation lives in one place (`my_daemon.doctor.store_error_message`), so
+every command says the same thing about the same condition.
+
 ## Inspection
 
 ### `daemon activations [query_id]`
@@ -139,15 +192,109 @@ LLM or vector calls.
 
 ## Maintenance
 
+### `daemon backup`
+
+```
+daemon backup [DEST_DIR] [--list]
+daemon backups
+```
+
+Writes a timestamped bundle holding the state the vault cannot regenerate:
+
+```
+./backups/backup-2026-07-26T22-56-22Z/
+├── feedback.db      ← learned weights, activation ledger, themes, feedback log
+├── graph.gpickle    ← the graph, including every reinforced edge
+├── manifest.json    ← the ingest manifest
+├── config.yaml      ← a copy of the config that produced all of the above
+└── metadata.json    ← bundle_version, created_at, my-daemon version, schema version, file sizes
+```
+
+`feedback.db` is copied with SQLite's online-backup API, so a backup taken
+while the GUI is open still captures writes sitting in the `-wal`. Files that
+do not exist yet are simply skipped and omitted from `metadata.json`.
+
+**Vectors are excluded by design.** They are the one part of the state that
+comes back for free (`daemon ingest --full`), and leaving them out is what
+keeps a bundle small enough to take often.
+
+The destination defaults to `backup.dir` (config key, default `./backups`,
+anchored to the config file's directory like every other relative path). It is
+deliberately *outside* `./data` — a backup inside the tree `daemon reset`
+clears is not a backup. Snapshots (`daemon snapshot create`) are a different
+thing: they freeze state *for analysis*, live under `./data`, and have no
+restore path.
+
+`daemon backup --list` (or `daemon backups`) enumerates bundles with their
+creation time, schema version and size.
+
+### `daemon restore`
+
+```
+daemon restore <BUNDLE_DIR> [--yes]
+```
+
+Puts a bundle's `feedback.db`, `graph.gpickle` and `manifest.json` back.
+In order:
+
+1. **Validates the bundle** — `metadata.json` must be present, well-formed,
+   and of a `bundle_version` this build writes.
+2. **Refuses a newer schema.** A bundle whose `schema_version` is above this
+   build's is rejected outright; a database is never migrated downwards.
+3. **Backs up what it is about to overwrite** into a sibling
+   `pre-restore-<timestamp>/` folder, so an accidental restore is itself
+   undoable.
+4. **Replaces each file atomically** (temp file + `os.replace`) while holding
+   the graph's inter-process lock, so a GUI endorse-click cannot save a graph
+   on top of the one being restored. Stale `feedback.db-wal` / `-shm`
+   sidecars are removed — the restored copy is already consistent, and
+   applying the old WAL to it would corrupt it.
+
+Prompts unless `--yes`. The config copy in the bundle is *not* restored — it
+is there to read, not to overwrite live configuration with.
+
+Vectors are not in the bundle, so finish with `daemon ingest --full` if the
+vault has changed since the backup was taken.
+
 ### `daemon reset`
 
 ```
-daemon reset [--yes]
+daemon reset [--yes] [--models] [--all]
 ```
 
-Deletes the entire `./data/` directory (Qdrant storage, models cache, graph
-pickle, manifest, feedback DB). Prompts for confirmation unless `--yes`.
-**Never touches the vault itself.**
+Deletes the daemon's **rebuildable** state. Every target comes from the
+resolved config, is listed with its size before the prompt, and is deleted by
+name — nothing is swept up by removing a parent directory. **The vault is
+never touched.**
+
+Three tiers, by cost of loss:
+
+| Flag | Also deletes | Why it is gated |
+|---|---|---|
+| *(default)* | graph, graph lock, ingest manifest, snapshots, consolidation reports, embedded Qdrant folder | all of it returns from `daemon ingest --full` |
+| `--models` | `embeddings.cache_folder` | a ~130MB re-download, not a loss — but not free either |
+| `--all` | `feedback.db` (+ `-wal`, `-shm`) | learned edge weights, the activation ledger and themes are **not** derivable from the vault. This is the only irreversible part of the command |
+
+`backup.dir` is never a reset target.
+
+**Server mode never has its storage folder deleted while Qdrant is up.** The
+collection is dropped over HTTP instead (which resets the vectors just as
+well), and the compose mount at `data/qdrant` is reported as refused:
+
+```
+Refusing to delete …/data/qdrant while Qdrant answers at http://localhost:6333
+— stop the container first (`docker compose down`) if you want the folder gone.
+Dropping the collection instead, which resets the vectors either way.
+```
+
+If the server is unreachable the folder becomes an ordinary listed target, and
+the output says plainly that the collection was *not* dropped. In embedded
+mode deleting the configured `qdrant.path` is the drop, and the store is never
+opened (opening it would recreate the folder).
+
+`--yes` skips the prompt, for scripts. `scripts/reset.py` is now a thin
+wrapper around this command — same guards, same prompt — rather than its own
+unguarded copy of the wipe.
 
 ### `daemon migrate db`
 
@@ -344,8 +491,9 @@ env-var equivalent of `--config`, useful in a crontab line.
 
 - `0` — success.
 - `1` — refused. Includes a missing `config.yaml` (the message lists every
-  location searched), `agent.enabled` false, and a declined destructive
-  prompt.
+  location searched), `agent.enabled` false, a declined destructive prompt, a
+  failing `daemon doctor` check, an unreachable vector store caught by an
+  inline preflight, and a `daemon restore` bundle that fails validation.
 - `2` — a preflight failed (e.g. `daemon chat --native` with pywebview
   missing).
 - Other non-zero — unexpected exception; see the stack trace.

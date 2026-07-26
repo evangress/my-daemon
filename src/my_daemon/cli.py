@@ -3,8 +3,12 @@
 
 from __future__ import annotations
 
+import contextlib
+import json
 import os
 import shutil
+from collections.abc import Iterator
+from datetime import UTC, datetime
 from pathlib import Path
 
 import typer
@@ -22,6 +26,17 @@ from my_daemon.config import (
     Settings,
     load_settings,
     user_config_dir,
+)
+from my_daemon.doctor import (
+    FAIL,
+    MODEL_DOWNLOAD_SIZE,
+    PASS,
+    WARN,
+    CheckResult,
+    connection_error_types,
+    run_checks,
+    server_reachable,
+    store_error_message,
 )
 from my_daemon.embeddings import Embedder, SparseEmbedder
 from my_daemon.integration.wiring import build_stores
@@ -57,7 +72,10 @@ from my_daemon.stores.db import MIGRATIONS as DB_MIGRATIONS
 from my_daemon.stores.db import SCHEMA_VERSION as DB_SCHEMA_VERSION
 from my_daemon.stores.db import migrate as db_migrate
 from my_daemon.stores.db import schema_version as db_schema_version
+from my_daemon.stores.graph import GraphLockTimeout
+from my_daemon.stores.snapshot import _backup_sqlite
 from my_daemon.stores.themes import ThemeStore
+from my_daemon.stores.vector import MEMORY_LOCATION, LocalStoreLockedError
 
 app = typer.Typer(
     name="daemon",
@@ -173,6 +191,30 @@ def _build_agent_state(s: Settings) -> AgentStateStore:
     return AgentStateStore(db_path=s.feedback.db_path)
 
 
+@contextlib.contextmanager
+def _store_errors(s: Settings) -> Iterator[None]:
+    """Turn a dead vector store into one actionable line, at the CLI boundary.
+
+    Qdrant being down is the single most common way a command fails, and it
+    used to arrive as a `[Errno 111] Connection refused` traceback from deep
+    inside retrieval. The translation lives in exactly one place — here, over
+    `doctor.store_error_message` — so `query`, `ask`, `search` and `ingest`
+    cannot drift into saying four different things about one condition.
+    """
+
+    try:
+        yield
+    except (LocalStoreLockedError, *connection_error_types()) as exc:
+        if isinstance(exc, GraphLockTimeout):
+            # `GraphLockTimeout` is a `TimeoutError`, so it lands here — but it
+            # names the process holding the graph, and calling that "Qdrant is
+            # unreachable" would send the reader to the wrong machine entirely.
+            raise
+        console.print(store_error_message(s, exc), style="red", soft_wrap=True)
+        console.print("[dim]Run `daemon doctor` for the full preflight.[/dim]")
+        raise typer.Exit(code=1) from exc
+
+
 @app.command()
 def version() -> None:
     """Print the installed version."""
@@ -238,19 +280,21 @@ def ingest(
 ) -> None:
     """Ingest the vault into the vector store and the graph."""
     s = _load()
-    embedder = _build_embedder(s)
-    sparse_embedder = _build_sparse_embedder(s)
-    vector_store = _build_vector_store(s, dim=embedder.dimension)
-    graph_store = _build_graph_store(s)
 
     def _progress(i: int, total: int, rel_path: str) -> None:
         if verbose:
             console.log(f"[{i + 1}/{total}] {rel_path}")
 
-    stats = ingest_vault(
-        s, embedder, vector_store, graph_store,
-        sparse_embedder=sparse_embedder, full_rebuild=full, progress=_progress,
-    )
+    with _store_errors(s):
+        embedder = _build_embedder(s)
+        sparse_embedder = _build_sparse_embedder(s)
+        vector_store = _build_vector_store(s, dim=embedder.dimension)
+        graph_store = _build_graph_store(s)
+
+        stats = ingest_vault(
+            s, embedder, vector_store, graph_store,
+            sparse_embedder=sparse_embedder, full_rebuild=full, progress=_progress,
+        )
 
     table = Table(title="Ingest summary")
     table.add_column("metric")
@@ -277,13 +321,14 @@ def _run_query(text: str, *, no_synthesize: bool = False, verbose: bool = False)
     """
 
     s = _load()
-    stores = build_stores(s)
-    engine = QueryEngine(
-        s, stores.embedder, stores.vector_store, stores.graph_store,
-        stores.feedback_store, stores.llm,
-        sparse_embedder=stores.sparse_embedder,
-    )
-    response = engine.ask(text, synthesize=not no_synthesize)
+    with _store_errors(s):
+        stores = build_stores(s)
+        engine = QueryEngine(
+            s, stores.embedder, stores.vector_store, stores.graph_store,
+            stores.feedback_store, stores.llm,
+            sparse_embedder=stores.sparse_embedder,
+        )
+        response = engine.ask(text, synthesize=not no_synthesize)
 
     if response.answer:
         console.print(Panel(response.answer, title="Daemon", border_style="cyan"))
@@ -408,16 +453,17 @@ def search(
 ) -> None:
     """Debug: vector search without graph expansion or LLM."""
     s = _load()
-    embedder = _build_embedder(s)
-    sparse_embedder = _build_sparse_embedder(s)
-    vector_store = _build_vector_store(s, dim=embedder.dimension)
+    with _store_errors(s):
+        embedder = _build_embedder(s)
+        sparse_embedder = _build_sparse_embedder(s)
+        vector_store = _build_vector_store(s, dim=embedder.dimension)
 
-    vec = embedder.encode_one(text)
-    if sparse_embedder is not None:
-        sparse_vec = sparse_embedder.encode_one(text)
-        hits = vector_store.hybrid_search(vec, sparse_vec, top_k=top_k)
-    else:
-        hits = vector_store.search(vec, top_k=top_k)
+        vec = embedder.encode_one(text)
+        if sparse_embedder is not None:
+            sparse_vec = sparse_embedder.encode_one(text)
+            hits = vector_store.hybrid_search(vec, sparse_vec, top_k=top_k)
+        else:
+            hits = vector_store.search(vec, top_k=top_k)
 
     table = Table(title="Vector hits")
     table.add_column("#", justify="right")
@@ -455,6 +501,52 @@ def status() -> None:
     table.add_row("graph edges", str(g_stats.edge_count))
     table.add_row("manifest", str(s.graph.manifest_path))
     console.print(table)
+
+
+_STATUS_STYLE = {PASS: "[green]pass[/green]", WARN: "[yellow]warn[/yellow]", FAIL: "[red]FAIL[/red]"}
+
+
+def _print_checks(results: list[CheckResult]) -> None:
+    table = Table(title="daemon doctor")
+    table.add_column("check")
+    table.add_column("status")
+    table.add_column("detail", overflow="fold")
+    for result in results:
+        table.add_row(result.name, _STATUS_STYLE[result.status], result.detail)
+    console.print(table)
+
+    for result in results:
+        if result.status != PASS and result.hint:
+            marker = "[red]→[/red]" if result.failed else "[yellow]→[/yellow]"
+            console.print(f"{marker} [bold]{result.name}[/bold]: {result.hint}", soft_wrap=True)
+
+
+@app.command()
+def doctor() -> None:
+    """Preflight every moving part and say what to do about each failure.
+
+    Runs in dependency order — config, vault, vector store, collection, API
+    key, model cache, state DB, graph — so the first failure is usually the
+    cause of the rest. Exits 1 if any hard check fails; warnings (no
+    collection yet, cold model cache, no API key) are reported and exit 0,
+    because none of them stop the daemon from working.
+    """
+
+    results = run_checks(_config_override)
+    _print_checks(results)
+
+    failures = [r for r in results if r.failed]
+    if failures:
+        console.print(
+            f"\n[red]{len(failures)} check(s) failed.[/red] "
+            "Fix the first one and re-run — later checks often depend on it."
+        )
+        raise typer.Exit(code=1)
+    warnings = [r for r in results if r.status == WARN]
+    if warnings:
+        console.print(f"\n[yellow]{len(warnings)} warning(s)[/yellow], nothing fatal.")
+    else:
+        console.print("\n[green]All checks passed.[/green]")
 
 
 @graph_app.command("stats")
@@ -1011,24 +1103,473 @@ def hermes_doctor() -> None:
         )
 
 
+# ---------------------------------------------------------------------------
+# reset
+# ---------------------------------------------------------------------------
+
+
+def _human_size(num_bytes: int) -> str:
+    size = float(num_bytes)
+    for unit in ("B", "KB", "MB", "GB"):
+        if size < 1024 or unit == "GB":
+            return f"{size:.0f} {unit}" if unit == "B" else f"{size:.1f} {unit}"
+        size /= 1024
+    return f"{size:.1f} GB"  # pragma: no cover — unreachable, the loop returns first
+
+
+def _path_size(path: Path) -> int:
+    """Bytes on disk, for a file or a whole tree. Unreadable entries count as 0."""
+
+    if path.is_file():
+        with contextlib.suppress(OSError):
+            return path.stat().st_size
+        return 0
+    total = 0
+    for child in path.rglob("*"):
+        if child.is_file():
+            with contextlib.suppress(OSError):
+                total += child.stat().st_size
+    return total
+
+
+def _delete(path: Path) -> None:
+    if path.is_dir():
+        shutil.rmtree(path)
+    elif path.exists():
+        path.unlink()
+
+
+def _compose_storage_dir(s: Settings) -> Path:
+    """Where docker-compose mounts Qdrant's storage, relative to the config.
+
+    Only ever consulted in server mode. The daemon does not own this directory
+    — Docker does — which is exactly why it needs naming rather than sweeping
+    up in a broader delete.
+    """
+
+    root = s.config_path.parent if s.config_path else Path.cwd()
+    return root / "data" / "qdrant"
+
+
+def _reset_targets(s: Settings, *, models: bool, everything: bool) -> list[tuple[str, Path]]:
+    """(label, path) for everything this invocation is allowed to delete.
+
+    Config-resolved, every one of them: the old version deleted `./data`
+    relative to the process's CWD, which from cron meant `$HOME/data` — either
+    nothing at all, or somebody else's.
+    """
+
+    targets: list[tuple[str, Path]] = [
+        ("graph", s.graph.path),
+        ("graph lock", GraphStore(path=s.graph.path).lock_path),
+        ("ingest manifest", s.graph.manifest_path),
+        ("snapshots", s.snapshot.dir),
+        ("consolidation reports", s.consolidation.out_dir),
+    ]
+    if models:
+        targets.append(("model cache", s.embeddings.cache_folder))
+    if everything:
+        db = s.feedback.db_path
+        targets.append(("state db (learned weights, ledger, themes)", db))
+        targets.append(("state db wal", db.with_name(db.name + "-wal")))
+        targets.append(("state db shm", db.with_name(db.name + "-shm")))
+    return [(label, path) for label, path in targets if path.exists()]
+
+
+def _drop_server_collection(s: Settings) -> str:
+    """Drop the live collection. Server mode only — embedded is covered by the path delete."""
+
+    store = _build_vector_store(s, dim=1)
+    try:
+        store._client_().delete_collection(collection_name=store.collection)
+        return f"[green]Dropped collection '{store.collection}' at {s.vector_store.qdrant.url}.[/green]"
+    except Exception as exc:  # noqa: BLE001 — reported, never fatal: this is cleanup
+        return (
+            f"[yellow]Could not drop collection '{store.collection}' "
+            f"at {s.vector_store.qdrant.url}: {exc}[/yellow]"
+        )
+    finally:
+        store.close()
+
+
 @app.command()
 def reset(
-    yes: bool = typer.Option(False, "--yes", help="Skip the confirmation prompt."),
+    yes: bool = typer.Option(False, "--yes", help="Skip the confirmation prompt (for scripts)."),
+    models: bool = typer.Option(
+        False,
+        "--models",
+        help=f"Also delete the embedding model cache (a {MODEL_DOWNLOAD_SIZE} re-download).",
+    ),
+    everything: bool = typer.Option(
+        False,
+        "--all",
+        help="Also delete feedback.db — learned weights, the activation ledger and themes. Irreplaceable.",
+    ),
 ) -> None:
-    """Wipe local state (data/ directory). The vault itself is never touched."""
+    """Delete the daemon's rebuildable state. The vault itself is never touched.
+
+    Every target comes from the resolved config, is listed with its size before
+    the prompt, and is deleted by name — nothing is swept up by deleting a
+    parent directory. Three tiers, by cost of loss:
+
+    * **default** — graph, manifest, vectors, snapshots, reports. All of it
+      comes back from `daemon ingest --full`.
+    * **`--models`** — the embedding cache. A re-download, not a loss.
+    * **`--all`** — `feedback.db`. The learned edge weights, the activation
+      ledger and the themes are *not* derivable from the vault. Nothing else
+      in this command is irreversible; this is.
+
+    In server mode the collection is dropped over HTTP rather than by deleting
+    Qdrant's storage folder, which the daemon does not own and must never
+    `rmtree` under a running container.
+    """
+
     s = _load()
-    data_dir = Path("./data").resolve()
-    if not yes:
-        confirm = Prompt.ask(f"This will delete {data_dir}. Type 'yes' to confirm")
-        if confirm.strip().lower() != "yes":
-            console.print("Aborted.")
-            raise typer.Exit(code=1)
-    if data_dir.is_dir():
-        shutil.rmtree(data_dir)
-        console.print(f"[green]Removed {data_dir}[/green]")
+    qdrant = s.vector_store.qdrant
+    targets = _reset_targets(s, models=models, everything=everything)
+    notes: list[str] = []
+
+    server_up = False
+    if qdrant.is_embedded:
+        if qdrant.path != MEMORY_LOCATION and Path(qdrant.path).exists():
+            targets.insert(0, ("vectors (embedded qdrant)", Path(qdrant.path)))
     else:
-        console.print(f"[yellow]Nothing to remove at {data_dir}[/yellow]")
-    _ = s  # quiet the unused-variable warning; loading validates config
+        server_up = server_reachable(qdrant.url)
+        storage = _compose_storage_dir(s)
+        if not storage.is_dir():
+            pass
+        elif server_up:
+            notes.append(
+                f"[yellow]Refusing to delete {storage} while Qdrant answers at "
+                f"{qdrant.url} — stop the container first (`docker compose down`) if you "
+                "want the folder gone. Dropping the collection instead, which resets the "
+                "vectors either way.[/yellow]"
+            )
+        else:
+            targets.append(("vectors (qdrant server storage)", storage))
+
+    if not targets and not (server_up and not qdrant.is_embedded):
+        for note in notes:
+            console.print(note, soft_wrap=True)
+        console.print("[yellow]Nothing to remove — the state paths are already clear.[/yellow]")
+        return
+
+    table = Table(title="Reset targets")
+    table.add_column("what")
+    table.add_column("path", overflow="fold")
+    table.add_column("size", justify="right")
+    for label, path in targets:
+        table.add_row(label, str(path), _human_size(_path_size(path)))
+    if server_up:
+        table.add_row(
+            "vectors (server collection)", f"{qdrant.url} → {qdrant.collection}", "dropped"
+        )
+    console.print(table)
+    for note in notes:
+        console.print(note, soft_wrap=True)
+
+    kept = []
+    if not models:
+        kept.append("the model cache (`--models` to include it)")
+    if not everything:
+        kept.append("feedback.db — learned weights, ledger, themes (`--all` to include it)")
+    if kept:
+        console.print("[dim]Keeping " + "; ".join(kept) + ".[/dim]")
+
+    if not yes:
+        confirm = Prompt.ask("Type 'yes' to delete the above")
+        if confirm.strip().lower() != "yes":
+            console.print("Aborted. Nothing was deleted.")
+            raise typer.Exit(code=1)
+
+    for label, path in targets:
+        _delete(path)
+        console.print(f"[green]Removed[/green] {label}: {path}")
+
+    if not qdrant.is_embedded:
+        if server_up:
+            console.print(_drop_server_collection(s), soft_wrap=True)
+        else:
+            console.print(
+                f"[yellow]Qdrant at {qdrant.url} is unreachable, so collection "
+                f"'{qdrant.collection}' was not dropped.[/yellow] Start it and re-run, "
+                "or let `daemon ingest --full` overwrite it.",
+                soft_wrap=True,
+            )
+
+    console.print("\nRun `daemon ingest --full` to rebuild. The vault was not touched.")
+
+
+# ---------------------------------------------------------------------------
+# backup / restore
+# ---------------------------------------------------------------------------
+
+#: Bumped if the bundle layout ever changes incompatibly. `restore` refuses
+#: anything it does not recognise rather than half-applying it.
+BACKUP_BUNDLE_VERSION = 1
+
+_BACKUP_METADATA = "metadata.json"
+_BACKUP_PREFIX = "backup-"
+_BACKUP_TIMESTAMP = "%Y-%m-%dT%H-%M-%SZ"
+
+_BACKUP_VECTORS_NOTE = (
+    "Vectors are not included by design — they are re-derivable from the vault. "
+    "After a restore, run `daemon ingest --full` to rebuild them."
+)
+
+
+def _timestamp(now: datetime | None = None) -> str:
+    return (now or datetime.now(UTC)).strftime(_BACKUP_TIMESTAMP)
+
+
+def _backup_sources(s: Settings) -> list[tuple[str, Path]]:
+    """(name-in-bundle, live path) for everything a bundle carries.
+
+    Deliberately short. This is the state that is *not* re-derivable from the
+    vault, plus the config needed to make sense of it — nothing else earns a
+    place in a file you want small enough to copy often.
+    """
+
+    sources = [
+        ("feedback.db", s.feedback.db_path),
+        ("graph.gpickle", s.graph.path),
+        ("manifest.json", s.graph.manifest_path),
+    ]
+    if s.config_path is not None:
+        sources.append(("config.yaml", s.config_path))
+    return sources
+
+
+def _write_bundle(s: Settings, bundle_dir: Path) -> dict:
+    """Copy the live state into ``bundle_dir`` and return the metadata written."""
+
+    bundle_dir.mkdir(parents=True, exist_ok=True)
+    files: dict[str, dict] = {}
+    for name, source in _backup_sources(s):
+        if not source.is_file():
+            continue
+        dest = bundle_dir / name
+        if name == "feedback.db":
+            # SQLite's online-backup API, not shutil: a plain copy of a live
+            # database misses everything still sitting in the -wal, and the
+            # realistic moment to take a backup is with the GUI open.
+            _backup_sqlite(source, dest)
+        else:
+            shutil.copy2(source, dest)
+        files[name] = {"bytes": dest.stat().st_size, "source": str(source)}
+
+    metadata = {
+        "kind": "my-daemon-backup",
+        "bundle_version": BACKUP_BUNDLE_VERSION,
+        "id": bundle_dir.name,
+        "created_at": datetime.now(UTC).isoformat(),
+        "my_daemon_version": __version__,
+        "schema_version": db_schema_version(s.feedback.db_path),
+        "vectors": "excluded — rebuild with `daemon ingest --full`",
+        "files": files,
+    }
+    (bundle_dir / _BACKUP_METADATA).write_text(
+        json.dumps(metadata, indent=2, sort_keys=True), encoding="utf-8"
+    )
+    return metadata
+
+
+def _read_bundle_metadata(bundle_dir: Path) -> dict:
+    """Validate a bundle and return its metadata, or raise ``ValueError`` saying why."""
+
+    if not bundle_dir.is_dir():
+        raise ValueError(f"{bundle_dir} is not a directory")
+    meta_path = bundle_dir / _BACKUP_METADATA
+    if not meta_path.is_file():
+        raise ValueError(f"{bundle_dir} has no {_BACKUP_METADATA} — not a backup bundle")
+    try:
+        metadata = json.loads(meta_path.read_text(encoding="utf-8"))
+    except (OSError, ValueError) as exc:
+        raise ValueError(f"{meta_path} is unreadable: {exc}") from exc
+    if not isinstance(metadata, dict) or metadata.get("kind") != "my-daemon-backup":
+        raise ValueError(f"{meta_path} does not describe a my-daemon backup")
+    version = metadata.get("bundle_version")
+    if version != BACKUP_BUNDLE_VERSION:
+        raise ValueError(
+            f"bundle version {version} is not the {BACKUP_BUNDLE_VERSION} this build writes"
+        )
+    return metadata
+
+
+def _list_bundles(root: Path) -> list[tuple[Path, dict | None]]:
+    if not root.is_dir():
+        return []
+    found = []
+    for child in sorted(root.iterdir()):
+        if not child.is_dir():
+            continue
+        try:
+            found.append((child, _read_bundle_metadata(child)))
+        except ValueError:
+            found.append((child, None))
+    return found
+
+
+def _replace_file(src: Path, dst: Path) -> None:
+    """Land ``src`` on ``dst`` atomically, via a sibling temp file."""
+
+    dst.parent.mkdir(parents=True, exist_ok=True)
+    tmp = dst.with_name(f".{dst.name}.restore-tmp")
+    shutil.copy2(src, tmp)
+    os.replace(tmp, dst)
+
+
+@app.command()
+def backup(
+    # B008 is Typer's calling convention; ruff exempts it only for the scalar
+    # annotations, not for `Path`.
+    dest: Path | None = typer.Argument(  # noqa: B008
+        None, help="Where to write the bundle. Default: backup.dir."
+    ),
+    show_list: bool = typer.Option(False, "--list", help="List existing bundles instead of writing one."),
+) -> None:
+    """Copy the state the vault cannot regenerate into a timestamped bundle.
+
+    The bundle holds `feedback.db` (learned weights, activation ledger,
+    themes), `graph.gpickle`, the ingest manifest, and a copy of the config
+    that produced them, plus a small `metadata.json` recording versions and
+    the schema version. Vectors are excluded on purpose.
+
+    Unlike a snapshot, a bundle lives outside `./data` — the tree `daemon
+    reset` clears — because a backup inside the blast radius is not a backup.
+    """
+
+    s = _load()
+    root = dest or s.backup.dir
+    if show_list:
+        _print_backups(root)
+        return
+
+    bundle_dir = root / (_BACKUP_PREFIX + _timestamp())
+    metadata = _write_bundle(s, bundle_dir)
+
+    table = Table(title=f"Backup {bundle_dir.name}")
+    table.add_column("file")
+    table.add_column("size", justify="right")
+    for name, info in sorted(metadata["files"].items()):
+        table.add_row(name, _human_size(info["bytes"]))
+    console.print(table)
+    console.print(f"Written to {bundle_dir}", soft_wrap=True)
+    console.print(f"[dim]{_BACKUP_VECTORS_NOTE}[/dim]")
+
+
+def _print_backups(root: Path) -> None:
+    bundles = _list_bundles(root)
+    if not bundles:
+        console.print(f"[yellow]No backups in {root}.[/yellow] Run `daemon backup` to make one.")
+        return
+    table = Table(title=f"Backups in {root}")
+    table.add_column("bundle")
+    table.add_column("created")
+    table.add_column("schema", justify="right")
+    table.add_column("size", justify="right")
+    for path, metadata in bundles:
+        if metadata is None:
+            table.add_row(path.name, "[red]not a bundle[/red]", "—", _human_size(_path_size(path)))
+            continue
+        table.add_row(
+            path.name,
+            str(metadata.get("created_at", "?")),
+            f"v{metadata.get('schema_version', '?')}",
+            _human_size(_path_size(path)),
+        )
+    console.print(table)
+
+
+@app.command()
+def backups() -> None:
+    """List the bundles in `backup.dir` (same as `daemon backup --list`)."""
+
+    _print_backups(_load().backup.dir)
+
+
+@app.command()
+def restore(
+    bundle: Path = typer.Argument(  # noqa: B008 — see `backup`
+        ..., help="The backup bundle directory to restore."
+    ),
+    yes: bool = typer.Option(False, "--yes", help="Skip the confirmation prompt (for scripts)."),
+) -> None:
+    """Put a backup bundle's state back, keeping what it replaces.
+
+    Validates the bundle first, refuses one written by a newer build (a state
+    database is never migrated downwards), and copies the current state into a
+    sibling `pre-restore-<timestamp>` folder before touching anything — so an
+    accidental restore is itself undoable.
+    """
+
+    s = _load()
+    try:
+        metadata = _read_bundle_metadata(bundle)
+    except ValueError as exc:
+        console.print(f"[red]{exc}[/red]", soft_wrap=True)
+        raise typer.Exit(code=1) from exc
+
+    bundle_schema = metadata.get("schema_version")
+    if isinstance(bundle_schema, int) and bundle_schema > DB_SCHEMA_VERSION:
+        console.print(
+            f"[red]This bundle's state database is at schema v{bundle_schema}, newer than "
+            f"the v{DB_SCHEMA_VERSION} this build understands.[/red] Upgrade my-daemon and "
+            "try again — a database is never migrated downwards.",
+            soft_wrap=True,
+        )
+        raise typer.Exit(code=1)
+
+    restorable = [
+        (name, bundle / name, live)
+        for name, live in _backup_sources(s)
+        if name != "config.yaml" and (bundle / name).is_file()
+    ]
+    if not restorable:
+        console.print(f"[red]{bundle} holds none of the restorable state files.[/red]")
+        raise typer.Exit(code=1)
+
+    table = Table(title=f"Restore {bundle.name}")
+    table.add_column("file")
+    table.add_column("onto", overflow="fold")
+    for name, _src, live in restorable:
+        table.add_row(name, str(live))
+    console.print(table)
+    console.print(
+        f"[dim]created {metadata.get('created_at')} by my-daemon "
+        f"{metadata.get('my_daemon_version')} at schema v{bundle_schema}[/dim]"
+    )
+
+    if not yes:
+        confirm = Prompt.ask("Type 'yes' to replace the current state")
+        if confirm.strip().lower() != "yes":
+            console.print("Aborted. Nothing was restored.")
+            raise typer.Exit(code=1)
+
+    pre_restore = bundle.parent / f"pre-restore-{_timestamp()}"
+    _write_bundle(s, pre_restore)
+    console.print(f"[green]Current state saved to[/green] {pre_restore}", soft_wrap=True)
+
+    # The graph lock is the one piece of cross-process serialisation the daemon
+    # has; holding it across the whole swap keeps a GUI endorse-click from
+    # saving a graph on top of the one being restored.
+    graph_store = GraphStore(path=s.graph.path)
+    with graph_store.lock():
+        for name, src, live in restorable:
+            _replace_file(src, live)
+            if name == "feedback.db":
+                # A -wal/-shm left from the replaced database would be applied
+                # to the restored one. The bundle copy is already consistent.
+                for suffix in ("-wal", "-shm"):
+                    sidecar = live.with_name(live.name + suffix)
+                    with contextlib.suppress(OSError):
+                        sidecar.unlink()
+            console.print(f"[green]Restored[/green] {name} → {live}")
+
+    console.print(
+        f"\n[dim]{_BACKUP_VECTORS_NOTE}[/dim]\n"
+        "Run `daemon ingest --full` if the vault has changed since this backup was taken."
+    )
 
 
 # ---------------------------------------------------------------------------
