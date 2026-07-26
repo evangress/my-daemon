@@ -22,9 +22,14 @@ deterministic, so re-ingesting the same chunk lands on the same point.
 Payload (display + filter fields):
 
 ```
-chunk_id, note_path, heading_path, chunk_index, tags, wikilinks,
+chunk_id, note_uuid, note_path, heading_path, chunk_index, tags, wikilinks,
 text  (truncated to 4000 chars; full text isn't stored here)
 ```
+
+`note_uuid` is the join key; `note_path` beside it is the display string.
+Both are covered by keyword payload indexes (`_ensure_payload_indexes`) —
+graph expansion filters on `note_uuid` for *every seed of every query*, so an
+unindexed field there is pure latency.
 
 Dense-only mode keeps the old single-slot schema. The two are not
 compatible; `ensure_collection()` detects a schema mismatch on startup, drops
@@ -39,7 +44,8 @@ VectorStore(url, collection, dim, hybrid=True)
   .upsert(chunks, vectors, sparse_vectors=None)
   .search(vector, top_k=8)                          # dense-only
   .hybrid_search(dense_vec, (idx, val), top_k=8)    # server-side RRF
-  .delete_by_note(note_path)
+  .delete_by_note_uuid(note_uuid)
+  .set_note_path(note_uuid, rel_path)   # rename: payload-only, no re-embed
   .count()
 ```
 
@@ -48,8 +54,12 @@ dense, one sparse) and a `FusionQuery(fusion=Fusion.RRF)` — Qdrant does the
 rank fusion server-side. This is why the daemon's hybrid query is one round
 trip, not two.
 
-`delete_by_note` uses a payload filter on `note_path`, which is also the
+`delete_by_note_uuid` uses a payload filter on `note_uuid`, which is also the
 mechanism the retrieval expander uses to pull all chunks of a neighbor note.
+
+`set_note_path` is what makes a rename cheap. Chunk ids derive from the note's
+UUID, so moving a file changes nothing semantic and leaves every point id
+correct — only the display path is stale, and one `set_payload` call fixes it.
 
 ## `GraphStore` (NetworkX)
 
@@ -59,7 +69,8 @@ mechanism the retrieval expander uses to pull all chunks of a neighbor note.
 
 | Node id | type | Attributes |
 |---|---|---|
-| `note::<relative_path>` | `note` | `title`, `mtime`, `chunk_ids`, optional `dangling=True` |
+| `note::<uuid>` | `note` | `title`, `rel_path`, `mtime`, `chunk_ids` |
+| `dangling::<raw target>` | `note` | `title`, `dangling=True` |
 | `tag::<tag>` | `tag` | `title` |
 
 Edges:
@@ -70,10 +81,10 @@ Edges:
 | note | tag | `tag` | `1.0` |
 
 A dangling wikilink (`[[Note That Doesn't Exist Yet]]`) becomes a
-`note::...` node with `dangling=True`. Stats and the retrieval expander
-filter these out, but they're kept in place so a later ingest can promote
-them when the target note is created. This is the seed of the "notes you
-mean to write" feature in the roadmap.
+`dangling::...` node. Stats and the retrieval expander filter these out, but
+they're kept in place as the seed of the "notes you mean to write" feature in
+the roadmap. See *Nodes are keyed by identity* below for why they get their own
+namespace.
 
 ### Public surface
 
@@ -83,15 +94,15 @@ GraphStore(path)
   .save()
   .add_note(note, chunk_ids)          # first ingest of a note
   .update_note(note, chunk_ids)       # every subsequent ingest — see below
-  .remove_note(rel_path)
-  .chunk_ids_for(rel_path) -> list[str]
-  .neighbors_within(rel_path, depth=2) -> dict[str, int]
+  .remove_note(note_uuid)
+  .chunk_ids_for(note_uuid) -> list[str]
+  .neighbors_within(note_uuid, depth=2) -> dict[str, float]
   .stats() -> GraphStats     # note_count, tag_count, edge_count, top_pagerank, top_tags
 ```
 
 `neighbors_within` runs a BFS over the **undirected** projection of the
 multi-digraph so it traverses both wikilink directions and the note↔tag↔note
-path. Returns `{neighbor_relative_path: distance}` for note nodes only.
+path. Returns `{neighbor_uuid: distance}` for note nodes only.
 
 ### Nodes are keyed by identity
 
@@ -149,6 +160,8 @@ shared by `FeedbackStore` and `AgentStateStore`. Every store goes through
 ```python
 MIGRATIONS: list[tuple[int, str, Migration]] = [
     (1, "baseline_feedback_and_agent_state", _m001_baseline),
+    (2, "note_registry_and_ordinals",        _m002_registry),
+    (3, "feedback_note_identity",            _m003_feedback_identity),
 ]
 SCHEMA_VERSION = MIGRATIONS[-1][0]
 ```
