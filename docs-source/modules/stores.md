@@ -98,9 +98,57 @@ path. Returns `{neighbor_relative_path: distance}` for note nodes only.
 `PowerIterationFailedConvergence`). Tag ranking is by degree in the current
 v0.1.
 
+## The state database and its migration ladder
+
+`stores/db.py` owns the schema of `data/feedback.db` — the single SQLite file
+shared by `FeedbackStore` and `AgentStateStore`. Every store goes through
+`open_state_db()`; no store defines its own DDL any more.
+
+```python
+MIGRATIONS: list[tuple[int, str, Migration]] = [
+    (1, "baseline_feedback_and_agent_state", _m001_baseline),
+]
+SCHEMA_VERSION = MIGRATIONS[-1][0]
+```
+
+Versions are tracked in `PRAGMA user_version`. Each step runs in its own
+`BEGIN IMMEDIATE` transaction that *also* bumps the version, so a crash
+part-way up the ladder leaves the file at a consistent earlier version rather
+than half-migrated.
+
+**Adoption.** Databases created before this module existed sit at
+`user_version == 0` but already contain every table, because the old code ran
+`CREATE TABLE IF NOT EXISTS` at store construction. Migration 1 is therefore
+*exactly* that old code — including the `PRAGMA table_info` introspection that
+adds the `selected_*` columns — and then stamps version 1. A fresh database and
+a months-old one converge on identical structure.
+
+**Pragmas.** `open_state_db()` sets `journal_mode = WAL` (without it, a
+`daemon consolidate` run holding a write lock blocks the chat UI outright),
+`busy_timeout = 5000` (without it, a concurrent write raises
+`database is locked` immediately), and `foreign_keys = ON` (off by default in
+SQLite, which had silently made every `REFERENCES` clause inert).
+
+**Read-only bundles.** Snapshot bundles are frozen artifacts and may sit on
+read-only media, so `open_state_db(read_only=True)` never migrates. It checks
+`min_version` and raises `SnapshotSchemaTooOld` if the bundle is too old,
+letting callers degrade — skip the analysis that needs the newer tables, carry
+on — rather than crash. `min_version` expresses *what the caller needs*, not the
+latest version: `FeedbackStore` passes `0`, since the `feedback` table exists
+even in unstamped databases.
+
+!!! warning "Never use `executescript` inside a migration"
+    `sqlite3.Cursor.executescript` issues an implicit `COMMIT` before it runs,
+    which silently ends the transaction `migrate()` opened. Use the
+    `exec_script()` helper in the same module, which splits on semicolons and
+    executes statements individually. (It cannot handle trigger bodies — a
+    migration needing those must issue its own `conn.execute` calls.)
+
+See `daemon migrate db` / `daemon migrate status` in the [CLI reference](../cli.md).
+
 ## `FeedbackStore` (SQLite — query log)
 
-`stores/feedback.py`. One table:
+`stores/feedback.py`. One table, defined by migration 1:
 
 ```sql
 CREATE TABLE feedback (

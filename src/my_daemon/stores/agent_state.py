@@ -1,10 +1,9 @@
 # SPDX-License-Identifier: Apache-2.0
 """SQLite-backed processed-state tables for the three background-agent jobs.
 
-Lives in the same DB as `FeedbackStore` (``data/feedback.db``) so users have
-one state file to back up / wipe. Schemas are additive (``CREATE TABLE IF NOT
-EXISTS``) — no migration needed when this module first runs against an
-existing feedback DB.
+Lives in the same DB as `FeedbackStore` (``data/feedback.db``) so users have one
+state file to back up / wipe. The schema lives in :mod:`my_daemon.stores.db`,
+which owns the version ladder for that file.
 """
 
 from __future__ import annotations
@@ -13,40 +12,11 @@ import sqlite3
 from datetime import UTC, datetime
 from pathlib import Path
 
-_SCHEMA = """
-CREATE TABLE IF NOT EXISTS agent_link_runs (
-    note_path TEXT PRIMARY KEY,
-    last_run_at TEXT NOT NULL,
-    note_mtime_seen REAL,
-    applied_count INTEGER NOT NULL DEFAULT 0,
-    suggested_count INTEGER NOT NULL DEFAULT 0
-);
-CREATE TABLE IF NOT EXISTS agent_extract_runs (
-    note_path TEXT PRIMARY KEY,
-    last_run_at TEXT NOT NULL,
-    note_mtime_seen REAL NOT NULL,
-    summary_hash TEXT NOT NULL
-);
-CREATE TABLE IF NOT EXISTS agent_reflect_runs (
-    theme TEXT PRIMARY KEY,
-    last_run_at TEXT NOT NULL,
-    source_notes_hash TEXT NOT NULL,
-    source_chat_count INTEGER NOT NULL DEFAULT 0
-);
-CREATE TABLE IF NOT EXISTS agent_observer_runs (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    snapshot_id TEXT NOT NULL,
-    letter_path TEXT,
-    written_at TEXT NOT NULL,
-    model TEXT NOT NULL,
-    events_replayed INTEGER NOT NULL DEFAULT 0,
-    communities_seen INTEGER NOT NULL DEFAULT 0,
-    edges_decayed INTEGER NOT NULL DEFAULT 0,
-    dry_run INTEGER NOT NULL DEFAULT 0
-);
-CREATE INDEX IF NOT EXISTS idx_observer_runs_written_at
-    ON agent_observer_runs(written_at);
-"""
+from my_daemon.stores.db import migrate, open_state_db
+
+# These tables exist from the baseline migration onward, and also in every
+# pre-ladder database (which sits at user_version 0).
+_MIN_SCHEMA_VERSION = 0
 
 
 def _now_iso() -> str:
@@ -56,17 +26,10 @@ def _now_iso() -> str:
 class AgentStateStore:
     def __init__(self, db_path: Path) -> None:
         self.db_path = db_path
-        self.db_path.parent.mkdir(parents=True, exist_ok=True)
-        self._init_schema()
+        migrate(self.db_path)
 
     def _connect(self) -> sqlite3.Connection:
-        conn = sqlite3.connect(self.db_path)
-        conn.row_factory = sqlite3.Row
-        return conn
-
-    def _init_schema(self) -> None:
-        with self._connect() as conn:
-            conn.executescript(_SCHEMA)
+        return open_state_db(self.db_path, min_version=_MIN_SCHEMA_VERSION)
 
     # ---- link runs --------------------------------------------------------
 

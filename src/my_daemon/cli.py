@@ -36,6 +36,10 @@ from my_daemon.stores import (
     open_readonly,
     prune_snapshots,
 )
+from my_daemon.stores.db import MIGRATIONS as DB_MIGRATIONS
+from my_daemon.stores.db import SCHEMA_VERSION as DB_SCHEMA_VERSION
+from my_daemon.stores.db import migrate as db_migrate
+from my_daemon.stores.db import schema_version as db_schema_version
 
 app = typer.Typer(
     name="daemon",
@@ -51,6 +55,8 @@ snapshot_app = typer.Typer(name="snapshot", help="Freeze + manage read-only stat
 app.add_typer(snapshot_app)
 hermes_app = typer.Typer(name="hermes", help="Hermes memory-provider integration.")
 app.add_typer(hermes_app)
+migrate_app = typer.Typer(name="migrate", help="Schema and identity migrations.")
+app.add_typer(migrate_app)
 
 console = Console()
 
@@ -908,6 +914,61 @@ def reset(
     else:
         console.print(f"[yellow]Nothing to remove at {data_dir}[/yellow]")
     _ = s  # quiet the unused-variable warning; loading validates config
+
+
+# ---------------------------------------------------------------------------
+# migrate
+# ---------------------------------------------------------------------------
+
+
+@migrate_app.command("db")
+def migrate_db() -> None:
+    """Bring the state database up to the current schema version."""
+    s = _load()
+    db_path = s.feedback.db_path
+    before = db_schema_version(db_path)
+    applied = db_migrate(db_path)
+
+    if not applied:
+        console.print(
+            f"[green]Already at schema v{before}[/green] — nothing to apply."
+        )
+        return
+
+    names = {version: name for version, name, _ in DB_MIGRATIONS}
+    for version in applied:
+        console.print(f"  [cyan]v{version}[/cyan]  {names.get(version, '?')}")
+    console.print(
+        f"[green]Migrated[/green] {db_path} from v{before} to v{DB_SCHEMA_VERSION}."
+    )
+
+
+@migrate_app.command("status")
+def migrate_status() -> None:
+    """Show the state database's current schema version and what's pending."""
+    s = _load()
+    db_path = s.feedback.db_path
+    found = db_schema_version(db_path)
+
+    console.print(
+        Panel(
+            f"[bold]{db_path}[/bold]\n"
+            f"current: [cyan]v{found}[/cyan]    target: [cyan]v{DB_SCHEMA_VERSION}[/cyan]",
+            title="schema",
+        )
+    )
+
+    pending = [(v, n) for v, n, _ in DB_MIGRATIONS if v > found]
+    if not pending:
+        console.print("[green]Up to date.[/green]")
+        return
+
+    table = Table(title="pending migrations")
+    table.add_column("version", justify="right")
+    table.add_column("name")
+    for version, name in pending:
+        table.add_row(str(version), name)
+    console.print(table)
 
 
 if __name__ == "__main__":

@@ -1,5 +1,9 @@
 # SPDX-License-Identifier: Apache-2.0
-"""SQLite-backed feedback log. v0.1 records; phase 4 will apply the signals."""
+"""SQLite-backed feedback log — the answer + user-signal record for a query.
+
+The schema lives in :mod:`my_daemon.stores.db`, which owns the version ladder
+for this file. This store only reads and writes rows.
+"""
 
 from __future__ import annotations
 
@@ -9,29 +13,12 @@ from datetime import UTC, datetime
 from pathlib import Path
 
 from my_daemon.models import FeedbackEvent, FeedbackSignal
+from my_daemon.stores.db import migrate, open_state_db
 
-_SCHEMA = """
-CREATE TABLE IF NOT EXISTS feedback (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    timestamp TEXT NOT NULL,
-    query TEXT NOT NULL,
-    retrieval_summary TEXT NOT NULL,
-    answer TEXT NOT NULL,
-    latency_ms INTEGER NOT NULL,
-    signal TEXT,
-    signal_captured_at TEXT
-);
-CREATE INDEX IF NOT EXISTS idx_feedback_timestamp ON feedback(timestamp);
-"""
-
-# Columns added after the initial schema. SQLite's `ADD COLUMN` is idempotent
-# only via explicit existence checks, so we introspect PRAGMA and add what's
-# missing — keeps upgrades safe for existing data/feedback.db files.
-_SELECTION_COLUMNS = {
-    "selected_rank": "INTEGER",
-    "selected_chunk_id": "TEXT",
-    "selected_note_path": "TEXT",
-}
+# The `feedback` table exists from the baseline migration onward, and also in
+# every pre-ladder database (which sits at user_version 0). Asking for 0 is what
+# lets snapshot bundles taken before the ladder existed still be read back.
+_MIN_SCHEMA_VERSION = 0
 
 
 class FeedbackStore:
@@ -39,24 +26,14 @@ class FeedbackStore:
         self.db_path = db_path
         self.read_only = read_only
         if not read_only:
-            self.db_path.parent.mkdir(parents=True, exist_ok=True)
-            self._init_schema()
+            migrate(self.db_path)
 
     def _connect(self) -> sqlite3.Connection:
-        if self.read_only:
-            conn = sqlite3.connect(f"file:{self.db_path}?mode=ro", uri=True)
-        else:
-            conn = sqlite3.connect(self.db_path)
-        conn.row_factory = sqlite3.Row
-        return conn
-
-    def _init_schema(self) -> None:
-        with self._connect() as conn:
-            conn.executescript(_SCHEMA)
-            existing = {row["name"] for row in conn.execute("PRAGMA table_info(feedback)")}
-            for col, typ in _SELECTION_COLUMNS.items():
-                if col not in existing:
-                    conn.execute(f"ALTER TABLE feedback ADD COLUMN {col} {typ}")
+        return open_state_db(
+            self.db_path,
+            read_only=self.read_only,
+            min_version=_MIN_SCHEMA_VERSION,
+        )
 
     def log(self, event: FeedbackEvent) -> int:
         if self.read_only:

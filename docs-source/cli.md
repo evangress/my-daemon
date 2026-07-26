@@ -104,6 +104,30 @@ Deletes the entire `./data/` directory (Qdrant storage, models cache, graph
 pickle, manifest, feedback DB). Prompts for confirmation unless `--yes`.
 **Never touches the vault itself.**
 
+### `daemon migrate db`
+
+```
+daemon migrate db
+```
+
+Brings the state database (`data/feedback.db`) up to the current schema
+version, applying each pending migration in its own transaction. Idempotent —
+re-running when there's nothing to do prints `Already at schema vN`.
+
+You rarely need to run this by hand: every store migrates the file on
+construction. It exists so an upgrade can be applied (and inspected)
+deliberately, before the first command that would otherwise do it silently.
+
+### `daemon migrate status`
+
+```
+daemon migrate status
+```
+
+Shows the database's current schema version against the target, and lists any
+pending migrations by name. Works before the database has ever been created —
+a missing file reports version 0 and is not created by the check.
+
 ### `daemon models download`
 
 Forces a download of the embedding model(s) into `embeddings.cache_folder`
