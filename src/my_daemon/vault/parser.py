@@ -8,6 +8,7 @@ from datetime import UTC, datetime
 from pathlib import Path
 
 import frontmatter
+import yaml
 
 from my_daemon.models import Note
 from my_daemon.vault.identity import read_note_uuid
@@ -40,9 +41,18 @@ def parse_note(file_path: Path, vault_root: Path) -> Note:
     """
 
     text = file_path.read_text(encoding="utf-8")
-    post = frontmatter.loads(text)
-    body = post.content
-    fm = dict(post.metadata)
+    try:
+        post = frontmatter.loads(text)
+        body = post.content
+        fm = dict(post.metadata)
+    except yaml.YAMLError:
+        # Real vaults hold YAML like `related: [[A]], [[B]]` — unquoted
+        # wikilinks are invalid block-mapping syntax. One bad note must not
+        # kill ingest: degrade to no metadata and keep the *raw* text as the
+        # body, so the content is still embedded and any wikilinks inside the
+        # broken block still register through the body regex below.
+        body = text
+        fm = {}
 
     rel_path = file_path.relative_to(vault_root).as_posix()
     title = _extract_title(body, fallback=file_path.stem)

@@ -435,3 +435,32 @@ def test_select_rejects_an_out_of_range_rank(settings: Settings, vault_graph: Gr
     assert result.exit_code == 1
     assert "out of range" in _squash(result.output)
     assert _wikilink_weights(settings.graph.path) == [1.0]
+
+
+def test_invalid_api_key_becomes_one_actionable_line(stores: FakeStores):
+    """A 401 from Anthropic must not arrive as a raw traceback.
+
+    Found live 2026-07-27: a placeholder key in .env passed doctor's
+    presence check, then `daemon ask` dumped an AuthenticationError
+    traceback from inside the SDK. Same contract as Qdrant-down: one
+    actionable line, exit 1.
+    """
+    import httpx
+    from anthropic import AuthenticationError
+
+    def raise_401(query, chunks, memories=None):  # noqa: ANN001
+        raise AuthenticationError(
+            message="invalid x-api-key",
+            response=httpx.Response(
+                401, request=httpx.Request("POST", "https://api.anthropic.com/v1/messages")
+            ),
+            body={"error": {"type": "authentication_error"}},
+        )
+
+    stores.llm.synthesize = raise_401
+    result = runner.invoke(app, ["ask", "what do I believe?"])
+
+    assert result.exit_code == 1
+    assert "Traceback" not in result.output
+    assert "ANTHROPIC_API_KEY" in result.output
+    assert "rejected" in result.output

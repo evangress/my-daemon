@@ -40,3 +40,36 @@ def test_note_with_no_wikilinks(vault_root: Path):
     note = parse_note(vault_root / "Grocery List.md", vault_root)
     assert note.wikilinks == []
     assert "household" in note.tags
+
+
+def test_malformed_frontmatter_degrades_instead_of_raising(tmp_path: Path):
+    """Real vaults contain YAML like `related: [[A]], [[B]]` (unquoted wikilinks).
+
+    One such note killed the entire first real-vault ingest (2026-07-27). The
+    contract: parse_note never raises on bad YAML — metadata degrades to {},
+    the full raw text (including the broken block) stays as body so the
+    content is still embedded, and wikilinks inside the broken frontmatter
+    still register via the body regex.
+    """
+    note = tmp_path / "Docling.md"
+    note.write_text(
+        "---\n"
+        "tags: [python, ocr]\n"
+        "related: [[Haystack Framework - Overview]], [[Personal Knowledge Base]]\n"
+        "sorted: true\n"
+        "---\n\n"
+        "# Docling\n\nBody text about document parsing.\n",
+        encoding="utf-8",
+    )
+
+    parsed = parse_note(note, tmp_path)
+
+    assert parsed.frontmatter == {}
+    # No adoptable uuid in broken YAML; derivation happens later in ingest.
+    assert parsed.uuid is None
+    assert parsed.uuid_source is None
+    assert "Body text about document parsing." in parsed.body
+    assert "related: [[Haystack Framework - Overview]]" in parsed.body  # raw block preserved
+    assert "Haystack Framework - Overview" in parsed.wikilinks
+    assert "Personal Knowledge Base" in parsed.wikilinks
+    assert parsed.title == "Docling"

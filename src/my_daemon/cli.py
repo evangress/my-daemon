@@ -236,6 +236,22 @@ def _store_errors(s: Settings) -> Iterator[None]:
         console.print(store_error_message(s, exc), style="red", soft_wrap=True)
         console.print("[dim]Run `daemon doctor` for the full preflight.[/dim]")
         raise typer.Exit(code=1) from exc
+    except Exception as exc:
+        # Doctor checks that a key is *present*; only Anthropic can say whether
+        # it's *valid*. A placeholder key in .env therefore surfaces here, at
+        # first synthesis — same contract as Qdrant-down: one line, exit 1.
+        from anthropic import AuthenticationError
+
+        if not isinstance(exc, AuthenticationError):
+            raise
+        console.print(
+            "ANTHROPIC_API_KEY was rejected by the API (401). The key is set "
+            "but not valid — put your real key in the .env beside config.yaml "
+            "(retrieval still works without one: `daemon query --no-llm`).",
+            style="red",
+            soft_wrap=True,
+        )
+        raise typer.Exit(code=1) from exc
 
 
 @app.command()
