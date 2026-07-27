@@ -26,7 +26,8 @@ class LLMClient:
 
             if not self.api_key:
                 raise RuntimeError(
-                    "ANTHROPIC_API_KEY is not set. Add it to .env or your shell environment."
+                    "ANTHROPIC_API_KEY is not set. Run `daemon setup` to store it in the "
+                    "OS credential store, or export it in your shell environment."
                 )
             self._client = Anthropic(api_key=self.api_key)
         return self._client

@@ -33,6 +33,11 @@ dependencies = [
     # verified with `python scripts/license_check.py`). Present transitively via
     # nicegui; declared so the dependency is intentional rather than incidental.
     "watchfiles>=0.21",
+    # OS-native credential storage for ANTHROPIC_API_KEY (MIT — Category A,
+    # Apache-2.0 compatible; verified with `python scripts/license_check.py`).
+    # Windows Credential Manager / macOS Keychain / Linux Secret Service, so
+    # the key is never written to disk in plaintext by this project.
+    "keyring>=25.0",
     "pytest>=9.0.3",
     "mkdocs>=1.6.1",
 ]

@@ -312,18 +312,25 @@ def print_next_steps() -> None:
        daemon setup
        (Windows users can double-click launch-setup.bat instead.)
 
-  2. Start Qdrant (one-time per machine):
+     The key is stored in the OS credential store — Windows Credential
+     Manager, macOS Keychain, or Linux Secret Service. It is never written
+     to config.yaml or .env.
 
-       docker compose up -d
-
-  3. Activate the environment in your shell:
+  2. Activate the environment in your shell:
 
        {activate}
+
+  3. Check everything resolved:
+
+       daemon doctor
 
   4. Ingest your vault and ask your first question:
 
        daemon ingest -v
        daemon query "what was I thinking about last week"
+
+     (Qdrant runs embedded by default — nothing to start. Only the optional
+     server mode needs `docker compose up -d`.)
 
   5. Launch the chat GUI:
 

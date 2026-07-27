@@ -45,8 +45,9 @@ Task Scheduler. Your one daemon stays one daemon no matter where you launch it.
 - `:memory:` for `vector_store.qdrant.path` is a mode, not a path, and is left
   alone.
 - Paths supplied via `MY_DAEMON_*` env vars are anchored the same way.
-- The `.env` read for `ANTHROPIC_API_KEY` is the one beside the config (the
-  copy in your current directory is still honored as a fallback).
+- `ANTHROPIC_API_KEY` is not a config value. It resolves environment → OS
+  credential store → legacy `.env` beside the config (with the copy in your
+  current directory honored as a last fallback). Set it with `daemon setup`.
 
 `daemon init --user` therefore puts state under `~/.config/my-daemon/data/`.
 If you want it somewhere else, give those keys absolute paths.

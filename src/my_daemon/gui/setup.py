@@ -2,9 +2,10 @@
 """Tkinter setup window — vault picker + API key entry.
 
 Saves the vault path to ``config.yaml`` and persists ``ANTHROPIC_API_KEY``:
-- updates ``.env`` (always — read by load_settings())
-- on Windows, also runs ``setx`` so the key is set as a true OS env var
-  for new processes
+- writes it to the **OS credential store** via :mod:`my_daemon.secrets`
+  (Windows Credential Manager, macOS Keychain, Linux Secret Service) and
+  nowhere else — never to ``.env``, never via ``setx``
+- strips any pre-existing plaintext copy out of ``.env`` on save
 - updates ``os.environ`` for the current process so anything launched
   next (e.g. ``daemon chat``) picks it up immediately
 
@@ -22,9 +23,10 @@ from pathlib import Path
 from tkinter import filedialog, ttk
 
 import yaml
-from dotenv import set_key
 
 from my_daemon.paths import CONFIG_FILENAME, find_config, log_path
+from my_daemon.secrets import ENV_VAR as ENV_KEY
+from my_daemon.secrets import purge_dotenv_key, read_keychain, store_in_keychain
 
 # Brand palette — hex approximations of the OKLCH values from THEME.md.
 # Tkinter doesn't support oklch(); these are the closest sRGB equivalents.
@@ -37,8 +39,6 @@ CYAN = "#5BCFD8"  # synthesis
 GOLD = "#E2B27E"  # human spark — focus / save success
 RULE = "#3A3A55"  # hairline borders
 ERROR = "#E37070"
-
-ENV_KEY = "ANTHROPIC_API_KEY"
 
 # Windows Task Scheduler job name for the daily reflection run.
 REFLECT_TASK_NAME = "MyDaemonReflect"
@@ -95,42 +95,37 @@ def _save_vault_path(vault_path: str) -> None:
 
 
 def _persist_api_key(api_key: str) -> tuple[bool, str]:
-    """Persist the key. Returns (success, status message).
+    """Persist the key to the OS credential store. Returns (ok, status message).
 
-    Writes to .env in all cases; on Windows, additionally runs `setx` so the
-    key is a true persistent user-level OS env var. Also updates os.environ
-    so anything launched from this process sees it without a restart.
+    The key is written **only** to the platform credential store — Windows
+    Credential Manager (DPAPI-encrypted), macOS Keychain, or Linux Secret
+    Service. It is deliberately never written to `.env`: the previous version
+    of this function did both, so the secret sat in a world-readable text file
+    even on Windows, where `setx` had already stored it properly.
+
+    `setx` is gone too. Beyond leaving the value unencrypted in
+    `HKCU\\Environment`, it takes the key as a command-line argument, which is
+    visible to any process listing and is recorded by Windows command-line
+    auditing (event 4688).
+
+    Failure is reported, never worked around. Falling back to a plaintext file
+    when the credential store is unavailable would quietly reintroduce the very
+    thing this function exists to prevent.
     """
-    # .env — handles quoting/escaping correctly.
-    dotenv_path = _dotenv_path()
-    dotenv_path.parent.mkdir(parents=True, exist_ok=True)
-    dotenv_path.touch(exist_ok=True)
-    set_key(str(dotenv_path), ENV_KEY, api_key, quote_mode="never")
+    ok, message = store_in_keychain(api_key)
+    if not ok:
+        return False, message
 
+    # So `daemon chat`, launched from this window, sees it without a restart.
     os.environ[ENV_KEY] = api_key
 
-    if sys.platform == "win32":
-        # setx writes to HKCU\Environment; new processes inherit it. Hide the
-        # console flash with CREATE_NO_WINDOW (0x08000000).
-        try:
-            subprocess.run(
-                ["setx", ENV_KEY, api_key],
-                check=True,
-                capture_output=True,
-                text=True,
-                creationflags=0x08000000,
-            )
-            return (
-                True,
-                f"Saved. {ENV_KEY} is set as a Windows user env var (new shells will see it).",
-            )
-        except (subprocess.CalledProcessError, FileNotFoundError) as exc:
-            return False, f"Wrote .env, but `setx` failed: {exc}"
-
-    return True, (
-        f"Saved to .env. To make {ENV_KEY} a permanent OS env var on this system, "
-        f"add `export {ENV_KEY}=...` to ~/.profile or ~/.zshrc."
-    )
+    # An upgrade that leaves the old plaintext copy behind has fixed nothing.
+    if purge_dotenv_key(_dotenv_path()):
+        message += (
+            " Removed the old plaintext copy from .env — rotate that key at "
+            "console.anthropic.com, since it has been readable on disk."
+        )
+    return True, message
 
 
 def _daemon_exe_path() -> Path:
@@ -293,7 +288,9 @@ class SetupWindow:
         # Prefill from current state.
         existing = _load_yaml()
         existing_vault = (existing.get("vault") or {}).get("path", "")
-        existing_key = os.environ.get(ENV_KEY, "")
+        # Keychain first: after the first save that is where the key lives, and
+        # reading only os.environ would show an empty field to a configured user.
+        existing_key = read_keychain() or os.environ.get(ENV_KEY, "")
 
         self.vault_var = tk.StringVar(
             value=str(Path(existing_vault).expanduser()) if existing_vault else ""

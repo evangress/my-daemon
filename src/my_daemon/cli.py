@@ -238,15 +238,15 @@ def _store_errors(s: Settings) -> Iterator[None]:
         raise typer.Exit(code=1) from exc
     except Exception as exc:
         # Doctor checks that a key is *present*; only Anthropic can say whether
-        # it's *valid*. A placeholder key in .env therefore surfaces here, at
-        # first synthesis — same contract as Qdrant-down: one line, exit 1.
+        # it's *valid*. A placeholder key therefore surfaces here, at first
+        # synthesis — same contract as Qdrant-down: one line, exit 1.
         from anthropic import AuthenticationError
 
         if not isinstance(exc, AuthenticationError):
             raise
         console.print(
             "ANTHROPIC_API_KEY was rejected by the API (401). The key is set "
-            "but not valid — put your real key in the .env beside config.yaml "
+            "but not valid — run `daemon setup` to store the real one "
             "(retrieval still works without one: `daemon query --no-llm`).",
             style="red",
             soft_wrap=True,
@@ -310,7 +310,12 @@ def init(
 
     if not env_path.exists() and env_example.is_file():
         shutil.copy(env_example, env_path)
-        console.print(f"[green]Wrote {env_path} — add your ANTHROPIC_API_KEY there.[/green]")
+        console.print(f"[green]Wrote {env_path} — for optional MY_DAEMON_* overrides.[/green]")
+
+    console.print(
+        "[cyan]Next:[/cyan] run [bold]daemon setup[/bold] to store your ANTHROPIC_API_KEY "
+        "in the OS credential store (it is never written to a file)."
+    )
 
     if user:
         console.print(f"Relative paths in that file (./data/…) now resolve under {dest}.")

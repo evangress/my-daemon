@@ -116,10 +116,13 @@ ships with Python so there's nothing to install.
 2. Vault picker (`filedialog.askdirectory`) — saves to `vault.path` in
    `config.yaml`, preserving every other setting via a round-trip through
    `yaml.safe_load` / `yaml.safe_dump`.
-3. API key entry — writes to `.env` via `python-dotenv.set_key`, also
-   updates `os.environ` for the current process. On Windows, additionally
-   runs `setx ANTHROPIC_API_KEY ...` so new shells inherit the key as a
-   user-level OS env var.
+3. API key entry (masked, with a *Show* toggle) — writes to the **OS
+   credential store** via `my_daemon.secrets.store_in_keychain`, and updates
+   `os.environ` so a `daemon chat` launched from this window sees it without a
+   restart. It is written nowhere else: any key found in a legacy `.env` is
+   migrated into the store and the plaintext line stripped. If no credential
+   store is available the save fails loudly rather than falling back to a
+   file — silently writing plaintext is the bug this replaced.
 4. **Windows-only:** checkbox to register `MyDaemonReflect` in Task
    Scheduler via `schtasks /Create` (daily at 03:00, runs
    `.venv\Scripts\daemon.exe reflect`). Unchecking it on a subsequent save

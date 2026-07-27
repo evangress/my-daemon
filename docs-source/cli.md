@@ -1,8 +1,9 @@
 # CLI Reference
 
 The `daemon` binary is a Typer app installed by the project. Every command
-below resolves a `config.yaml`, merges environment overrides, and reads
-`ANTHROPIC_API_KEY` from the environment / the `.env` beside that config.
+below resolves a `config.yaml`, merges environment overrides, and resolves
+`ANTHROPIC_API_KEY` from the environment, then the OS credential store, then a
+legacy `.env` beside that config.
 
 Run `daemon --help` for the live listing.
 
@@ -134,7 +135,7 @@ of the ones below it:
 | 2 | **vault** | `vault.path` is missing or is not a directory | it exists but holds no `.md` files |
 | 3 | **vector store** | server mode: nothing answers at `qdrant.url`; embedded mode: the folder cannot be opened, or another process holds it | — |
 | 4 | **collection** | the collection's dense dimension does not match the embedder's | the collection does not exist yet (run `daemon ingest`), or the store was unreachable |
-| 5 | **api key** | — | `ANTHROPIC_API_KEY` is unset. Retrieval still works; synthesis (`query`/`ask`) and `extract`/`reflect`/`consolidate` do not |
+| 5 | **api key** | — | `ANTHROPIC_API_KEY` is unset (retrieval still works; synthesis (`query`/`ask`) and `extract`/`reflect`/`consolidate` do not), **or** it was read from a plaintext `.env` — run `daemon setup` to migrate it into the OS credential store. On pass, the detail names which layer supplied it |
 | 6 | **model cache** | — | the configured embedding model is not in `embeddings.cache_folder` — the first ingest will download ~130MB |
 | 7 | **state db** | the file is at a schema *newer* than this build | it is behind (run `daemon migrate db`) |
 | 8 | **graph** | `graph.gpickle` exists but will not load (`GraphCorruptError`) | it does not exist yet |

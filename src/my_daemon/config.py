@@ -4,9 +4,12 @@
 Env var overrides use the prefix ``MY_DAEMON_`` and double-underscore nesting,
 e.g. ``MY_DAEMON_LLM__MODEL=claude-sonnet-4-6``.
 
-The Anthropic API key is **never** read from config.yaml — it comes from the
-environment (or a ``.env`` file next to the config, which is auto-loaded). This
-keeps the key out of any file the user might accidentally commit.
+The Anthropic API key is **never** read from config.yaml. It resolves through
+:mod:`my_daemon.secrets`: a real environment variable, then the OS credential
+store (Windows Credential Manager / macOS Keychain / Linux Secret Service),
+then a legacy plaintext ``.env``. Only the last of those touches disk in the
+clear, so :attr:`Settings.api_key_source` records which layer answered and
+``daemon doctor`` warns when it was the plaintext one.
 
 Two rules make the daemon safe to run from a scheduler:
 
@@ -40,6 +43,7 @@ from my_daemon.paths import (
     user_config_dir,
     user_config_path,
 )
+from my_daemon.secrets import ENV_VAR, KeySource, resolve_api_key
 
 __all__ = [
     "CONFIG_FILENAME",
@@ -399,6 +403,11 @@ class Settings(BaseSettings):
 
     anthropic_api_key: str | None = None
 
+    # Which layer supplied the key above. Carried so `daemon doctor` can tell
+    # the user their secret is sitting in a plaintext file — the value alone
+    # cannot reveal that. See :mod:`my_daemon.secrets`.
+    api_key_source: KeySource = "missing"
+
     # The file `load_settings` actually resolved — the anchor every relative
     # path in this object was made absolute against. None when a Settings was
     # constructed programmatically (tests, library callers).
@@ -489,19 +498,31 @@ def load_settings(config_path: Path | str | None = None) -> Settings:
 
     root = Path(os.path.abspath(path)).parent
 
+    # Captured *before* load_dotenv, because dotenv merges `.env` into
+    # os.environ and after that a plaintext key is indistinguishable from a
+    # properly-stored one — which is exactly the distinction the user needs.
+    real_env_key = os.environ.get(ENV_VAR)
+
     # `.env` lives next to the config. `override=False` means a value already in
     # the real environment wins, which is what we want when the OS env var was
-    # set persistently via `setx` or a shell profile. The CWD copy is still
-    # honored second so an interactive shell in a checkout keeps working when
-    # the active config lives elsewhere.
+    # set persistently in a shell profile. The CWD copy is still honored second
+    # so an interactive shell in a checkout keeps working when the active
+    # config lives elsewhere. This is for the `MY_DAEMON_*` overrides; the API
+    # key is resolved separately below.
     load_dotenv(dotenv_path=root / ".env", override=False)
     load_dotenv(dotenv_path=Path.cwd() / ".env", override=False)
 
     with path.open("r", encoding="utf-8") as fh:
         data = yaml.safe_load(fh) or {}
 
-    # API key is environment-only — never read from yaml, never written back.
-    data["anthropic_api_key"] = os.environ.get("ANTHROPIC_API_KEY")
+    # API key is secret-store-only — never read from yaml, never written back.
+    # Order: real env var → OS credential store → legacy plaintext `.env`.
+    resolved = resolve_api_key(
+        env_value=real_env_key,
+        dotenv_paths=[root / ".env", Path.cwd() / ".env"],
+    )
+    data["anthropic_api_key"] = resolved.value
+    data["api_key_source"] = resolved.source
 
     settings = Settings(**data)
     _anchor_model_paths(settings, root)
