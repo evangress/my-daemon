@@ -31,6 +31,23 @@ class Embedder:
         self._model: SentenceTransformer | None = None
         self._dim: int | None = None
 
+    def _dimension_of(self, model: SentenceTransformer) -> int:
+        """The model's output width, or a plain error saying we cannot tell.
+
+        ``get_embedding_dimension()`` returns ``None`` for a model whose head
+        does not declare one. That number goes straight into the Qdrant
+        collection schema, so guessing is not an option — and ``int(None)``
+        would surface as a bare ``TypeError`` from an unrelated-looking line.
+        """
+
+        dim = model.get_embedding_dimension()
+        if dim is None:
+            raise RuntimeError(
+                f"embedding model {self.model_name!r} does not report an output "
+                "dimension; pick a sentence-transformers model that does"
+            )
+        return int(dim)
+
     def _resolve_device(self) -> str | None:
         if self.device == "auto":
             return None
@@ -52,7 +69,7 @@ class Embedder:
             except Exception:
                 # Cache miss (or corrupted local copy) — pull once, then stay offline next time.
                 self._model = self._load(local_files_only=False)
-            self._dim = int(self._model.get_embedding_dimension())
+            self._dim = self._dimension_of(self._model)
         return self._model
 
     def download(self) -> Path:
@@ -61,8 +78,12 @@ class Embedder:
         Safe to call when already cached — sentence-transformers will no-op.
         """
         self._model = self._load(local_files_only=False)
-        self._dim = int(self._model.get_embedding_dimension())
-        return self.cache_folder if self.cache_folder is not None else Path.home() / ".cache" / "huggingface"
+        self._dim = self._dimension_of(self._model)
+        return (
+            self.cache_folder
+            if self.cache_folder is not None
+            else Path.home() / ".cache" / "huggingface"
+        )
 
     @property
     def dimension(self) -> int:

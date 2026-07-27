@@ -8,8 +8,10 @@ from datetime import UTC, datetime
 from pathlib import Path
 
 import frontmatter
+import yaml
 
 from my_daemon.models import Note
+from my_daemon.vault.identity import read_note_uuid
 
 WIKILINK_RE = re.compile(r"\[\[([^\]|]+)(?:\|[^\]]+)?\]\]")
 # Inline tag: # followed by a letter, then word/-/slash chars. Negative lookbehind
@@ -39,9 +41,18 @@ def parse_note(file_path: Path, vault_root: Path) -> Note:
     """
 
     text = file_path.read_text(encoding="utf-8")
-    post = frontmatter.loads(text)
-    body = post.content
-    fm = dict(post.metadata)
+    try:
+        post = frontmatter.loads(text)
+        body = post.content
+        fm = dict(post.metadata)
+    except yaml.YAMLError:
+        # Real vaults hold YAML like `related: [[A]], [[B]]` — unquoted
+        # wikilinks are invalid block-mapping syntax. One bad note must not
+        # kill ingest: degrade to no metadata and keep the *raw* text as the
+        # body, so the content is still embedded and any wikilinks inside the
+        # broken block still register through the body regex below.
+        body = text
+        fm = {}
 
     rel_path = file_path.relative_to(vault_root).as_posix()
     title = _extract_title(body, fallback=file_path.stem)
@@ -65,6 +76,7 @@ def parse_note(file_path: Path, vault_root: Path) -> Note:
 
     mtime = datetime.fromtimestamp(file_path.stat().st_mtime, tz=UTC)
     word_count = len(body.split())
+    note_uuid, uuid_source = read_note_uuid(fm)
 
     return Note(
         path=file_path,
@@ -73,7 +85,14 @@ def parse_note(file_path: Path, vault_root: Path) -> Note:
         body=body,
         frontmatter=fm,
         wikilinks=wikilinks,
+        # Unresolved is the honest default: only the reader holds the title
+        # index needed to turn a link into an identity. A Note that never goes
+        # through it (single-note capture, agent_link) still keeps its links,
+        # as dangling targets, instead of silently losing them.
+        dangling_wikilinks=list(wikilinks),
         tags=tags,
         mtime=mtime,
         word_count=word_count,
+        uuid=note_uuid,
+        uuid_source=uuid_source,
     )

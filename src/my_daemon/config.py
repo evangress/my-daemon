@@ -5,25 +5,63 @@ Env var overrides use the prefix ``MY_DAEMON_`` and double-underscore nesting,
 e.g. ``MY_DAEMON_LLM__MODEL=claude-sonnet-4-6``.
 
 The Anthropic API key is **never** read from config.yaml — it comes from the
-environment (or a project-local ``.env`` file, which is auto-loaded). This
+environment (or a ``.env`` file next to the config, which is auto-loaded). This
 keeps the key out of any file the user might accidentally commit.
+
+Two rules make the daemon safe to run from a scheduler:
+
+* **A config must be found.** :func:`load_settings` raises
+  :class:`ConfigNotFoundError` rather than falling back to defaults, because
+  "defaults" means an empty vault that nobody owns and state written into
+  whatever directory the process happened to start in.
+* **Relative paths anchor to the config file's directory, not the CWD.** A
+  config at ``/home/evan/dev/my-daemon/config.yaml`` saying ``./data/graph.gpickle``
+  always means ``/home/evan/dev/my-daemon/data/graph.gpickle`` — from cron
+  (which starts in ``$HOME``), from a Windows scheduled task (which starts in
+  ``system32``), from anywhere.
 """
 
 from __future__ import annotations
 
 import os
+from datetime import datetime, time
 from pathlib import Path
-from typing import Literal
+from typing import Literal, get_args
 
 import yaml
 from dotenv import load_dotenv
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
+
+from my_daemon.paths import (
+    CONFIG_FILENAME,
+    config_search_paths,
+    find_config,
+    user_config_dir,
+    user_config_path,
+)
+
+__all__ = [
+    "CONFIG_FILENAME",
+    "ConfigNotFoundError",
+    "RunConfig",
+    "Settings",
+    "config_search_paths",
+    "find_config",
+    "load_settings",
+    "user_config_dir",
+    "user_config_path",
+]
 
 
 class VaultConfig(BaseModel):
     path: Path = Path("~/Documents/Obsidian/MyVault").expanduser()
-    exclude_dirs: list[str] = Field(default_factory=lambda: [".obsidian", ".trash", "templates"])
+    # Must stay in sync with config.example.yaml — anything constructing
+    # Settings() programmatically would otherwise ingest the daemon's own
+    # generated prose and its backup copies as if they were the user's notes.
+    exclude_dirs: list[str] = Field(
+        default_factory=lambda: [".obsidian", ".trash", "templates", "Agent"]
+    )
 
 
 class ChunkingConfig(BaseModel):
@@ -44,8 +82,48 @@ class EmbeddingsConfig(BaseModel):
 
 
 class QdrantConfig(BaseModel):
+    """Where the chunk vectors live.
+
+    Two mutually exclusive modes:
+
+    * **embedded** — set ``path`` (a directory, or the literal ``:memory:``).
+      qdrant-client runs the engine in-process against that folder, so a
+      default install needs no Docker at all. Single-process only: exactly one
+      client may hold the folder at a time.
+    * **server** — leave ``path`` unset and point ``url`` at a running Qdrant
+      (``docker-compose up -d qdrant``). Required for concurrent access, and
+      the better choice for large vaults.
+
+    ``url`` keeps its historical default so a config that says nothing at all
+    behaves exactly as it did before embedded mode existed; the default only
+    applies when ``path`` was not set explicitly.
+    """
+
     url: str = "http://localhost:6333"
+    path: Path | str | None = None
     collection: str = "chunks"
+
+    @model_validator(mode="after")
+    def _one_mode_only(self) -> QdrantConfig:
+        # `model_fields_set` (not the value) is what makes this fair: a user who
+        # sets only `path` should not trip over `url`'s default.
+        if "url" in self.model_fields_set and "path" in self.model_fields_set:
+            raise ValueError(
+                "vector_store.qdrant: set either 'url' (server mode) or 'path' "
+                "(embedded mode), not both. Embedded mode runs Qdrant in-process "
+                "and needs no Docker; comment out 'url' to use it, or remove "
+                "'path' to keep talking to a server."
+            )
+        return self
+
+    @property
+    def is_embedded(self) -> bool:
+        return self.path is not None
+
+    @property
+    def location(self) -> str:
+        """Human-readable target of whichever mode is active."""
+        return str(self.path) if self.path is not None else self.url
 
 
 class VectorStoreConfig(BaseModel):
@@ -148,7 +226,7 @@ class HermesConfig(BaseModel):
     # grounded, cited context, not an answer composed for it (PLAN-HERMES §4).
     recall_synthesize_default: bool = False
     recall_top_k: int = 8
-    allow_write_back: bool = False          # gates endorse + remember (both faces)
+    allow_write_back: bool = False  # gates endorse + remember (both faces)
     # --- MCP server (Path B, optional portability) ------------------------
     mcp_enabled: bool = False
     mcp_transport: Literal["stdio", "http"] = "stdio"
@@ -158,8 +236,30 @@ class HermesConfig(BaseModel):
     mcp_auth_token_env: str = "MY_DAEMON_MCP_TOKEN"
 
 
+class MemoryConfig(BaseModel):
+    """Fingerprint recall — "you've been here before".
+
+    Injection and display toggle independently on purpose: enriching the
+    model's context and showing you the memory are different acts, and you
+    may want one without the other.
+    """
+
+    recall_enabled: bool = True
+    inject_into_context: bool = True
+    show_to_user: bool = True
+    min_score: float = 0.15
+    top_k: int = 3
+    lookback_days: int = 180
+    max_df_ratio: float = 0.25
+
+
 class FeedbackConfig(BaseModel):
     db_path: Path = Path("./data/feedback.db")
+    # Gates graph reinforcement from an *explicit* pick (a GUI click, `daemon
+    # select`). Separate from `hermes.allow_write_back`, which gates ambient
+    # capture and Hermes' implicit soft-reinforcement — pressing a button is
+    # not the same act as the daemon deciding to write on your behalf.
+    reinforce_enabled: bool = True
 
 
 class SnapshotConfig(BaseModel):
@@ -175,7 +275,29 @@ class SnapshotConfig(BaseModel):
     retention_days: int = 14
 
 
+class BackupConfig(BaseModel):
+    """Where `daemon backup` writes, and where `daemon restore` looks.
+
+    Deliberately *outside* ``./data``: a backup that lives inside the tree
+    `daemon reset` clears is not a backup. Vectors are never included — they
+    are re-derivable from the vault with `daemon ingest --full`, and excluding
+    them is what keeps a bundle small enough to actually be taken often.
+    """
+
+    dir: Path = Path("./backups")
+
+
 class ConsolidationConfig(BaseModel):
+    # --- Emergent themes (M-mem-7) --------------------------------------
+    cluster_themes: bool = True
+    min_cluster_size: int = 3
+    # Cosine above which a new cluster is judged the *same* theme as an
+    # existing one and inherits its id and label. Label stability matters more
+    # than partition stability.
+    theme_match_threshold: float = 0.60
+    # Only new clusters are named, so this bounds the nightly LLM spend.
+    max_new_themes_per_run: int = 5
+    theme_query_limit: int = 4000
     """Where M3 structural + weight-evolution reports persist.
 
     One subdirectory per snapshot id: ``<out_dir>/<snapshot_id>/structural.json``
@@ -198,6 +320,53 @@ class ConsolidationConfig(BaseModel):
     betweenness_sample_k: int = 200
 
 
+class RunConfig(BaseModel):
+    """`daemon run` — the foreground supervisor.
+
+    Three knobs, and each is a promise about latency:
+
+    * ``debounce_seconds`` — how long the vault must be *quiet* before an
+      incremental ingest runs. Not a rate limit: the timer restarts on every
+      new change, so a sync client rewriting a hundred files produces one
+      ingest after it finishes rather than one in the middle of it.
+    * ``consolidate_at`` — local wall-clock ``HH:MM`` for the nightly
+      consolidation. ``null`` turns it off. The job still obeys both writeback
+      gates (``agent.enabled`` and ``agent.observer_enabled``); with either
+      closed the supervisor logs the reason once and stops mentioning it.
+    * ``heartbeat_minutes`` — cadence of the "still alive" log line. ``0``
+      silences it.
+    """
+
+    debounce_seconds: float = 5.0
+    consolidate_at: str | None = "03:00"
+    heartbeat_minutes: float = 15.0
+
+    @property
+    def consolidate_time(self) -> time | None:
+        """``consolidate_at`` as a :class:`datetime.time`, or None when off."""
+        if self.consolidate_at is None or not self.consolidate_at.strip():
+            return None
+        try:
+            return datetime.strptime(self.consolidate_at.strip(), "%H:%M").time()
+        except ValueError as exc:
+            raise ValueError(
+                f"run.consolidate_at must be 24-hour 'HH:MM' (got {self.consolidate_at!r}); "
+                "set it to null to turn the nightly consolidation off."
+            ) from exc
+
+    @model_validator(mode="after")
+    def _validate(self) -> RunConfig:
+        # Parse at load time, not at 03:00 six weeks from now inside a
+        # background process whose log nobody is reading. The value is
+        # discarded; the parse is the point.
+        _ = self.consolidate_time
+        if self.debounce_seconds < 0:
+            raise ValueError("run.debounce_seconds must not be negative")
+        if self.heartbeat_minutes < 0:
+            raise ValueError("run.heartbeat_minutes must not be negative (0 disables it)")
+        return self
+
+
 class LoggingConfig(BaseModel):
     level: str = "INFO"
 
@@ -218,46 +387,123 @@ class Settings(BaseSettings):
     graph: GraphConfig = Field(default_factory=GraphConfig)
     retrieval: RetrievalConfig = Field(default_factory=RetrievalConfig)
     llm: LLMConfig = Field(default_factory=LLMConfig)
+    memory: MemoryConfig = Field(default_factory=MemoryConfig)
     feedback: FeedbackConfig = Field(default_factory=FeedbackConfig)
     snapshot: SnapshotConfig = Field(default_factory=SnapshotConfig)
+    backup: BackupConfig = Field(default_factory=BackupConfig)
     consolidation: ConsolidationConfig = Field(default_factory=ConsolidationConfig)
+    run: RunConfig = Field(default_factory=RunConfig)
     logging: LoggingConfig = Field(default_factory=LoggingConfig)
     agent: AgentConfig = Field(default_factory=AgentConfig)
     hermes: HermesConfig = Field(default_factory=HermesConfig)
 
     anthropic_api_key: str | None = None
 
-
-def _default_config_path() -> Path:
-    explicit = os.environ.get("MY_DAEMON_CONFIG")
-    if explicit:
-        return Path(explicit).expanduser()
-    return Path.cwd() / "config.yaml"
+    # The file `load_settings` actually resolved — the anchor every relative
+    # path in this object was made absolute against. None when a Settings was
+    # constructed programmatically (tests, library callers).
+    config_path: Path | None = None
 
 
-def load_settings(config_path: Path | None = None) -> Settings:
-    """Load settings from yaml (if present) and merge env overrides on top.
+class ConfigNotFoundError(FileNotFoundError):
+    """No ``config.yaml`` in any searched location.
 
-    Loads a project-local ``.env`` file first so ``ANTHROPIC_API_KEY`` (and any
-    other env-driven overrides) are honored without requiring the user to
-    ``export`` them in every shell.
+    Subclasses :class:`FileNotFoundError` so anything already catching that
+    keeps working, but it is a *typed* error the CLI can render as a one-line
+    refusal instead of a traceback — and, crucially, instead of the old silent
+    fall-through to defaults that let a scheduled job report success against a
+    vault that does not exist.
     """
 
-    # `.env` lives next to the config (project root by default). `override=False`
-    # means a value already in the real environment wins, which is what we want
-    # when the OS env var was set persistently via `setx` or shell profile.
+    def __init__(self, searched: list[Path]) -> None:
+        self.searched = list(searched)
+        locations = "\n".join(f"  - {p}" for p in self.searched)
+        super().__init__(
+            "no config.yaml found — run `daemon init` here, or "
+            "`daemon init --user` to create one in your user config directory.\n"
+            f"searched:\n{locations}"
+        )
+
+
+# qdrant-client's in-memory sentinel. Looks path-shaped, is not a path.
+_EMBEDDED_MEMORY = ":memory:"
+
+
+def _anchor(value: Path, root: Path) -> Path:
+    """Make one config-supplied path absolute.
+
+    ``~`` first (a user writing ``~/notes`` means their home, not a directory
+    literally named ``~`` under the config), then anchor anything still
+    relative to the config's own directory. Absolute paths pass through
+    untouched.
+    """
+    expanded = value.expanduser()
+    if expanded.is_absolute():
+        return expanded
+    return Path(os.path.normpath(root / expanded))
+
+
+def _annotation_allows_path(annotation: object) -> bool:
+    return annotation is Path or Path in get_args(annotation)
+
+
+def _anchor_model_paths(model: BaseModel, root: Path) -> None:
+    """Recursively rewrite every relative path field to be absolute.
+
+    Done on the *constructed* Settings rather than on the raw yaml so that
+    ``MY_DAEMON_*`` env overrides get anchored too — an override is just as
+    likely to be relative, and just as broken from cron if it isn't resolved.
+
+    ``vector_store.qdrant.path`` is annotated ``Path | str | None`` and pydantic
+    keeps a yaml string as a ``str``, hence the annotation check: it is a real
+    path and has to be anchored, while ``:memory:`` must not be.
+    """
+    for name, field in type(model).model_fields.items():
+        value = getattr(model, name)
+        if isinstance(value, BaseModel):
+            _anchor_model_paths(value, root)
+        elif isinstance(value, Path):
+            setattr(model, name, _anchor(value, root))
+        elif (
+            isinstance(value, str)
+            and value != _EMBEDDED_MEMORY
+            and _annotation_allows_path(field.annotation)
+        ):
+            setattr(model, name, str(_anchor(Path(value), root)))
+
+
+def load_settings(config_path: Path | str | None = None) -> Settings:
+    """Resolve a config file, load it, and merge env overrides on top.
+
+    Search order (first hit wins, see :func:`my_daemon.paths.config_search_paths`):
+    ``config_path`` / ``--config`` → ``$MY_DAEMON_CONFIG`` → ``./config.yaml``
+    → the user config dir.
+
+    Raises :class:`ConfigNotFoundError` when none of them exist. Every relative
+    path in the result is anchored to the resolved config's directory.
+    """
+    searched = config_search_paths(config_path)
+    path = find_config(config_path)
+    if path is None:
+        raise ConfigNotFoundError(searched)
+
+    root = Path(os.path.abspath(path)).parent
+
+    # `.env` lives next to the config. `override=False` means a value already in
+    # the real environment wins, which is what we want when the OS env var was
+    # set persistently via `setx` or a shell profile. The CWD copy is still
+    # honored second so an interactive shell in a checkout keeps working when
+    # the active config lives elsewhere.
+    load_dotenv(dotenv_path=root / ".env", override=False)
     load_dotenv(dotenv_path=Path.cwd() / ".env", override=False)
 
-    path = config_path or _default_config_path()
-    data: dict = {}
-    if path.is_file():
-        with path.open("r", encoding="utf-8") as fh:
-            data = yaml.safe_load(fh) or {}
-
-    if "vault" in data and "path" in data["vault"]:
-        data["vault"]["path"] = str(Path(data["vault"]["path"]).expanduser())
+    with path.open("r", encoding="utf-8") as fh:
+        data = yaml.safe_load(fh) or {}
 
     # API key is environment-only — never read from yaml, never written back.
     data["anthropic_api_key"] = os.environ.get("ANTHROPIC_API_KEY")
 
-    return Settings(**data)
+    settings = Settings(**data)
+    _anchor_model_paths(settings, root)
+    settings.config_path = path
+    return settings

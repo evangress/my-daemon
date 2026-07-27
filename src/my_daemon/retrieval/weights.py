@@ -30,23 +30,23 @@ DEFAULT_HALF_LIFE_DAYS = 30
 
 @dataclass
 class ReinforcementResult:
-    path: list[str]            # node ids on the reinforced path (start → end)
-    edges_reinforced: int      # count of (u, v) edge instances bumped
-    total_delta: float         # sum of weight increments applied
+    path: list[str]  # node ids on the reinforced path (start → end)
+    edges_reinforced: int  # count of (u, v) edge instances bumped
+    total_delta: float  # sum of weight increments applied
 
 
 @dataclass
 class DecayResult:
     edges_visited: int
-    edges_decayed: int         # only those whose weight changed by > epsilon
-    total_delta: float         # sum of |weight - new_weight| over decayed edges
+    edges_decayed: int  # only those whose weight changed by > epsilon
+    total_delta: float  # sum of |weight - new_weight| over decayed edges
 
 
 def apply_selection(
     graph_store: GraphStore,
     *,
-    seed_note_path: str,
-    selected_note_path: str,
+    seed_note_uuid: str,
+    selected_note_uuid: str,
     alpha: float = DEFAULT_ALPHA,
     hop_decay: float = DEFAULT_HOP_DECAY,
     ceiling: float = DEFAULT_CEILING,
@@ -63,7 +63,7 @@ def apply_selection(
         now = datetime.now(UTC)
     iso_now = now.isoformat()
 
-    path = graph_store.shortest_note_path(seed_note_path, selected_note_path)
+    path = graph_store.shortest_note_path(seed_note_uuid, selected_note_uuid)
     if not path or len(path) < 2:
         return ReinforcementResult(path=path or [], edges_reinforced=0, total_delta=0.0)
 
@@ -72,7 +72,7 @@ def apply_selection(
     total_delta = 0.0
 
     for hop_index, (u, v) in enumerate(zip(path[:-1], path[1:], strict=True)):
-        bump = alpha * (hop_decay ** hop_index)
+        bump = alpha * (hop_decay**hop_index)
         # The graph is a MultiDiGraph: there can be parallel edges (e.g. a tag
         # edge AND a wikilink between the same nodes if a note both names and
         # tags another), and the original direction may be either u→v or v→u

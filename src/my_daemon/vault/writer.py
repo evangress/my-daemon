@@ -48,6 +48,7 @@ def is_writable(
     vault_root: Path,
     agent_folder: str = "Agent",
     grace_minutes: int = 30,
+    allow_agent_folder: bool = False,
 ) -> tuple[bool, str]:
     """Return ``(ok, reason)`` for whether this file may be modified by the daemon.
 
@@ -56,6 +57,11 @@ def is_writable(
       2. Path must not be inside ``<vault_root>/<agent_folder>``.
       3. Frontmatter must not contain ``daemon: ignore``.
       4. mtime must be older than ``grace_minutes`` (don't collide with a save in progress).
+
+    ``allow_agent_folder`` relaxes gate 2 only. That gate exists to stop the
+    daemon rewriting its own generated *prose*; stamping an identity key into
+    its own files is a different act, and the observer letters need to be
+    addressable like any other note. Gates 1, 3 and 4 always apply.
     """
     try:
         resolved = note_path.resolve(strict=True)
@@ -68,7 +74,7 @@ def is_writable(
         return False, f"path escapes vault: {resolved}"
 
     rel_parts = resolved.relative_to(root_resolved).parts
-    if rel_parts and rel_parts[0].lower() == agent_folder.lower():
+    if not allow_agent_folder and rel_parts and rel_parts[0].lower() == agent_folder.lower():
         return False, f"inside {agent_folder}/ (daemon-owned)"
 
     try:
@@ -83,6 +89,261 @@ def is_writable(
         return False, f"modified within last {grace_minutes} minutes — grace period"
 
     return True, "ok"
+
+
+# ---------------------------------------------------------------------------
+# Textual single-key frontmatter editing
+#
+# A `frontmatter.loads`/`dumps` round-trip cannot be used to change one key:
+# PyYAML reorders keys, strips comments, requotes strings, expands flow-style
+# lists into block style, re-renders dates, and normalizes line endings. That is
+# acceptable nowhere, and catastrophic for a migration that touches every note
+# in the vault. These helpers change exactly one line and leave every other byte
+# of the file alone.
+# ---------------------------------------------------------------------------
+
+_BOM = "﻿"
+_FENCE = ("---", "...")
+
+
+def detect_newline(text: str) -> str:
+    """The file's dominant line ending, so inserted lines match their neighbours."""
+    crlf = text.count("\r\n")
+    lf = text.count("\n") - crlf
+    return "\r\n" if crlf > lf else "\n"
+
+
+def _frontmatter_bounds(lines: list[str]) -> tuple[int, int] | None:
+    """``(first_key_index, closing_fence_index)`` of the frontmatter block.
+
+    The opening fence only counts on the very first line — a ``---`` further
+    down is a horizontal rule, not frontmatter. Returns ``None`` when there is
+    no block, or when it is never closed.
+    """
+
+    if not lines or lines[0].rstrip("\r\n") != "---":
+        return None
+    for i in range(1, len(lines)):
+        if lines[i].rstrip("\r\n") in _FENCE:
+            return 1, i
+    return None
+
+
+def _key_pattern(key: str) -> re.Pattern[str]:
+    # `uuid\s*:` deliberately does not match `uuid_source:`.
+    return re.compile(rf"^\s*{re.escape(key)}\s*:")
+
+
+def _read_for_edit(note_path: Path) -> tuple[str, list[str], str]:
+    """``(bom, lines_with_endings, dominant_newline)``.
+
+    Reads with ``newline=""`` so universal-newline mode does *not* silently
+    translate CRLF to LF — that translation happens on read, not on write, and
+    would turn every edit to a Windows-synced vault into a whole-file diff.
+    """
+    with note_path.open("r", encoding="utf-8", newline="") as fh:
+        raw = fh.read()
+    bom = ""
+    if raw.startswith(_BOM):
+        bom, raw = _BOM, raw[len(_BOM) :]
+    return bom, raw.splitlines(keepends=True), detect_newline(raw)
+
+
+def set_frontmatter_key_textual(
+    note_path: Path,
+    key: str,
+    value: str,
+    *,
+    vault_root: Path,
+    agent_folder: str = "Agent",
+    allow_agent_folder: bool = False,
+    grace_minutes: int = 2,
+) -> WriteResult:
+    """Insert or replace a single scalar ``key: value`` line in the frontmatter.
+
+    Everything outside that one line is preserved byte-for-byte, including
+    comments, key order, quoting style, and line endings. A note with no
+    frontmatter gains a minimal block. New keys go at the end of the block —
+    the least surprising diff.
+
+    ``value`` is written bare, so it must be YAML-safe as-is (a canonical UUID
+    is). This is not a general-purpose YAML writer.
+    """
+
+    ok, reason = is_writable(
+        note_path,
+        vault_root=vault_root,
+        agent_folder=agent_folder,
+        grace_minutes=grace_minutes,
+        allow_agent_folder=allow_agent_folder,
+    )
+    if not ok:
+        return WriteResult(path=note_path, changed=False, reason=reason)
+
+    bom, lines, nl = _read_for_edit(note_path)
+    new_text = f"{key}: {value}"
+    bounds = _frontmatter_bounds(lines)
+
+    if bounds is None:
+        lines = [f"---{nl}", f"{new_text}{nl}", f"---{nl}", *lines]
+    else:
+        first, close = bounds
+        pattern = _key_pattern(key)
+        for i in range(first, close):
+            if not pattern.match(lines[i]):
+                continue
+            current = lines[i].split(":", 1)[1].strip().strip("'\"")
+            if current == value:
+                return WriteResult(path=note_path, changed=False, reason="already set")
+            body = lines[i].rstrip("\r\n")
+            ending = lines[i][len(body) :] or nl
+            lines[i] = f"{new_text}{ending}"
+            break
+        else:
+            lines.insert(close, f"{new_text}{nl}")
+
+    _atomic_write_text(note_path, bom + "".join(lines))
+    return WriteResult(path=note_path, changed=True, reason="ok")
+
+
+def add_frontmatter_list_values_textual(
+    note_path: Path,
+    key: str,
+    values: list[str],
+    *,
+    vault_root: Path,
+    agent_folder: str = "Agent",
+    allow_agent_folder: bool = False,
+    grace_minutes: int = 2,
+) -> WriteResult:
+    """Append values to a frontmatter list, preserving the style already there.
+
+    Flow style stays flow, block style stays block (at its own indentation), a
+    scalar becomes a flow list, and a missing key is created. Everything else
+    in the file is untouched — which is the whole point, since the alternative
+    (`frontmatter.dumps`) rewrites the entire document.
+    """
+
+    ok, reason = is_writable(
+        note_path,
+        vault_root=vault_root,
+        agent_folder=agent_folder,
+        grace_minutes=grace_minutes,
+        allow_agent_folder=allow_agent_folder,
+    )
+    if not ok:
+        return WriteResult(path=note_path, changed=False, reason=reason)
+
+    wanted = [v.strip().lstrip("#") for v in values if v and v.strip()]
+    if not wanted:
+        return WriteResult(path=note_path, changed=False, reason="no values")
+
+    bom, lines, nl = _read_for_edit(note_path)
+    bounds = _frontmatter_bounds(lines)
+
+    if bounds is None:
+        block = [f"---{nl}", f"{key}: [{', '.join(wanted)}]{nl}", f"---{nl}"]
+        _atomic_write_text(note_path, bom + "".join(block + lines))
+        return WriteResult(path=note_path, changed=True, reason="ok")
+
+    first, close = bounds
+    pattern = _key_pattern(key)
+    index = next((i for i in range(first, close) if pattern.match(lines[i])), None)
+
+    if index is None:
+        lines.insert(close, f"{key}: [{', '.join(wanted)}]{nl}")
+        _atomic_write_text(note_path, bom + "".join(lines))
+        return WriteResult(path=note_path, changed=True, reason="ok")
+
+    body = lines[index].rstrip("\r\n")
+    ending = lines[index][len(body) :] or nl
+    inline = body.split(":", 1)[1].strip()
+
+    if inline.startswith("[") and inline.endswith("]"):
+        existing = [v.strip() for v in inline[1:-1].split(",") if v.strip()]
+        additions = [v for v in wanted if v not in existing]
+        if not additions:
+            return WriteResult(path=note_path, changed=False, reason="no new values")
+        merged = ", ".join([*existing, *additions])
+        lines[index] = f"{key}: [{merged}]{ending}"
+    elif inline:
+        # A scalar value. Promote to a flow list rather than restructuring the
+        # file into block style.
+        existing = [inline.strip("'\"")]
+        additions = [v for v in wanted if v not in existing]
+        if not additions:
+            return WriteResult(path=note_path, changed=False, reason="no new values")
+        lines[index] = f"{key}: [{', '.join([*existing, *additions])}]{ending}"
+    else:
+        # Block style: `key:` followed by `- value` entries.
+        entry = re.compile(r"^(\s*)-\s*(.*?)\s*$")
+        last, indent, existing = index, "  ", []
+        for i in range(index + 1, close):
+            match = entry.match(lines[i].rstrip("\r\n"))
+            if not match:
+                break
+            indent, last = match.group(1), i
+            existing.append(match.group(2).strip("'\""))
+        additions = [v for v in wanted if v not in existing]
+        if not additions:
+            return WriteResult(path=note_path, changed=False, reason="no new values")
+        for offset, value in enumerate(additions):
+            lines.insert(last + 1 + offset, f"{indent}- {value}{nl}")
+
+    _atomic_write_text(note_path, bom + "".join(lines))
+    return WriteResult(path=note_path, changed=True, reason="ok")
+
+
+def remove_frontmatter_key_textual(
+    note_path: Path,
+    key: str,
+    *,
+    vault_root: Path,
+    agent_folder: str = "Agent",
+    allow_agent_folder: bool = False,
+    grace_minutes: int = 2,
+    drop_empty_block: bool = False,
+) -> WriteResult:
+    """Delete a single ``key:`` line from the frontmatter. The rollback path.
+
+    Surgical by design: it never restores a body, so it stays safe to run on a
+    file the user has edited since the key was written.
+
+    ``drop_empty_block`` also removes the frontmatter fences when the deletion
+    empties them — what rollback needs, so a note that had no frontmatter
+    before the migration is left with none after it.
+    """
+
+    ok, reason = is_writable(
+        note_path,
+        vault_root=vault_root,
+        agent_folder=agent_folder,
+        grace_minutes=grace_minutes,
+        allow_agent_folder=allow_agent_folder,
+    )
+    if not ok:
+        return WriteResult(path=note_path, changed=False, reason=reason)
+
+    bom, lines, _nl = _read_for_edit(note_path)
+    bounds = _frontmatter_bounds(lines)
+    if bounds is None:
+        return WriteResult(path=note_path, changed=False, reason="no frontmatter")
+
+    first, close = bounds
+    pattern = _key_pattern(key)
+    for i in range(first, close):
+        if pattern.match(lines[i]):
+            del lines[i]
+            if drop_empty_block and close - first == 1:
+                # That was the only key — remove the fences too. Indices shifted
+                # by one when the key line went, so the closing fence is now at
+                # `first` and the opening is at 0.
+                del lines[first]
+                del lines[0]
+            _atomic_write_text(note_path, bom + "".join(lines))
+            return WriteResult(path=note_path, changed=True, reason="ok")
+
+    return WriteResult(path=note_path, changed=False, reason=f"no {key}: key")
 
 
 def snapshot(note_path: Path, *, vault_root: Path, agent_folder: str = "Agent") -> Path:
@@ -241,7 +502,7 @@ def insert_wikilinks(
             if _in_any_span(m.start(), spans):
                 continue
             insertion = f"[[{target}|{m.group(0)}]]"
-            body = body[: m.start()] + insertion + body[m.end():]
+            body = body[: m.start()] + insertion + body[m.end() :]
             break  # first match only — strict per plan
 
     if body == original_body:
@@ -250,7 +511,9 @@ def insert_wikilinks(
     snap = snapshot(note_path, vault_root=vault_root, agent_folder=agent_folder)
     post.content = body
     _atomic_write_text(note_path, _serialize(post, had_frontmatter=had_frontmatter))
-    return WriteResult(path=note_path, changed=True, reason=f"inserted {len(links)} wikilink(s)", snapshot=snap)
+    return WriteResult(
+        path=note_path, changed=True, reason=f"inserted {len(links)} wikilink(s)", snapshot=snap
+    )
 
 
 def add_tags(
@@ -261,30 +524,19 @@ def add_tags(
     agent_folder: str = "Agent",
     grace_minutes: int = 30,
 ) -> WriteResult:
-    """Extend the frontmatter ``tags`` list with ``tags``, preserving original ordering.
+    """Extend the frontmatter ``tags:`` list.
 
-    Creates the ``tags`` block if absent. Strips leading ``#`` from each tag.
-    Never writes inline ``#tag`` markers — frontmatter is the safer surface.
+    Delegates to :func:`add_frontmatter_list_values_textual`. It used to
+    round-trip the document through PyYAML, which collapsed CRLF, expanded
+    flow-style lists into block style, deleted comments, and dropped the
+    trailing newline — on every ``daemon link`` run.
     """
-    ok, reason = is_writable(
-        note_path, vault_root=vault_root, agent_folder=agent_folder, grace_minutes=grace_minutes
+
+    return add_frontmatter_list_values_textual(
+        note_path,
+        "tags",
+        tags,
+        vault_root=vault_root,
+        agent_folder=agent_folder,
+        grace_minutes=grace_minutes,
     )
-    if not ok:
-        return WriteResult(path=note_path, changed=False, reason=reason)
-
-    text = note_path.read_text(encoding="utf-8")
-    post = frontmatter.loads(text)
-    existing_raw = post.metadata.get("tags") or []
-    if isinstance(existing_raw, str):
-        existing_raw = [existing_raw]
-    existing = [str(t).lstrip("#") for t in existing_raw]
-
-    additions = [t.lstrip("#") for t in tags if t.lstrip("#") not in set(existing)]
-    if not additions:
-        return WriteResult(path=note_path, changed=False, reason="no new tags")
-
-    post.metadata["tags"] = existing + additions
-    snap = snapshot(note_path, vault_root=vault_root, agent_folder=agent_folder)
-    # add_tags always writes frontmatter (it's the whole point) — force serialization.
-    _atomic_write_text(note_path, _serialize(post, had_frontmatter=True))
-    return WriteResult(path=note_path, changed=True, reason=f"added tags: {additions}", snapshot=snap)

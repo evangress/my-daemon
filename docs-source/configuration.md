@@ -2,10 +2,54 @@
 
 Every knob the daemon exposes lives in `config.yaml`. Defaults come from
 `src/my_daemon/config.py`; values in `config.yaml` override defaults; env
-vars (`MY_DAEMON_<SECTION>__<KEY>`) override the YAML.
+vars (`MY_DAEMON_<SECTION>__<KEY>`) fill in anything the YAML leaves unset.
 
 The Anthropic API key is **never** read from `config.yaml`. It comes from the
-environment (or the project-local `.env`, auto-loaded on startup).
+environment (or the `.env` beside the config, auto-loaded on startup).
+
+## Where `config.yaml` comes from
+
+The first of these that exists wins:
+
+| # | Location | For |
+|---|---|---|
+| 1 | `daemon --config PATH` | One-off, and schedulers |
+| 2 | `$MY_DAEMON_CONFIG` | The same, from a crontab or a service unit |
+| 3 | `./config.yaml` | Working in a checkout — unchanged from day one |
+| 4 | `~/.config/my-daemon/config.yaml`<br>(`$XDG_CONFIG_HOME` honored; `%APPDATA%\my-daemon\config.yaml` on Windows) | An installed daemon. Create it with `daemon init --user` |
+
+Naming a file (1 or 2) is *exclusive*: if that file does not exist the daemon
+stops rather than quietly resolving to a different one, because a typo that
+lands you on someone else's config is worse than a typo that fails.
+
+**If none of them exists, the daemon refuses.** Every state-touching command
+exits 1 and prints the list above with real paths filled in. It does not fall
+back to built-in defaults — those describe a vault nobody owns, and a
+scheduled job running against them would look like it was working.
+`daemon version`, `daemon init` and `daemon setup` need no config.
+
+## Relative paths follow the config, not your shell
+
+Every relative path in a config — `graph.path`, `graph.manifest_path`,
+`feedback.db_path`, `snapshot.dir`, `consolidation.out_dir`,
+`embeddings.cache_folder`, `vector_store.qdrant.path`, `vault.path` — is
+resolved against **the directory the config file is in**, at load time.
+
+A config at `/home/evan/dev/my-daemon/config.yaml` that says
+`./data/graph.gpickle` always means `/home/evan/dev/my-daemon/data/graph.gpickle`
+— from that directory, from `$HOME` under cron, from `system32` under Windows
+Task Scheduler. Your one daemon stays one daemon no matter where you launch it.
+
+- Absolute paths pass through untouched.
+- `~` expands to your home directory (it is not treated as a relative path).
+- `:memory:` for `vector_store.qdrant.path` is a mode, not a path, and is left
+  alone.
+- Paths supplied via `MY_DAEMON_*` env vars are anchored the same way.
+- The `.env` read for `ANTHROPIC_API_KEY` is the one beside the config (the
+  copy in your current directory is still honored as a fallback).
+
+`daemon init --user` therefore puts state under `~/.config/my-daemon/data/`.
+If you want it somewhere else, give those keys absolute paths.
 
 ## Section by section
 
@@ -60,6 +104,21 @@ embeddings:
 
 ### `vector_store`
 
+Qdrant runs in one of two modes, and the config picks which.
+
+**Embedded (default — no Docker).** Qdrant runs in-process against a local
+folder:
+
+```yaml
+vector_store:
+  backend: qdrant
+  qdrant:
+    path: ./data/qdrant-local
+    collection: chunks
+```
+
+**Server.** Point at a running Qdrant (`docker compose up -d qdrant`):
+
 ```yaml
 vector_store:
   backend: qdrant
@@ -71,8 +130,28 @@ vector_store:
 | Key | Default | Notes |
 |---|---|---|
 | `backend` | `qdrant` | Only backend supported. |
-| `qdrant.url` | `http://localhost:6333` | HTTP endpoint. The Docker compose service binds here. |
+| `qdrant.path` | unset | Set it to use **embedded** mode: a directory (persisted across restarts), or the literal `:memory:` for a throwaway store. |
+| `qdrant.url` | `http://localhost:6333` | **Server** mode endpoint. The Docker compose service binds here. Only used when `path` is unset. |
 | `qdrant.collection` | `chunks` | Collection name. |
+
+Setting **both** `path` and `url` is a validation error — the daemon will not
+guess which store your vectors should land in.
+
+**Which to use.** Embedded needs no Docker and is the right default for a
+personal vault, but it is *single-process*: exactly one daemon may hold the
+folder at a time (a second one fails with a clear "already open in another
+process" error rather than corrupting anything), and it filters payloads in
+Python instead of using real indexes. Move to the server when you want the GUI,
+CLI and Hermes open at once, or when the vault is large enough that filtered
+search latency shows.
+
+Retrieval behaves identically in both modes, including hybrid dense+sparse RRF
+fusion — the embedded engine emulates the same Query API server-side path.
+
+The two on-disk layouts are **not** interchangeable: switching modes means
+re-running `daemon ingest --full`. `./data/qdrant/` is the docker server's
+storage mount; embedded mode deliberately uses a different folder so they can
+coexist.
 
 ### `graph`
 
@@ -168,6 +247,34 @@ feedback:
 | Key | Default | Notes |
 |---|---|---|
 | `db_path` | `./data/feedback.db` | SQLite file. Holds both the `feedback` table (every query) and the three `agent_*_runs` state tables. One file to back up. |
+
+### `run`
+
+The foreground supervisor, `daemon run`. See
+[Background Agents → Running as a service](background-agents.md#running-as-a-service).
+
+```yaml
+run:
+  debounce_seconds: 5
+  consolidate_at: "03:00"
+  heartbeat_minutes: 15
+```
+
+| Key | Default | Notes |
+|---|---|---|
+| `debounce_seconds` | `5` | Seconds of *quiet* before an incremental ingest fires. Not a rate limit — the timer restarts on every new change, so a sync client rewriting a hundred notes produces one ingest after it settles rather than one in the middle of it. `0` ingests on the next tick. |
+| `consolidate_at` | `"03:00"` | Local wall-clock time for the nightly consolidation, 24-hour `HH:MM`. `null` turns it off. Parsed at config-load time, so a typo fails when you start the daemon, not at 03:00 six weeks later. |
+| `heartbeat_minutes` | `15` | Cadence of the "still alive" log line. `0` silences it. |
+
+The nightly job still obeys both writeback gates: it runs only when
+`agent.enabled` **and** `agent.observer_enabled` are true. With either closed,
+the supervisor logs the reason once and then stops mentioning it.
+
+Scheduling is **DST-naive on purpose**: `consolidate_at` is the next local
+wall-clock occurrence of that time, and one calendar day is added once it has
+passed. Across a DST boundary two runs are therefore 23 or 25 hours apart. For
+a nightly pass over a personal vault, that beats depending on a timezone
+database and a cron parser.
 
 ### `logging`
 

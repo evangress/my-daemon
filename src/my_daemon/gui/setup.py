@@ -24,24 +24,19 @@ from tkinter import filedialog, ttk
 import yaml
 from dotenv import set_key
 
-from my_daemon.paths import log_path
+from my_daemon.paths import CONFIG_FILENAME, find_config, log_path
 
 # Brand palette — hex approximations of the OKLCH values from THEME.md.
 # Tkinter doesn't support oklch(); these are the closest sRGB equivalents.
-BG = "#16162A"          # deep indigo background
-SURFACE = "#1F1F32"     # raised panel
-INK = "#EEEAE0"         # warm near-white
-INK_MUTE = "#A8A39A"    # softened body text
-VIOLET = "#A86CFF"      # daemon — primary CTA
-CYAN = "#5BCFD8"        # synthesis
-GOLD = "#E2B27E"        # human spark — focus / save success
-RULE = "#3A3A55"        # hairline borders
+BG = "#16162A"  # deep indigo background
+SURFACE = "#1F1F32"  # raised panel
+INK = "#EEEAE0"  # warm near-white
+INK_MUTE = "#A8A39A"  # softened body text
+VIOLET = "#A86CFF"  # daemon — primary CTA
+CYAN = "#5BCFD8"  # synthesis
+GOLD = "#E2B27E"  # human spark — focus / save success
+RULE = "#3A3A55"  # hairline borders
 ERROR = "#E37070"
-
-PROJECT_ROOT = Path.cwd()
-CONFIG_PATH = PROJECT_ROOT / "config.yaml"
-CONFIG_EXAMPLE = PROJECT_ROOT / "config.example.yaml"
-DOTENV_PATH = PROJECT_ROOT / ".env"
 
 ENV_KEY = "ANTHROPIC_API_KEY"
 
@@ -50,9 +45,39 @@ REFLECT_TASK_NAME = "MyDaemonReflect"
 REFLECT_TASK_TIME = "03:00"
 
 
+def config_path() -> Path:
+    """The config this window edits.
+
+    Resolved through the same search order the daemon itself uses, so the
+    window edits the file the daemon will read. Only when nothing exists
+    anywhere does it fall back to the current directory — i.e. the file
+    `daemon init` would have written.
+
+    Deliberately a function, not an import-time constant: the old
+    `PROJECT_ROOT = Path.cwd()` meant `daemon setup` wrote config.yaml into
+    whatever directory the launcher happened to start in.
+    """
+    found = find_config()
+    return found if found is not None else Path.cwd() / CONFIG_FILENAME
+
+
+def project_root() -> Path:
+    """Directory the config lives in — the anchor for its relative paths."""
+    return config_path().parent
+
+
+def _config_example() -> Path:
+    return project_root() / "config.example.yaml"
+
+
+def _dotenv_path() -> Path:
+    """`.env` sits beside the config, which is where `load_settings` reads it."""
+    return project_root() / ".env"
+
+
 def _load_yaml() -> dict:
     """Read config.yaml; fall back to config.example.yaml; finally an empty dict."""
-    for path in (CONFIG_PATH, CONFIG_EXAMPLE):
+    for path in (config_path(), _config_example()):
         if path.is_file():
             with path.open("r", encoding="utf-8") as fh:
                 return yaml.safe_load(fh) or {}
@@ -63,7 +88,9 @@ def _save_vault_path(vault_path: str) -> None:
     """Persist vault.path to config.yaml, preserving other settings."""
     data = _load_yaml()
     data.setdefault("vault", {})["path"] = vault_path
-    with CONFIG_PATH.open("w", encoding="utf-8") as fh:
+    target = config_path()
+    target.parent.mkdir(parents=True, exist_ok=True)
+    with target.open("w", encoding="utf-8") as fh:
         yaml.safe_dump(data, fh, sort_keys=False, default_flow_style=False)
 
 
@@ -75,8 +102,10 @@ def _persist_api_key(api_key: str) -> tuple[bool, str]:
     so anything launched from this process sees it without a restart.
     """
     # .env — handles quoting/escaping correctly.
-    DOTENV_PATH.touch(exist_ok=True)
-    set_key(str(DOTENV_PATH), ENV_KEY, api_key, quote_mode="never")
+    dotenv_path = _dotenv_path()
+    dotenv_path.parent.mkdir(parents=True, exist_ok=True)
+    dotenv_path.touch(exist_ok=True)
+    set_key(str(dotenv_path), ENV_KEY, api_key, quote_mode="never")
 
     os.environ[ENV_KEY] = api_key
 
@@ -91,7 +120,10 @@ def _persist_api_key(api_key: str) -> tuple[bool, str]:
                 text=True,
                 creationflags=0x08000000,
             )
-            return True, f"Saved. {ENV_KEY} is set as a Windows user env var (new shells will see it)."
+            return (
+                True,
+                f"Saved. {ENV_KEY} is set as a Windows user env var (new shells will see it).",
+            )
         except (subprocess.CalledProcessError, FileNotFoundError) as exc:
             return False, f"Wrote .env, but `setx` failed: {exc}"
 
@@ -103,7 +135,7 @@ def _persist_api_key(api_key: str) -> tuple[bool, str]:
 
 def _daemon_exe_path() -> Path:
     """Resolve the bundled daemon entry point inside the project's venv."""
-    return PROJECT_ROOT / ".venv" / "Scripts" / "daemon.exe"
+    return project_root() / ".venv" / "Scripts" / "daemon.exe"
 
 
 def _reflect_task_exists() -> bool:
@@ -111,9 +143,23 @@ def _reflect_task_exists() -> bool:
         return False
     res = subprocess.run(
         ["schtasks", "/Query", "/TN", REFLECT_TASK_NAME],
-        capture_output=True, text=True, creationflags=0x08000000,
+        capture_output=True,
+        text=True,
+        creationflags=0x08000000,
     )
     return res.returncode == 0
+
+
+def reflect_task_command(exe: Path, cfg: Path) -> str:
+    """The `/TR` string for the scheduled reflect job.
+
+    A Windows scheduled task starts in `system32`, and `schtasks` has no
+    working-directory switch outside XML task definitions. So the working
+    directory is made irrelevant instead: `--config` names the file
+    absolutely, and every relative state path in it anchors to *its* directory,
+    not the process CWD. That also puts `.env` (the API key) back in scope.
+    """
+    return f'"{exe}" --config "{cfg}" reflect'
 
 
 def _schedule_reflect_task() -> tuple[bool, str]:
@@ -126,16 +172,27 @@ def _schedule_reflect_task() -> tuple[bool, str]:
     try:
         subprocess.run(
             [
-                "schtasks", "/Create",
-                "/SC", "DAILY",
-                "/TN", REFLECT_TASK_NAME,
-                "/TR", f'"{exe}" reflect',
-                "/ST", REFLECT_TASK_TIME,
+                "schtasks",
+                "/Create",
+                "/SC",
+                "DAILY",
+                "/TN",
+                REFLECT_TASK_NAME,
+                "/TR",
+                reflect_task_command(exe, config_path()),
+                "/ST",
+                REFLECT_TASK_TIME,
                 "/F",
             ],
-            check=True, capture_output=True, text=True, creationflags=0x08000000,
+            check=True,
+            capture_output=True,
+            text=True,
+            creationflags=0x08000000,
         )
-        return True, f"Scheduled `daemon reflect` daily at {REFLECT_TASK_TIME} (task: {REFLECT_TASK_NAME})."
+        return (
+            True,
+            f"Scheduled `daemon reflect` daily at {REFLECT_TASK_TIME} (task: {REFLECT_TASK_NAME}).",
+        )
     except (subprocess.CalledProcessError, FileNotFoundError) as exc:
         return False, f"schtasks /Create failed: {exc}"
 
@@ -146,7 +203,10 @@ def _unschedule_reflect_task() -> tuple[bool, str]:
     try:
         subprocess.run(
             ["schtasks", "/Delete", "/TN", REFLECT_TASK_NAME, "/F"],
-            check=True, capture_output=True, text=True, creationflags=0x08000000,
+            check=True,
+            capture_output=True,
+            text=True,
+            creationflags=0x08000000,
         )
         return True, f"Removed scheduled task {REFLECT_TASK_NAME}."
     except (subprocess.CalledProcessError, FileNotFoundError) as exc:
@@ -158,42 +218,63 @@ def _style_widgets(root: tk.Tk) -> ttk.Style:
     style = ttk.Style(root)
     style.theme_use("clam")
 
-    style.configure(".", background=BG, foreground=INK, fieldbackground=SURFACE,
-                    bordercolor=RULE, lightcolor=BG, darkcolor=BG)
+    style.configure(
+        ".",
+        background=BG,
+        foreground=INK,
+        fieldbackground=SURFACE,
+        bordercolor=RULE,
+        lightcolor=BG,
+        darkcolor=BG,
+    )
     style.configure("TFrame", background=BG)
     style.configure("TLabel", background=BG, foreground=INK, font=("Georgia", 11))
-    style.configure("Eyebrow.TLabel", background=BG, foreground=INK_MUTE,
-                    font=("Courier", 9))
-    style.configure("Heading.TLabel", background=BG, foreground=INK,
-                    font=("Georgia", 18, "italic"))
-    style.configure("Status.TLabel", background=BG, foreground=INK_MUTE,
-                    font=("Georgia", 10, "italic"))
-    style.configure("Error.TLabel", background=BG, foreground=ERROR,
-                    font=("Georgia", 10, "italic"))
-    style.configure("Success.TLabel", background=BG, foreground=GOLD,
-                    font=("Georgia", 10, "italic"))
+    style.configure("Eyebrow.TLabel", background=BG, foreground=INK_MUTE, font=("Courier", 9))
+    style.configure("Heading.TLabel", background=BG, foreground=INK, font=("Georgia", 18, "italic"))
+    style.configure(
+        "Status.TLabel", background=BG, foreground=INK_MUTE, font=("Georgia", 10, "italic")
+    )
+    style.configure("Error.TLabel", background=BG, foreground=ERROR, font=("Georgia", 10, "italic"))
+    style.configure(
+        "Success.TLabel", background=BG, foreground=GOLD, font=("Georgia", 10, "italic")
+    )
 
-    style.configure("TEntry", fieldbackground=SURFACE, foreground=INK,
-                    bordercolor=RULE, insertcolor=GOLD, padding=6,
-                    relief="flat")
-    style.map("TEntry",
-              bordercolor=[("focus", GOLD)],
-              fieldbackground=[("focus", SURFACE)])
+    style.configure(
+        "TEntry",
+        fieldbackground=SURFACE,
+        foreground=INK,
+        bordercolor=RULE,
+        insertcolor=GOLD,
+        padding=6,
+        relief="flat",
+    )
+    style.map("TEntry", bordercolor=[("focus", GOLD)], fieldbackground=[("focus", SURFACE)])
 
-    style.configure("TButton", background=SURFACE, foreground=INK,
-                    bordercolor=RULE, padding=(14, 8), relief="flat",
-                    font=("Georgia", 10))
-    style.map("TButton",
-              background=[("active", "#2A2A44"), ("pressed", "#2A2A44")],
-              foreground=[("active", INK), ("pressed", INK)])
+    style.configure(
+        "TButton",
+        background=SURFACE,
+        foreground=INK,
+        bordercolor=RULE,
+        padding=(14, 8),
+        relief="flat",
+        font=("Georgia", 10),
+    )
+    style.map(
+        "TButton",
+        background=[("active", "#2A2A44"), ("pressed", "#2A2A44")],
+        foreground=[("active", INK), ("pressed", INK)],
+    )
 
-    style.configure("Primary.TButton", background=VIOLET, foreground="#15102A",
-                    padding=(20, 9), font=("Courier", 9, "bold"))
-    style.map("Primary.TButton",
-              background=[("active", "#B985FF"), ("pressed", "#9358EE")])
+    style.configure(
+        "Primary.TButton",
+        background=VIOLET,
+        foreground="#15102A",
+        padding=(20, 9),
+        font=("Courier", 9, "bold"),
+    )
+    style.map("Primary.TButton", background=[("active", "#B985FF"), ("pressed", "#9358EE")])
 
-    style.configure("Link.TCheckbutton", background=BG, foreground=INK_MUTE,
-                    font=("Courier", 9))
+    style.configure("Link.TCheckbutton", background=BG, foreground=INK_MUTE, font=("Courier", 9))
     style.map("Link.TCheckbutton", background=[("active", BG)])
 
     return style
@@ -214,7 +295,9 @@ class SetupWindow:
         existing_vault = (existing.get("vault") or {}).get("path", "")
         existing_key = os.environ.get(ENV_KEY, "")
 
-        self.vault_var = tk.StringVar(value=str(Path(existing_vault).expanduser()) if existing_vault else "")
+        self.vault_var = tk.StringVar(
+            value=str(Path(existing_vault).expanduser()) if existing_vault else ""
+        )
         self.key_var = tk.StringVar(value=existing_key)
         self.show_key_var = tk.BooleanVar(value=False)
         # Scheduling — preselect if the task already exists so Save is non-destructive.
@@ -254,8 +337,11 @@ class SetupWindow:
         self.key_entry = ttk.Entry(container, textvariable=self.key_var, show="•", width=50)
         self.key_entry.grid(row=5, column=0, columnspan=2, sticky="ew", padx=(0, 8))
         ttk.Checkbutton(
-            container, text="show", variable=self.show_key_var,
-            command=self._toggle_show_key, style="Link.TCheckbutton",
+            container,
+            text="show",
+            variable=self.show_key_var,
+            command=self._toggle_show_key,
+            style="Link.TCheckbutton",
         ).grid(row=5, column=2, sticky="e")
 
         ttk.Label(

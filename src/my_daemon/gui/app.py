@@ -15,21 +15,16 @@ import logging
 import threading
 from collections.abc import Iterator
 from dataclasses import dataclass
-from datetime import UTC, datetime
 from logging.handlers import RotatingFileHandler
 from pathlib import Path
 
 from nicegui import ui
 
 from my_daemon.config import Settings, load_settings
-from my_daemon.embeddings import Embedder, SparseEmbedder
-from my_daemon.llm import LLMClient
-from my_daemon.models import FeedbackEvent, RetrievalResult
+from my_daemon.integration.core import DaemonCore, build_core
+from my_daemon.models import RetrievalResult
 from my_daemon.paths import log_path as _shared_log_path
 from my_daemon.pipeline import build_retrieval_summary
-from my_daemon.retrieval import RetrievalOrchestrator
-from my_daemon.retrieval.weights import apply_selection
-from my_daemon.stores import FeedbackStore, GraphStore, VectorStore
 
 log = logging.getLogger("my_daemon.chat")
 
@@ -43,9 +38,7 @@ def _configure_file_logging() -> Path:
     path = _shared_log_path()
     path.parent.mkdir(parents=True, exist_ok=True)
     handler = RotatingFileHandler(path, maxBytes=1_000_000, backupCount=3, encoding="utf-8")
-    handler.setFormatter(
-        logging.Formatter("%(asctime)s %(levelname)s %(name)s: %(message)s")
-    )
+    handler.setFormatter(logging.Formatter("%(asctime)s %(levelname)s %(name)s: %(message)s"))
     root = logging.getLogger()
     # Avoid duplicate handlers when launch_chat is somehow called twice in-process.
     if not any(getattr(h, "baseFilename", None) == str(path) for h in root.handlers):
@@ -54,14 +47,15 @@ def _configure_file_logging() -> Path:
         root.setLevel(logging.INFO)
     return path
 
+
 # Brand palette (OKLCH). Source: my-daemon-astro-website/BRAND.md § 2.
 # A question (gold) calls a daemon (violet) which speaks back (cyan).
-VIOLET = "oklch(72% 0.20 305)"   # the daemon — wordmark dot, primary CTA
-CYAN = "oklch(78% 0.14 195)"     # synthesis / reply — daemon bubble accent
-GOLD = "oklch(82% 0.155 75)"     # the human spark — user bubble accent, italic emphasis
+VIOLET = "oklch(72% 0.20 305)"  # the daemon — wordmark dot, primary CTA
+CYAN = "oklch(78% 0.14 195)"  # synthesis / reply — daemon bubble accent
+GOLD = "oklch(82% 0.155 75)"  # the human spark — user bubble accent, italic emphasis
 # Surfaces — deep midnight indigo, slightly tinted as they rise.
 BG = "oklch(14% 0.025 282)"
-INK = "oklch(92% 0.018 90)"      # warm near-white body text
+INK = "oklch(92% 0.018 90)"  # warm near-white body text
 INK_MUTE = "oklch(92% 0.018 90 / 0.70)"
 RULE = "oklch(60% 0.05 285 / 0.20)"  # hairline borders
 
@@ -75,45 +69,28 @@ class _DaemonContext:
     """
 
     settings: Settings
-    embedder: Embedder
-    sparse_embedder: SparseEmbedder | None
-    vector_store: VectorStore
-    graph_store: GraphStore
-    feedback_store: FeedbackStore
-    llm: LLMClient
-    orchestrator: RetrievalOrchestrator
+    core: DaemonCore
 
 
 def _build_context() -> _DaemonContext:
+    """One construction path — see `integration/wiring.py` for why."""
     s = load_settings()
-    embedder = Embedder(
-        s.embeddings.model,
-        batch_size=s.embeddings.batch_size,
-        device=s.embeddings.device,
-        cache_folder=s.embeddings.cache_folder,
-    )
-    sparse_embedder: SparseEmbedder | None = None
-    if s.embeddings.hybrid:
-        sparse_embedder = SparseEmbedder(
-            model_name=s.embeddings.sparse_model,
-            cache_folder=s.embeddings.cache_folder,
+    return _DaemonContext(settings=s, core=build_core(s))
+
+
+def _render_memories(chat_column, memories) -> None:  # noqa: ANN001
+    """The "you've been here before" strip — the GUI half of M-mem-5."""
+    with chat_column, ui.row().classes("w-full justify-start"):
+        rows = "".join(
+            f"<div class='memory-row'><span class='memory-date'>{m.ts.date().isoformat()}</span>"
+            f"<span class='memory-text'>{html.escape(m.text)}</span>"
+            f"<span class='memory-notes'>{html.escape(', '.join(m.shared_notes))}</span></div>"
+            for m in memories
         )
-    vector_store = VectorStore(
-        url=s.vector_store.qdrant.url,
-        collection=s.vector_store.qdrant.collection,
-        dim=embedder.dimension,
-        hybrid=s.embeddings.hybrid,
-    )
-    graph_store = GraphStore(path=s.graph.path)
-    graph_store.load()
-    feedback_store = FeedbackStore(db_path=s.feedback.db_path)
-    llm = LLMClient(s.llm, api_key=s.anthropic_api_key)
-    orchestrator = RetrievalOrchestrator(
-        s, embedder, vector_store, graph_store, sparse_embedder=sparse_embedder,
-    )
-    return _DaemonContext(
-        s, embedder, sparse_embedder, vector_store, graph_store, feedback_store, llm, orchestrator,
-    )
+        ui.html(
+            f"<div class='memory-panel'><div class='memory-title'>"
+            f"You've been here before</div>{rows}</div>"
+        )
 
 
 def _render_sources(
@@ -157,8 +134,7 @@ def _render_sources(
                 heading = html.escape(" › ".join(entry.get("heading_path") or []))
                 preview = html.escape(preview_by_id.get(entry.get("chunk_id", ""), ""))
                 ui.html(
-                    f'<span class="source-rank">#{i}</span>'
-                    f'<span class="source-path">{path}</span>'
+                    f'<span class="source-rank">#{i}</span><span class="source-path">{path}</span>'
                 )
                 if heading:
                     ui.html(f'<div class="source-heading">› {heading}</div>')
@@ -176,25 +152,16 @@ def _render_sources(
         status.content = '<div class="sources-status">…recording your pick</div>'
 
         def _apply() -> str:
-            res = apply_selection(
-                ctx.graph_store,
-                seed_note_path=entry.get("seed_note_path") or entry.get("note_path"),
-                selected_note_path=entry.get("note_path"),
-            )
-            ctx.graph_store.save()
-            ctx.feedback_store.attach_signal(
-                feedback_event_id,
-                "candidate_selected",
-                selected_rank=rank,
-                selected_chunk_id=entry.get("chunk_id"),
-                selected_note_path=entry.get("note_path"),
-            )
-            if res.edges_reinforced == 0:
+            # A click is explicit, so it is not gated by hermes.allow_write_back.
+            res = ctx.core.endorse(feedback_event_id, rank, require_write_back=False)
+            if not res.get("ok"):
+                return res.get("reason", "could not record that pick")
+            if res["edges_reinforced"] == 0:
                 return "Recorded — this candidate was the seed itself; nothing to reinforce."
-            hops = max(len(res.path) - 1, 0)
+            hops = max(len(res["path"]) - 1, 0)
             return (
-                f"Reinforced {res.edges_reinforced} edge instance(s) "
-                f"along a {hops}-hop path (Δweight {res.total_delta:.2f})."
+                f"Reinforced {res['edges_reinforced']} edge instance(s) "
+                f"along a {hops}-hop path (Δweight {res['total_delta']:.2f})."
             )
 
         try:
@@ -202,16 +169,16 @@ def _render_sources(
             status.content = f'<div class="sources-status">{msg}</div>'
         except Exception as exc:
             log.exception("candidate selection failed")
-            status.content = (
-                f'<div class="sources-status">(error: {html.escape(str(exc))})</div>'
-            )
+            status.content = f'<div class="sources-status">(error: {html.escape(str(exc))})</div>'
 
     for i, entry in enumerate(ranked, start=1):
         # Capture i and entry by default-arg to dodge the late-binding closure pitfall.
         cards[i - 1].on("click", lambda _e, r=i, x=entry: _pick(r, x))
 
 
-async def _stream_into_label(label: ui.markdown, generator: Iterator[str], accumulator: list[str]) -> None:
+async def _stream_into_label(
+    label: ui.markdown, generator: Iterator[str], accumulator: list[str]
+) -> None:
     """Drain a sync text generator into a NiceGUI label without blocking the event loop."""
     queue: asyncio.Queue[str | None] = asyncio.Queue()
     loop = asyncio.get_running_loop()
@@ -485,6 +452,41 @@ def _mount_ui(ctx: _DaemonContext) -> None:
             color: var(--ink-mute);
             margin-top: 6px;
           }}
+          /* "You've been here before" — past questions that lit up the same
+             notes. Quieter than the sources panel: it is context, not an answer. */
+          .memory-panel {{
+            border-left: 2px solid var(--rule);
+            padding: 8px 0 8px 14px;
+            margin: 4px 0 2px 0;
+            max-width: 46rem;
+          }}
+          .memory-title {{
+            font-family: var(--font-mono);
+            font-size: 0.7rem;
+            letter-spacing: 0.09em;
+            text-transform: uppercase;
+            color: var(--ink-mute);
+            margin-bottom: 6px;
+          }}
+          .memory-row {{
+            display: flex;
+            flex-wrap: wrap;
+            gap: 8px;
+            align-items: baseline;
+            font-size: 0.86rem;
+            margin-bottom: 4px;
+          }}
+          .memory-date {{
+            font-family: var(--font-mono);
+            font-size: 0.72rem;
+            color: var(--ink-mute);
+          }}
+          .memory-text {{ color: var(--ink); }}
+          .memory-notes {{
+            font-family: var(--font-mono);
+            font-size: 0.72rem;
+            color: var(--ink-mute);
+          }}
         </style>
         """
     )
@@ -492,17 +494,13 @@ def _mount_ui(ctx: _DaemonContext) -> None:
     with ui.column().classes("w-full max-w-3xl mx-auto px-6 py-10 gap-5"):
         # Header — wordmark on the left, mono eyebrow vault label on the right.
         with ui.row().classes("items-baseline w-full justify-between"):
-            ui.html(
-                '<span class="wordmark"><span class="wordmark__dot"></span>My Daemon</span>'
-            )
-            ui.html(
-                f'<span class="eyebrow">vault · {ctx.settings.vault.path.name}</span>'
-            )
+            ui.html('<span class="wordmark"><span class="wordmark__dot"></span>My Daemon</span>')
+            ui.html(f'<span class="eyebrow">vault · {ctx.settings.vault.path.name}</span>')
 
         # A whisper, not a shout. Italic Fraunces at low opacity is the brand's default tone.
-        ui.html(
-            'Ask, and I will walk the vault with you<span class="accent">.</span>'
-        ).classes("epigraph")
+        ui.html('Ask, and I will walk the vault with you<span class="accent">.</span>').classes(
+            "epigraph"
+        )
 
         chat_column = ui.column().classes("w-full gap-3 pt-4")
 
@@ -530,34 +528,25 @@ def _mount_ui(ctx: _DaemonContext) -> None:
             with ui.row().classes("w-full justify-start"):
                 daemon_label = ui.markdown("…").classes("daemon-bubble")
 
-        t0 = datetime.now(UTC)
         try:
-            result = await asyncio.to_thread(ctx.orchestrator.retrieve, query)
+            # `ask_stream` retrieves, recalls, streams, and logs. The GUI used
+            # to reproduce all four and drifted out of sync with the CLI.
+            stream = ctx.core.ask_stream(query, surface="gui")
+            accumulator: list[str] = []
+            daemon_label.content = ""
+            await _stream_into_label(daemon_label, iter(stream), accumulator)
 
-            if not result.ranked:
+            if not stream.retrieval.ranked:
                 daemon_label.content = (
                     "_Nothing in your notes matched. Try a different phrasing, "
                     "or ingest more of the vault._"
                 )
                 return
 
-            accumulator: list[str] = []
-            daemon_label.content = ""
-            generator = ctx.llm.synthesize_stream(query, result.ranked)
-            await _stream_into_label(daemon_label, generator, accumulator)
-            answer = "".join(accumulator).strip()
-
-            latency_ms = int((datetime.now(UTC) - t0).total_seconds() * 1000)
-            feedback_event_id = ctx.feedback_store.log(
-                FeedbackEvent(
-                    timestamp=t0,
-                    query=query,
-                    retrieval_summary=build_retrieval_summary(result),
-                    answer=answer,
-                    latency_ms=latency_ms,
-                )
-            )
-            _render_sources(ctx, chat_column, result, feedback_event_id)
+            if stream.memories and ctx.settings.memory.show_to_user:
+                _render_memories(chat_column, stream.memories)
+            if stream.feedback_event_id is not None:
+                _render_sources(ctx, chat_column, stream.retrieval, stream.feedback_event_id)
         except Exception as exc:
             log.exception("chat send failed")
             daemon_label.content = f"_(daemon error: {exc})_"

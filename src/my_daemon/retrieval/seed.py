@@ -31,6 +31,7 @@ def seed_search(
     for h in hits:
         chunk = Chunk(
             id=h["chunk_id"],
+            note_uuid=h.get("note_uuid", ""),
             note_path=h["note_path"],
             heading_path=list(h.get("heading_path") or []),
             text=h.get("text", ""),

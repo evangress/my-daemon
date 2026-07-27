@@ -137,7 +137,8 @@ def test_is_writable_blocks_outside_vault(tmp_path: Path) -> None:
 
 def test_insert_wikilinks_skips_code_fences(vault: Path) -> None:
     note = _write_note(
-        vault, "a.md",
+        vault,
+        "a.md",
         "# Title\n\nThis mentions Daemon in prose.\n\n```\nDaemon in a code block\n```\n",
     )
     result = insert_wikilinks(note, [("Pullman Daemons", "Daemon")], vault_root=vault)

@@ -36,10 +36,26 @@ class AgentNotesPayload:
 
 
 @dataclass
+class LetterTheme:
+    """One emergent theme, flattened for the observer letter's prompt.
+
+    The dream phase mints these (cluster → reconcile → name) and the letter is
+    the only place the user meets them in prose, so the letter has to run
+    *after* clustering and receive them.
+    """
+
+    label: str
+    summary: str = ""
+    is_new: bool = False
+    query_count: int = 0
+    note_titles: list[str] = field(default_factory=list)
+
+
+@dataclass
 class LinkSuggestion:
-    target: str       # target note title
-    anchor: str       # exact substring of the source body to wrap as [[target|anchor]]
-    confidence: float # 0..1 LLM-rated
+    target: str  # target note title
+    anchor: str  # exact substring of the source body to wrap as [[target|anchor]]
+    confidence: float  # 0..1 LLM-rated
     reason: str = ""
 
 
@@ -145,7 +161,10 @@ def extract_note_observations(
         "Respond with ONLY the JSON object described in the system prompt."
     )
     raw = _call(
-        client, system=_EXTRACT_SYSTEM, user=user, model=_model_for(client, model),
+        client,
+        system=_EXTRACT_SYSTEM,
+        user=user,
+        model=_model_for(client, model),
         max_tokens=1200,
     )
     data = _coerce_json(raw)
@@ -231,7 +250,10 @@ def propose_links(
         + "\n\nRespond with ONLY the JSON array described in the system prompt."
     )
     raw = _call(
-        client, system=_LINK_SYSTEM, user=user, model=_model_for(client, model),
+        client,
+        system=_LINK_SYSTEM,
+        user=user,
+        model=_model_for(client, model),
         max_tokens=1200,
     )
     data = _coerce_json(raw)
@@ -298,11 +320,10 @@ def update_memory(
     for n in recent_notes:
         excerpt = n.body[:note_excerpt_chars].strip()
         note_blocks.append(f"### {n.title}  ({n.relative_path})\n{excerpt}")
+    recent_chats = answered_only(recent_chats)
     chat_blocks: list[str] = []
     for ev in recent_chats:
-        chat_blocks.append(
-            f"- Q: {ev.query.strip()[:300]}\n  A: {(ev.answer or '').strip()[:400]}"
-        )
+        chat_blocks.append(f"- Q: {ev.query.strip()[:300]}\n  A: {(ev.answer or '').strip()[:400]}")
 
     user_parts: list[str] = [
         f"Theme to maintain: **{theme}**",
@@ -322,8 +343,11 @@ def update_memory(
         "Rewrite the memory file body now. Markdown only.",
     ]
     return _call(
-        client, system=_REFLECT_SYSTEM, user="\n".join(user_parts),
-        model=_model_for(client, model), max_tokens=2000,
+        client,
+        system=_REFLECT_SYSTEM,
+        user="\n".join(user_parts),
+        model=_model_for(client, model),
+        max_tokens=2000,
     )
 
 
@@ -336,12 +360,14 @@ You will be given:
 - A structural snapshot of the user's vault graph: communities the algorithm found, notes that bridge those communities, "load-bearing" links whose removal would disconnect parts of the graph, orphan notes (poorly connected), dangling wikilink targets (notes-they-keep-meaning-to-write), and the warmest edges (the ones that have been most reinforced by the user's recent picks).
 - A weight-evolution preview: which edges *would* shift if the recent feedback were replayed against the snapshot.
 - A short list of the user's most recent chats with the daemon.
+- The **emergent themes**: clusters of the user's own questions that kept landing on the same notes, each already named. Some are new this run; some are recurring, and a recurring theme is a concern the user keeps returning to. A churn number says how settled the themes are overall.
 - The bodies of up to a handful of your own prior letters, for continuity.
 
 Write a single-page **second-person markdown letter** that interprets these patterns *semantically*. Treat the structural numbers as evidence, not subject matter — the user already saw the JSON. Your job is to translate the numbers into things like "your daemon-related notes have started pulling Obsidian-tooling notes into the same conversation" or "the journal entries about Austin keep being the bridge between projects and relationships — they are doing structural work in your second brain."
 
 Rules:
 - Do not invent. If a community's top tags don't suggest a clear theme, name the uncertainty ("a cluster I can't yet read") instead of pretending.
+- Weave the emergent themes into the letter by name — they are the closest thing you have to *what the user has been wondering about*, as opposed to what their files look like. Say plainly which ones are new and which keep coming back. If churn is high (above ~0.5) or a theme appeared only this run, say the reading is provisional.
 - Address the user directly. Warm, but not saccharine. Not a corporate report.
 - Name *uncertainty* when evidence is thin: "this is from one week of selections, so take it as a hunch, not a verdict."
 - Continuity: when a prior letter said something that's still true (or no longer true), acknowledge it explicitly. Avoid restating it verbatim.
@@ -372,8 +398,7 @@ def _render_bridging(report: StructuralReport) -> str:
     if not report.bridging_notes:
         return "(no notes with notable betweenness yet)"
     return "\n".join(
-        f"- {b.note_path}  (betweenness {b.betweenness:.4f})"
-        for b in report.bridging_notes
+        f"- {b.note_path}  (betweenness {b.betweenness:.4f})" for b in report.bridging_notes
     )
 
 
@@ -381,8 +406,7 @@ def _render_bridges(report: StructuralReport) -> str:
     if not report.bridge_edges:
         return "(no load-bearing note↔note links)"
     return "\n".join(
-        f"- {e.src} ↔ {e.dst}  ({e.kind}, weight {e.weight:.2f})"
-        for e in report.bridge_edges
+        f"- {e.src} ↔ {e.dst}  ({e.kind}, weight {e.weight:.2f})" for e in report.bridge_edges
     )
 
 
@@ -390,8 +414,7 @@ def _render_warm(report: StructuralReport) -> str:
     if not report.warm_edges:
         return "(no reinforced edges yet — everything is at baseline weight)"
     return "\n".join(
-        f"- {e.src} → {e.dst}  ({e.kind}, weight {e.weight:.2f})"
-        for e in report.warm_edges
+        f"- {e.src} → {e.dst}  ({e.kind}, weight {e.weight:.2f})" for e in report.warm_edges
     )
 
 
@@ -399,8 +422,7 @@ def _render_dangling(report: StructuralReport) -> str:
     if not report.dangling_targets:
         return "(no dangling wikilink targets)"
     return "\n".join(
-        f"- {d.target}  (referenced by {d.incoming_links} note(s))"
-        for d in report.dangling_targets
+        f"- {d.target}  (referenced by {d.incoming_links} note(s))" for d in report.dangling_targets
     )
 
 
@@ -416,8 +438,7 @@ def _render_evolution(evolution: WeightEvolutionReport | None) -> str:
     ]
     for d in evolution.top_edges[:8]:
         lines.append(
-            f"  - {d.src} → {d.dst}  ({d.kind}): {d.before:.2f} → {d.after:.2f} "
-            f"(Δ {d.delta:+.2f})"
+            f"  - {d.src} → {d.dst}  ({d.kind}): {d.before:.2f} → {d.after:.2f} (Δ {d.delta:+.2f})"
         )
     if evolution.top_notes:
         lines.append("Top notes by aggregate shift:")
@@ -428,7 +449,20 @@ def _render_evolution(evolution: WeightEvolutionReport | None) -> str:
     return "\n".join(lines)
 
 
+def answered_only(events: list[FeedbackEvent]) -> list[FeedbackEvent]:
+    """Drop feedback rows that carry no answer.
+
+    A row with an empty answer is a *retrieval* record, not a conversation: an
+    ambient Hermes prefetch, or a retrieval-only tool call. Rendering them as
+    "recent chats" pads the observer's and reflector's prompts with turns that
+    never happened, and Hermes generates one per turn.
+    """
+
+    return [ev for ev in events if (ev.answer or "").strip()]
+
+
 def _render_recent_chats(recent: list[FeedbackEvent], *, limit: int = 8) -> str:
+    recent = answered_only(recent)
     if not recent:
         return "(no recent chats)"
     chunks: list[str] = []
@@ -438,6 +472,23 @@ def _render_recent_chats(recent: list[FeedbackEvent], *, limit: int = 8) -> str:
             f"    A: {(ev.answer or '').strip()[:300]}"
         )
     return "\n".join(chunks)
+
+
+def _render_themes(themes: list[LetterTheme], *, churn: float | None = None) -> str:
+    if not themes:
+        return "(no emergent themes yet)"
+    lines: list[str] = []
+    if churn is not None:
+        lines.append(
+            f"Theme churn: {churn:.2f} (0 = the same themes as last run, 1 = nothing carried over)."
+        )
+    for t in themes:
+        age = "new this run" if t.is_new else "recurring"
+        notes = ", ".join(t.note_titles[:6]) or "(no resolvable notes)"
+        lines.append(f"- **{t.label}** — {age}, {t.query_count} question(s); notes: {notes}")
+        if t.summary:
+            lines.append(f"    {t.summary}")
+    return "\n".join(lines)
 
 
 def _render_prior_letters(letters: list[str]) -> str:
@@ -458,6 +509,8 @@ def observer_letter(
     recent_feedback: list[FeedbackEvent],
     prior_letters: list[str],
     snapshot_id: str,
+    themes: list[LetterTheme] | None = None,
+    theme_churn: float | None = None,
     max_communities: int = 8,
     model: str | None = None,
     max_tokens: int = 2400,
@@ -481,6 +534,8 @@ def observer_letter(
             "--- dangling wikilink targets ---\n" + _render_dangling(structural),
             "--- hypothetical weight evolution ---\n" + _render_evolution(evolution),
             "--- recent chats ---\n" + _render_recent_chats(recent_feedback),
+            "--- emergent themes (this run's clustering of your questions) ---\n"
+            + _render_themes(themes or [], churn=theme_churn),
             "--- prior letters (for continuity) ---\n" + _render_prior_letters(prior_letters),
             "Write the letter now. Markdown body only.",
         ]
@@ -492,3 +547,55 @@ def observer_letter(
         model=_model_for(client, model),
         max_tokens=max_tokens,
     )
+
+
+_THEME_NAMER_SYSTEM = """You name recurring themes in someone's personal knowledge vault.
+
+You are shown a handful of note titles that a cluster of the user's own questions kept landing on, plus a few of those questions verbatim. Name what connects them.
+
+Rules:
+- The label is 2-5 words, in the user's register, naming the *concern* — not the mechanism. "Why projects stall" beats "Cluster of project notes".
+- The summary is one sentence saying what the user seems to be circling.
+- Do not invent detail beyond what the titles and questions support. If they don't cohere, say so in the summary and give a deliberately plain label.
+- Never use the words "cluster", "theme", "embedding", or "vector" in the label.
+
+Return exactly two lines:
+LABEL: <the label>
+SUMMARY: <the sentence>
+"""
+
+
+def name_theme(
+    client,  # noqa: ANN001
+    *,
+    note_titles: list[str],
+    representative_queries: list[str],
+    model: str | None = None,
+) -> tuple[str, str]:
+    """Name one emergent theme. Titles only — never chunk bodies.
+
+    Called for *new* clusters only, so steady state is zero or one call a
+    night, on the cheap model.
+    """
+
+    titles = "\n".join(f"- {t}" for t in note_titles[:12]) or "(none)"
+    questions = "\n".join(f"- {q}" for q in representative_queries[:3]) or "(none)"
+    user = (
+        f"Notes this cluster keeps landing on:\n{titles}\n\n"
+        f"Questions from the cluster:\n{questions}"
+    )
+    text = _call(
+        client,
+        system=_THEME_NAMER_SYSTEM,
+        user=user,
+        model=_model_for(client, model),
+        max_tokens=200,
+    )
+
+    label, summary = "", ""
+    for line in (text or "").splitlines():
+        if line.upper().startswith("LABEL:"):
+            label = line.split(":", 1)[1].strip()
+        elif line.upper().startswith("SUMMARY:"):
+            summary = line.split(":", 1)[1].strip()
+    return label or "unnamed", summary

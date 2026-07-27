@@ -265,3 +265,32 @@ def test_create_snapshot_survives_missing_live_state(tmp_path: Path, vault_root:
         assert handle.feedback.recent() == []
     finally:
         handle.close()
+
+
+def test_qdrant_returning_no_snapshot_degrades_to_a_warning(
+    tmp_path: Path, vault_root: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """`create_snapshot` is Optional in qdrant-client, and None used to be an
+    AttributeError three lines later. It should read as a skipped vector
+    snapshot — the rest of the bundle is still worth writing."""
+
+    import qdrant_client
+
+    class _NoSnapshotClient:
+        def __init__(self, **_kwargs: object) -> None:
+            pass
+
+        def create_snapshot(self, **_kwargs: object) -> None:
+            return None
+
+    monkeypatch.setattr(qdrant_client, "QdrantClient", _NoSnapshotClient)
+
+    settings = _build_settings(tmp_path, vault_root)
+    _seed_live_state(settings, vault_root)
+
+    warnings: list[str] = []
+    bundle = create_snapshot(settings, include_qdrant=True, on_warning=warnings.append)
+
+    assert bundle.qdrant_snapshot is None
+    assert bundle.graph_path.is_file()
+    assert warnings and "did not create a snapshot" in warnings[0]

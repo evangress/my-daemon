@@ -7,6 +7,10 @@ from my_daemon.stores.graph import GraphStore
 from my_daemon.vault import VaultReader
 from my_daemon.vault.chunker import chunk_note
 
+# Fixture notes carry no `uuid:` frontmatter, so their identity is the
+# deterministic path-derived fallback.
+from my_daemon.vault.identity import derive_path_uuid as _u
+
 
 def _populated_store(vault_root: Path, store_path: Path) -> GraphStore:
     store = GraphStore(path=store_path)
@@ -28,18 +32,18 @@ def test_graph_builds_from_fixture_vault(tmp_path: Path, vault_root: Path):
 def test_neighbors_within_walks_wikilinks(tmp_path: Path, vault_root: Path):
     store = _populated_store(vault_root, tmp_path / "graph.gpickle")
     # Designing AI Memory wikilinks Pullman Daemons, Socratic Daemon, Obsidian Vaults
-    neighbors = store.neighbors_within("Designing AI Memory.md", depth=1)
-    assert "Pullman Daemons.md" in neighbors
-    assert "Socratic Daemon.md" in neighbors
-    assert "Obsidian Vaults.md" in neighbors
+    neighbors = store.neighbors_within(_u("Designing AI Memory.md"), depth=1)
+    assert _u("Pullman Daemons.md") in neighbors
+    assert _u("Socratic Daemon.md") in neighbors
+    assert _u("Obsidian Vaults.md") in neighbors
 
 
 def test_neighbors_reaches_via_shared_tag(tmp_path: Path, vault_root: Path):
     store = _populated_store(vault_root, tmp_path / "graph.gpickle")
     # Pullman Daemons and Socratic Daemon both have #metaphor — they should be
     # reachable from each other at depth 2 (note → tag → note).
-    neighbors = store.neighbors_within("Pullman Daemons.md", depth=2)
-    assert "Socratic Daemon.md" in neighbors
+    neighbors = store.neighbors_within(_u("Pullman Daemons.md"), depth=2)
+    assert _u("Socratic Daemon.md") in neighbors
 
 
 def test_persistence_roundtrip(tmp_path: Path, vault_root: Path):

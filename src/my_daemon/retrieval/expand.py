@@ -13,6 +13,7 @@ def expand_from_seeds(
     vector_store: VectorStore,
     depth: int = 2,
     decay: float = 0.5,
+    exclude_tag_prefixes: tuple[str, ...] = (),
 ) -> list[RetrievedChunk]:
     """For each seed, BFS the graph and pull chunks belonging to neighbor notes.
 
@@ -23,7 +24,7 @@ def expand_from_seeds(
     from qdrant_client.http.models import FieldCondition, Filter, MatchValue
 
     out: dict[str, RetrievedChunk] = {}
-    seen_seed_paths: set[str] = {s.chunk.note_path for s in seeds}
+    seen_seed_uuids: set[str] = {s.chunk.note_uuid for s in seeds}
 
     client = vector_store._client_()
 
@@ -31,16 +32,21 @@ def expand_from_seeds(
         # weighted=True: Dijkstra over 1/weight so feedback-reinforced edges
         # produce a *smaller* distance and ride in with a higher decayed score.
         # Hop budget still enforced inside the call.
-        neighbors = graph_store.neighbors_within(seed.chunk.note_path, depth=depth, weighted=True)
-        for rel_path, distance in neighbors.items():
-            if rel_path in seen_seed_paths:
+        neighbors = graph_store.neighbors_within(
+            seed.chunk.note_uuid,
+            depth=depth,
+            weighted=True,
+            exclude_tag_prefixes=exclude_tag_prefixes,
+        )
+        for neighbor_uuid, distance in neighbors.items():
+            if neighbor_uuid in seen_seed_uuids:
                 # already represented by the seed itself
                 continue
             # Pull chunks of this neighbor note from Qdrant via payload filter.
             scroll_hits, _ = client.scroll(
                 collection_name=vector_store.collection,
                 scroll_filter=Filter(
-                    must=[FieldCondition(key="note_path", match=MatchValue(value=rel_path))]
+                    must=[FieldCondition(key="note_uuid", match=MatchValue(value=neighbor_uuid))]
                 ),
                 with_payload=True,
                 limit=64,
@@ -50,6 +56,7 @@ def expand_from_seeds(
                 p = point.payload or {}
                 chunk = Chunk(
                     id=p["chunk_id"],
+                    note_uuid=p.get("note_uuid", ""),
                     note_path=p["note_path"],
                     heading_path=list(p.get("heading_path") or []),
                     text=p.get("text", ""),
@@ -57,7 +64,7 @@ def expand_from_seeds(
                     tags=list(p.get("tags") or []),
                     wikilinks=list(p.get("wikilinks") or []),
                 )
-                score = seed_score * (decay ** distance)
+                score = seed_score * (decay**distance)
                 existing = out.get(chunk.id)
                 if existing is None or score > existing.combined_score:
                     out[chunk.id] = RetrievedChunk(

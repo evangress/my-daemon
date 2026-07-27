@@ -23,6 +23,7 @@ from my_daemon.retrieval.weights import apply_selection
 from my_daemon.stores import FeedbackStore, GraphStore
 from my_daemon.vault import VaultReader
 from my_daemon.vault.chunker import chunk_note
+from my_daemon.vault.identity import derive_path_uuid as _u
 
 # ---------------------------------------------------------------------------
 # fakes — stand in for the embedder + Qdrant so tests stay offline
@@ -159,15 +160,26 @@ def test_recall_shape_and_feedback_id(tmp_path: Path, vault_root: Path) -> None:
             latency_ms=5,
         )
     )
-    core.engine.ask = lambda q, synthesize=False: QueryResponse(  # type: ignore[method-assign]
-        answer="", retrieval=_fake_retrieval(), feedback_event_id=eid, latency_ms=5,
+    core.engine.ask = lambda q, synthesize=False, surface=None: QueryResponse(  # type: ignore[method-assign]
+        answer="",
+        retrieval=_fake_retrieval(),
+        feedback_event_id=eid,
+        latency_ms=5,
     )
 
     data = core.recall("what is a daemon")
     assert data["feedback_event_id"] == eid
     assert data["candidates"], "expected at least one candidate"
     top = data["candidates"][0]
-    assert {"rank", "chunk_id", "note_path", "heading_path", "score", "preview", "seed_note_path"} <= top.keys()
+    assert {
+        "rank",
+        "chunk_id",
+        "note_path",
+        "heading_path",
+        "score",
+        "preview",
+        "seed_note_path",
+    } <= top.keys()
     assert top["rank"] == 1
     assert top["note_path"] == "Pullman Daemons.md"
 
@@ -176,8 +188,11 @@ def test_recall_block_is_cited_and_budget_capped(tmp_path: Path, vault_root: Pat
     vault = _tmp_vault(tmp_path, vault_root)
     settings = _settings(tmp_path, vault)
     core = _core(settings, vault)
-    core.engine.ask = lambda q, synthesize=False: QueryResponse(  # type: ignore[method-assign]
-        answer="", retrieval=_fake_retrieval(two=True), feedback_event_id=1, latency_ms=5,
+    core.engine.ask = lambda q, synthesize=False, surface=None: QueryResponse(  # type: ignore[method-assign]
+        answer="",
+        retrieval=_fake_retrieval(two=True),
+        feedback_event_id=1,
+        latency_ms=5,
     )
 
     block = core.recall_block("what is a daemon", budget_chars=4000)
@@ -224,7 +239,7 @@ def test_remember_writes_provenance_capture_and_ingests(tmp_path: Path, vault_ro
 
     # The note was incrementally ingested: vector upsert + graph node + manifest.
     assert any("Conversations/hermes" in p for p in core.vector_store.upserted)
-    assert core.graph.chunk_ids_for(result["rel_path"])
+    assert core.graph.chunk_ids_for(_u(result["rel_path"]))
 
 
 def test_remember_noop_when_write_back_disabled(tmp_path: Path, vault_root: Path) -> None:
@@ -274,7 +289,9 @@ def test_endorse_reinforces_seed_to_note_path(tmp_path: Path, vault_root: Path) 
                     {
                         "chunk_id": "stub",
                         "note_path": "Pullman Daemons.md",
+                        "note_uuid": _u("Pullman Daemons.md"),
                         "seed_note_path": "Designing AI Memory.md",
+                        "seed_note_uuid": _u("Designing AI Memory.md"),
                     }
                 ]
             },
@@ -290,7 +307,8 @@ def test_endorse_reinforces_seed_to_note_path(tmp_path: Path, vault_root: Path) 
     # The feedback row now carries the selection signal.
     event = core.feedback.get(eid)
     assert event is not None and event.signal == "candidate_selected"
-    assert event.selected_note_path == "Pullman Daemons.md"
+    assert event.selected_note_uuid == _u("Pullman Daemons.md")
+    assert event.selected_note_path == "Pullman Daemons.md"  # display breadcrumb
 
 
 def test_endorse_noop_when_write_back_disabled(tmp_path: Path, vault_root: Path) -> None:
@@ -338,12 +356,28 @@ def test_neighbors_and_status(tmp_path: Path, vault_root: Path) -> None:
     # Reinforce one edge so a neighbor is reachable + the graph has warmth.
     apply_selection(
         core.graph,
-        seed_note_path="Designing AI Memory.md",
-        selected_note_path="Pullman Daemons.md",
+        seed_note_uuid=_u("Designing AI Memory.md"),
+        selected_note_uuid=_u("Pullman Daemons.md"),
     )
     n = core.neighbors("Designing AI Memory.md", depth=2)
     assert n["note_path"] == "Designing AI Memory.md"
-    assert isinstance(n["neighbors"], list)
+    # Asserting the shape only is what let this silently return {} for a whole
+    # release after the identity cutover. Assert real values.
+    assert n["ok"] is True
+    returned = {nb["note_path"] for nb in n["neighbors"]}
+    assert "Pullman Daemons.md" in returned
+    assert all(p.endswith(".md") for p in returned), "paths, not uuids"
+
+
+def test_neighbors_of_an_unknown_path_says_so(tmp_path: Path, vault_root: Path) -> None:
+    """An empty list is indistinguishable from a bug. Be explicit."""
+    settings = _settings(tmp_path, vault_root)
+    core = _core(settings, _tmp_vault(tmp_path, vault_root))
+
+    n = core.neighbors("No Such Note.md")
+
+    assert n["ok"] is False
+    assert n["neighbors"] == []
 
     status = core.status()
     assert status["notes"] >= 1

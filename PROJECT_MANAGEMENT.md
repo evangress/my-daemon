@@ -76,15 +76,150 @@ below for the full implementation summary.
   non-selection rides passively. Add explicit down-weights as v2 once we
   see how the positive-only signal accumulates.
 
+## Known Bugs
+
+Both found while planning the memory refocus (2026-07-26) and **verified in the
+code**. Neither depends on that plan; both should be fixed regardless.
+
+- [x] **Re-ingesting a note destroys inbound edges and resets learned weights.**
+  ~~`pipeline/ingest.py:101-103` calls `graph_store.remove_note()` →
+  `nx.MultiDiGraph.remove_node`, which drops *all* incident edges in both
+  directions. `add_note` only recreates that note's **outgoing** edges,
+  hardcoded to `weight=1.0`.~~ **Fixed 2026-07-26 (M-mem-1b)** by
+  `GraphStore.update_note()` — differential re-ingest that leaves surviving
+  edges completely untouched. Both `ingest_vault` and `ingest_note` use it.
+
+- [ ] **Incremental and full ingest diverge when a linked note is deleted.**
+  Found while fixing the above. Delete `B.md` while `A.md` still links to it:
+  a **full rebuild** produces `note::B` — a dangling placeholder keyed by the
+  raw wikilink text, since `[[B]]` no longer resolves to a file — preserving
+  A's outgoing link. **Incremental** ingest calls `remove_note("B.md")`, which
+  drops the `A → B` edge outright, and never rebuilds it until `A` happens to
+  be re-ingested for some other reason. Same family as the bug above, but on
+  the deletion path. Fixing it means re-resolving the linkers' wikilinks when a
+  target disappears — deliberately out of scope for M-mem-1b. Current behavior
+  is pinned by `test_deleting_a_notes_target_currently_loses_the_inbound_edge`
+  so the fix is visible when it lands. Also feeds the planned
+  `daemon graph todos`, which would otherwise under-count.
+
+- [x] **`add_tags`' frontmatter round-trip rewrites the whole file.**
+  *(Corrected 2026-07-26: originally logged against `_atomic_write_text`
+  forcing `newline="\n"`. That is not a bug — Python's `open()` performs no
+  translation on write for `newline="\n"`, and CRLF passes through intact. The
+  damage is entirely in the `frontmatter.loads`/`dumps` round-trip.)*
+  `vault/writer.py:add_tags` round-trips the whole document through PyYAML.
+  Verified on one small file, that single call: collapsed CRLF to LF on every
+  line, expanded flow-style `tags: [a, b]` into block style, **deleted a YAML
+  comment outright**, and dropped the trailing newline. On a Windows-synced
+  vault every `daemon link` run turns a one-tag edit into a whole-file diff,
+  and comments are lost permanently.
+  **Fixed 2026-07-26 (M-mem-8).** `add_tags` now delegates to
+  `add_frontmatter_list_values_textual`, which appends in whatever style is
+  already there — flow stays flow, block stays block at its own indentation, a
+  scalar becomes a flow list — and leaves every other byte alone.
+
+- [x] **`neighbors_within` was called with a path after the UUID cutover.**
+  Found 2026-07-26 while auditing the theme self-reinforcement loop.
+  `pipeline/agent_link.py` and `integration/core.py` still passed a
+  vault-relative path where nodes had become `note::<uuid>`, so both hit the
+  "not in graph" early return and silently yielded `{}`. **`daemon link`'s tag
+  suggestions and the Hermes `neighbors` tool were dead.** The test that should
+  have caught it asserted only `isinstance(result, list)`, which passes on
+  empty. **Fixed** — both resolve identities properly, `neighbors()` reports
+  `ok: False` for an unknown path instead of an empty list, and the tests now
+  assert real neighbour values.
+
+- [x] **Frontmatter-only edits were invisible to ingest.** Also found
+  2026-07-26. The identity cutover changed the skip check from `mtime` to
+  `body_sha256`, so editing only frontmatter — every tag added in Obsidian,
+  every theme tag accepted — never reached the graph, the registry, or the
+  payload until `daemon ingest --full`. **Fixed** by hashing frontmatter
+  separately and adding a *metadata refresh* path: differential graph update
+  plus a registry refresh, with no chunking and no embedding. Reported as
+  "Notes metadata-refreshed" in the ingest summary.
+
+- [ ] **Activation rows recorded before the theme-tag exclusion shipped.**
+  Any activation logged before 2026-07-26 may have been derived through a
+  daemon-authored tag edge, and still clusters at full weight. Not worth
+  invalidation machinery today — the ledger is effectively empty and the
+  `memory.lookback_days` window (180d) ages them out. Revisit only if a real
+  ledger predates the fix.
+
+The 2026-07-26 five-agent maturity evaluation
+([MATURITY-EVALUATION-2026-07-26.md](MATURITY-EVALUATION-2026-07-26.md), §7)
+found thirteen more. Status after the same-day fix waves:
+
+- [x] **Reinforcement crashed all retrieval** — float Dijkstra distances vs
+  `RetrievedChunk.graph_distance: int`. The adaptive loop had never closed.
+  Fixed: field widened to float, `is_seed_distance()` owns seed semantics,
+  seam test added (`tests/test_expand_seam.py`).
+- [x] **`daemon select` raised TypeError on every invocation** (dead
+  `selected_note_path` kwarg from the UUID cutover). Fixed + 20 CliRunner
+  tests (`tests/test_cli.py`).
+- [x] **`daemon ask` silently never synthesized** (truthy Typer `OptionInfo`
+  sentinels). Fixed via shared `_run_query()`.
+- [x] **Hermes ambient prefetch classified as intentional** — new
+  `hermes_prefetch` ambient surface; prompt-boundary filter for answer-less
+  rows. Feedback rows kept (endorse + weight replay read them).
+- [x] **Themes never reached the observer letter** — phase order now
+  snapshot → analyze → themes → letter → decay; `observer_letter(themes=)`.
+- [x] **Missing config silently became defaults** (broke cron/schtasks) —
+  `ConfigNotFoundError`, search order, config-dir-anchored paths.
+- [x] **Non-atomic, unlocked graph/manifest writes** — atomic replace +
+  inter-process lock + `GraphStore.transaction()` at all three
+  read-modify-write sites; `GraphCorruptError` with recovery hint.
+- [x] **`daemon reset` footgun** — config-aware, `--models`/`--all` tiers,
+  refuses live server storage; plus new `daemon backup`/`restore`.
+- [x] **`config.example.yaml` shipped `agent.enabled: true`** — now matches
+  the code default (false) after the example rewrite for embedded Qdrant.
+- [ ] **`ActivationLedger.compact()` would destroy fingerprints** (nothing
+  reads `fingerprint_json`); still zero callers. Fix or delete before wiring.
+- [ ] **`apply_selection` can route through theme-tag hubs**
+  (`shortest_note_path` has no tag exclusion) — latent until theme tags are
+  accepted; part of finishing the loop severance (eval §6 item 25).
+- [ ] **`similar()` IDF asymmetry** (probe weighted, candidates not) —
+  eval §2 "3.6".
+- [ ] **`agent_link_runs`/`agent_extract_runs` still path-keyed** after the
+  UUID cutover — a rename re-runs the extractor/linker.
+
 ## Other Planned Work
 
 Separate from the Adaptive Memory Loop arc:
 
 - [ ] Light setup UI for `ANTHROPIC_API_KEY` + a "compose docker" button.
+  *(Partly obsolete since 2026-07-26: embedded Qdrant is the default, so
+  Docker is optional; the setup UI ask shrinks to key + vault + first ingest.)*
 - [ ] Multi-embedding spaces.
-- [ ] Obsidian plugin / file watcher.
+- [x] ~~Obsidian plugin /~~ file watcher — **shipped 2026-07-26** as
+  `daemon run` (watchfiles debounced ingest + nightly consolidate) plus
+  `daemon schedule` (systemd --user / schtasks units). An Obsidian *plugin*
+  remains unplanned.
 - [ ] `daemon graph todos` — surface dangling wikilink targets as
   "notes you keep meaning to write" (see AI Suggestions).
+- [ ] **No payload index on Qdrant's `note_path`**, though
+  `retrieval/expand.py:40-47` scrolls on it for every seed of every query.
+  Free latency win; folded into M-mem-3.
+
+## Memory Refocus — UUID identity + activation ledger
+
+Plan to re-key the system on **per-note UUIDs** and add an **activation
+ledger** lives in [PLAN-MEMORY.md](PLAN-MEMORY.md). Note identity today is the
+vault-relative path, which is load-bearing in four places and breaks the moment
+the Librarian moves a file. The plan puts a `uuid:` in each note's frontmatter
+as the shared key across SQLite (identity), Qdrant (semantics), and networkx
+(relations); records which notes *fire* for every query as a sparse
+"fingerprint" over note-UUID space; finds historically related queries by
+activation pattern rather than wording; clusters those fingerprints into named
+**themes** during the nightly `daemon consolidate` dream phase; and surfaces
+past queries both into the LLM's context and back to the user.
+
+Decisions locked in 2026-07-26: frontmatter UUID with a one-shot backfill;
+themes clustered offline in consolidation; recall both injected and displayed;
+theme tags proposed and written only on confirmation. Eleven milestones
+(M-mem-0 … M-mem-9), each independently shippable. **No milestone requires a
+full re-ingest**, and the only one-way door (the graph relabel, M-mem-6) sits
+after the entire fingerprint payoff has shipped. Plan file:
+`~/.claude/plans/it-s-been-a-while-compiled-ritchie.md`.
 
 ## Hermes Integration
 
@@ -109,6 +244,62 @@ questions in PLAN-HERMES §14 (identity-note seed, single-vs-many clients,
 NiceGUI's long-term fate) are not yet decided.
 
 ## Done
+
+- **Maturity-evaluation fix waves, Arcs 1+2 (2026-07-26).** Five-agent audit
+  ([MATURITY-EVALUATION-2026-07-26.md](MATURITY-EVALUATION-2026-07-26.md))
+  followed by four fix waves, all Opus sub-agents, TDD throughout;
+  358 → 624 passing tests. **Arc 1 (loop closure):** the three dead commands
+  (float `graph_distance`, `select` kwarg, `ask` sentinel bug), the missing
+  reinforce→expand seam test, `hermes_prefetch` ambient surface, themes into
+  the observer letter. **Arc 2 (daemon envelope):** config search order +
+  loud missing-config failure + config-dir-anchored paths (cron/schtasks now
+  correct-by-construction), atomic graph/manifest writes + inter-process
+  lock + `transaction()`, embedded Qdrant as default (Docker optional; local
+  hybrid RRF verified by test), `daemon doctor` (8 checks + shared Qdrant
+  error translation), defanged `reset`, `backup`/`restore`, `daemon run`
+  supervisor + `daemon schedule`. **Hygiene:** uv.lock tracked, `.idea/` +
+  `docs-site/` untracked, `[Ss]cripts` gitignore trap fixed (scripts/ was
+  never tracked), GitHub Actions CI, mypy gate, repo-wide ruff format.
+
+- **Memory refocus M-mem-0 → M-mem-4 (2026-07-26).** The identity spine and the
+  activation ledger, per [PLAN-MEMORY.md](PLAN-MEMORY.md). **M-mem-0:** a real
+  `PRAGMA user_version` migration ladder in `stores/db.py`, replacing the
+  `PRAGMA table_info` hack; WAL, `busy_timeout`, and `foreign_keys` (all three
+  were missing, and `foreign_keys` being off had silently made every
+  `REFERENCES` clause inert). **M-mem-1b:** `GraphStore.update_note()` —
+  differential re-ingest that stops every note save from deleting inbound
+  wikilinks and resetting M1's learned edge weights. **M-mem-1a:** `uuid:` in
+  frontmatter via a textual single-key writer that changes exactly one line,
+  `vault/identity.py` (adoption of foreign id keys, deterministic derivation,
+  path-derived fallback), the `notes`/`note_ordinals` registry, and
+  `daemon migrate assign-uuids | list-runs | rollback-uuids`. **M-mem-2/3/6:**
+  the identity cutover, collapsed into one change once a full re-ingest became
+  acceptable — chunk ids from `note_uuid`, graph nodes `note::<uuid>` with a
+  `dangling::<text>` namespace for unresolved links, `note_uuid` in the Qdrant
+  payload with indexes on it and `note_path`, uuid-keyed content-hashed
+  manifest, and renames handled as a payload update with no embedding and no
+  weight loss. **M-mem-4:** the activation ledger (`queries`,
+  `query_activations`, `note_activation_stats`), IDF-weighted fingerprints with
+  inverted-index cosine, the `RetrievalListener` seam on the orchestrator, and
+  `daemon activations` / `daemon hot-notes`. **M-mem-5:** fingerprint recall —
+  a reworded question surfaces the earlier one it shares notes with, injected
+  into the model's context and shown as a "You've been here before" panel (the
+  two toggle independently). **M-mem-7:** emergent themes — HDBSCAN over
+  fingerprint cosine inside `daemon consolidate`, with centroid matching, label
+  locking, dormancy and an honest churn metric, so labels stay stable even
+  though partitions over a mutating vault cannot. **M-mem-8:** theme tag
+  proposals — accepted themes propose `theme/<slug>` tags, you decide, and
+  accepted ones are written through a new textual list writer that `add_tags`
+  now shares (closing its round-trip bug). Graph expansion refuses to walk
+  `theme/` edges, which breaks the tags → edges → fingerprints → themes loop.
+  **M-mem-9:** one construction path
+  (`integration/wiring.py`), `DaemonCore.retrieve_only` / `log_answer` /
+  `ask_stream`, the GUI fully onto `DaemonCore` — which is how it gained
+  fingerprint recall it had silently never had — the reinforcement gate split
+  (an explicit click is not the same act as ambient write-back), and
+  `daemon migrate backfill-activations` to recover a ledger from the historical
+  feedback log. **The whole M-mem arc is complete.** Suite 358 pass / 1
+  pre-existing skip. **Requires `daemon ingest --full` once.**
 
 - **Hermes integration H1–H3 — memory-provider plugin (2026-06-05).** My Daemon is now a native Hermes memory provider (PLAN-HERMES.md Path A). One shared adapter — `src/my_daemon/integration/core.py` (`DaemonCore` + `build_core`) — wraps the existing pipeline behind plain methods: `recall`/`recall_block` (retrieval-only by default — Hermes brings its own model and wants cited context, not a composed answer), `endorse` (the `daemon select` reinforcement factored out of `cli.py`), `remember` (provenance-stamped capture → single-note `ingest_note` so it's recallable in-session), `latest_dream`/`dreams`/`read_dream` (the observer letters), `neighbors`, `status`. The plugin `src/my_daemon/hermes/provider.py` (`MyDaemonProvider`) subclasses Hermes's `MemoryProvider` ABC **lazily** (resolves to `object` when Hermes isn't importable, so `my_daemon` adds no runtime dep and the module unit-tests standalone) and implements the full hook set: `is_available` (network-free kill-switch on `provider_enabled`), `initialize`, `system_prompt_block` (identity framing + last night's letter), `prefetch` (ambient cited recall, caches the feedback id), `sync_turn` (non-blocking daemon thread: salient-turn capture + positive-only soft reinforcement of any prefetched note the reply used), `get_tool_schemas`/`handle_tool_call` (`mydaemon_recall`/`dream`/`neighbors` always; `endorse`/`remember` only when write-back is on), `on_memory_write`, `on_session_end`, `get_config_schema`/`save_config`, `shutdown`. New `HermesConfig` in `config.py` + both yamls (everything off by default: `provider_enabled`, `allow_write_back`). Hermes shim at `plugins/memory/my-daemon/` (`__init__.register`, `plugin.yaml`, `README.md`); new `daemon hermes doctor` preflight; new `pipeline.ingest.ingest_note`; docs at `docs-source/integrations/hermes.md` (+ mkdocs nav). The Anthropic key stays daemon-side (observer Opus + batch Haiku sub-agents) and Hermes never sees it; My Daemon stays local-only. 20 new tests (`tests/test_integration_core.py`, `tests/test_hermes_provider.py`) cover recall shape + `feedback_event_id`, budget-capped cited block, capture→recallable + provenance, write-back gating, soft endorse, dream newest-first + graceful-empty, tool routing, and non-blocking `sync_turn`. Full suite 86 pass / 1 pre-existing skip; ruff clean. **Deferred:** H4 MCP server; PLAN-HERMES §14 open questions. License: Hermes MIT → Apache-2.0 compatible, lazily imported, not redistributed.
 
@@ -141,4 +332,24 @@ The graph store currently keeps dangling wikilink targets as placeholder nodes (
 
 **The philosophical framing should live somewhere the daemon can read.**
 You and I have talked about why this project matters. Right now that context lives in CLAUDE.md (which only I see) and PROJECT_MANAGEMENT.md (which is gitignored from RAG, ironically). If My Daemon ingests its own vault, you might want to seed it with a short "purpose" note so it can answer questions like "why am I building this" from your own voice rather than mine. Just an idea.
+
+### 2026-07-26 — After the maturity-evaluation fix waves
+
+**What's deliberately still open** (evaluation Arcs 3–4, not started):
+docs refresh (README/roadmap/cli.md still describe the pre-M1 world),
+CONTRIBUTING.md, retiring commit-to-master before collaborators arrive,
+version bump + tags, packaging config templates into the wheel, GUI
+catch-up (session_id/history, themes + dream panels, status bar,
+self-hosted fonts), one real Hermes-host validation, the librarian STATUS
+banner + §L4 rewrite around UUID identity, finishing the theme-loop
+severance, and the `similar()` IDF asymmetry.
+
+**The deepest open design question is unchanged:** seeds dominate the
+candidate pool and seed-picks reinforce nothing (`apply_selection` no-ops
+when seed == selected). Now that the loop *can* close mechanically, decide
+what "picking" should mean — reserve pool slots for expanded candidates,
+reinforce seed retrieval features, or widen the pool with a damped seed
+advantage — before scaling any more learning machinery. Watch
+`daemon analyze` after a week of real use: if the weight distribution is
+still uniform, this is why.
 

@@ -51,6 +51,29 @@ What it extracts:
   stripped from the tag-detection source.
 - **mtime** (UTC) and **word count**.
 
+## `vault.identity` — reading a note's UUID
+
+`parse_note` populates `Note.uuid` and `Note.uuid_source` by scanning
+frontmatter for `ADOPT_KEYS` in priority order: `uuid` (ours), then `uid`,
+`id`, `guid`, `note-id`, `permanent_id`.
+
+- A value that parses as a UUID is **adopted verbatim**, canonicalized to
+  lowercase-hyphenated form. Uppercase, braced, and `urn:uuid:` forms are all
+  accepted, because that is what people and plugins actually write.
+- A **foreign** key holding an opaque non-UUID string of 8+ characters (a
+  Zettelkasten timestamp, say) yields a **derived** `uuid5`. Deterministic, so a
+  re-run on a machine with no registry converges on the same answer.
+- A non-UUID value in **our own** `uuid:` key reads as *absent*, never derived.
+  Our key has a defined type, so garbage in it means a hand-edit or a sync
+  corruption; minting a new identity there would silently orphan that note's
+  entire history. Ingest restores the registry's value instead.
+- `derive_path_uuid(rel_path)` is the fallback for notes the daemon may not
+  write to. Deterministic across machines, but **not rename-stable** — the same
+  weakness as path-keying, now at least recorded per note rather than implicit.
+
+`NAMESPACE` is fixed forever. Changing it would silently re-identify every note
+that relies on derivation.
+
 ## `vault.chunker.chunk_note`
 
 `chunk_note(note, max_tokens=512, overlap_tokens=50) -> list[Chunk]`.
@@ -103,11 +126,57 @@ Extend the frontmatter `tags:` list with new entries, preserving order.
 Creates the `tags:` block if absent. Never writes inline `#tag` markers —
 frontmatter is the safer surface to mutate.
 
-### `is_writable(note_path, ...) -> (ok, reason)`
+!!! warning "This round-trips the document through PyYAML"
+    `add_tags` still uses `frontmatter.loads`/`dumps`, which rewrites the whole
+    file. Measured on one small note, a single call collapsed CRLF to LF on
+    every line, expanded flow-style `tags: [a, b]` into block style, deleted a
+    YAML comment, and dropped the trailing newline. It needs converting to the
+    textual approach below — see Known Bugs in `PROJECT_MANAGEMENT.md`.
+
+### `set_frontmatter_key_textual(note_path, key, value, ...) -> WriteResult`
+
+Insert or replace **one scalar `key: value` line**, leaving every other byte of
+the file untouched — comments, key order, quoting style, flow-style lists,
+dates, and line endings all survive. A note with no frontmatter gains a minimal
+block; new keys go at the end of an existing one.
+
+This exists because the UUID migration touches every note in the vault, and a
+whole-vault reformat is the fastest way to make a user distrust the tool. The
+byte-level contract is pinned by `tests/test_vault_writer_frontmatter.py`.
+
+Two details that are easy to get wrong, both regression-tested:
+
+- **The opening `---` only counts on the very first line.** A `---` further down
+  is a horizontal rule.
+- **Reads use `newline=""`.** Python's universal-newline mode translates CRLF to
+  LF *on read* — that, not the write, is what would turn every edit to a
+  Windows-synced vault into a whole-file diff.
+
+`value` is written bare, so it must be YAML-safe as-is. This is not a
+general-purpose YAML writer.
+
+### `remove_frontmatter_key_textual(note_path, key, ...) -> WriteResult`
+
+Deletes a single `key:` line. The rollback path for the UUID migration.
+Surgical by design — it never restores a body, so it stays safe to run on a
+file the user has edited since the key was written.
+
+### `detect_newline(text) -> str`
+
+The dominant line ending of a document, so inserted lines match their
+neighbours.
+
+### `is_writable(note_path, ..., allow_agent_folder=False) -> (ok, reason)`
 
 The five-gate check (containment, agent folder, opt-out, grace, parseable
 frontmatter). Returned `reason` strings flow into the stats tables shown
 after each `daemon extract` / `link` / `reflect` run.
+
+`allow_agent_folder=True` relaxes the agent-folder gate **and only that gate**.
+That gate exists to stop the daemon rewriting its own generated *prose*;
+stamping an identity key into its own files is a different act, and the observer
+letters need to be addressable like any other note. Containment, `daemon:
+ignore`, and the grace window always apply.
 
 ### `snapshot(note_path, ...) -> Path`
 

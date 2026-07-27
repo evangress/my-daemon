@@ -36,12 +36,14 @@ from my_daemon.models import (
     StructuralReport,
     WarmEdge,
     WeightEvolutionReport,
+    is_daemon_authored_tag,
 )
 from my_daemon.retrieval.weights import apply_selection
 from my_daemon.stores.graph import GraphStore
 from my_daemon.stores.snapshot import SnapshotBundle, open_readonly
 
 _NOTE_PREFIX = "note::"
+_DANGLING_PREFIX = "dangling::"
 _TAG_PREFIX = "tag::"
 
 # Default cutoff for "warm" edges in the report. Edges above this are surfaced
@@ -82,16 +84,28 @@ def compute_report(
     undirected = g.to_undirected(as_view=False)  # mutable view for algorithms
 
     note_nodes = {
-        n for n, d in g.nodes(data=True)
-        if d.get("type") == "note" and not d.get("dangling")
+        n for n, d in g.nodes(data=True) if d.get("type") == "note" and not d.get("dangling")
     }
     tag_nodes = {n for n, d in g.nodes(data=True) if d.get("type") == "tag"}
+    # Daemon-authored tags are this report's own past conclusions. They stay in
+    # the graph and in `stats()`, but the observer must not read them back as
+    # evidence — the letter is written in the same consolidate run that mints
+    # them, so citing one would be the daemon quoting itself.
+    daemon_tag_nodes = {
+        n for n in tag_nodes if is_daemon_authored_tag(str(g.nodes[n].get("title", "")))
+    }
+    # Communities only: betweenness, bridges and orphans measure the graph's
+    # real shape, and a tag the user accepted is part of that shape.
+    community_projection = (
+        undirected.subgraph([n for n in undirected if n not in daemon_tag_nodes])
+        if daemon_tag_nodes
+        else undirected
+    )
     dangling_nodes = {
-        n for n, d in g.nodes(data=True)
-        if d.get("type") == "note" and d.get("dangling")
+        n for n, d in g.nodes(data=True) if d.get("type") == "note" and d.get("dangling")
     }
 
-    communities = _louvain_communities(g, undirected, max_communities=max_communities)
+    communities = _louvain_communities(g, community_projection, max_communities=max_communities)
     bridging = _bridging_notes(
         undirected, note_nodes, k=betweenness_sample_k, limit=max_bridging_notes
     )
@@ -122,7 +136,10 @@ def _louvain_communities(
     *,
     max_communities: int,
 ) -> list[CommunitySummary]:
-    """Louvain on the full undirected projection (tags carry useful signal).
+    """Louvain on the undirected projection (user tags carry useful signal).
+
+    ``undirected`` arrives with daemon-authored tag nodes already removed, so a
+    theme tag can never be the reason two notes share a community.
 
     Members reported are note-only — tags are clustering glue, not output.
     Communities of size 1 (singleton notes) are pruned: they're already
@@ -139,14 +156,18 @@ def _louvain_communities(
     summaries: list[CommunitySummary] = []
     for idx, comm in enumerate(sorted(raw, key=len, reverse=True)):
         note_members = sorted(
-            n.removeprefix(_NOTE_PREFIX)
+            _display(g, n)
             for n in comm
             if n.startswith(_NOTE_PREFIX) and not g.nodes[n].get("dangling")
         )
         if len(note_members) < 2:
             continue
         tag_counts = Counter(
-            n.removeprefix(_TAG_PREFIX) for n in comm if n.startswith(_TAG_PREFIX)
+            tag
+            for tag in (n.removeprefix(_TAG_PREFIX) for n in comm if n.startswith(_TAG_PREFIX))
+            # Belt and braces: the projection already excludes these, but this
+            # Counter feeds the observer prompt directly.
+            if not is_daemon_authored_tag(tag)
         )
         summaries.append(
             CommunitySummary(
@@ -181,7 +202,7 @@ def _bridging_notes(
     except Exception:  # noqa: BLE001
         return []
     ranked = sorted(
-        ((n.removeprefix(_NOTE_PREFIX), s) for n, s in bc.items() if n in note_nodes and s > 0),
+        ((_display(undirected, n), s) for n, s in bc.items() if n in note_nodes and s > 0),
         key=lambda x: x[1],
         reverse=True,
     )[:limit]
@@ -210,8 +231,8 @@ def _bridge_edges(
         kind, weight = _summarize_parallel_edges(g, u, v)
         out.append(
             BridgeEdge(
-                src=u.removeprefix(_NOTE_PREFIX),
-                dst=v.removeprefix(_NOTE_PREFIX),
+                src=_display(g, u),
+                dst=_display(g, v),
                 kind=kind,
                 weight=weight,
             )
@@ -237,7 +258,7 @@ def _orphan_notes(
     out: list[str] = []
     for n in sorted(note_nodes):
         if undirected.degree(n) <= 1:
-            out.append(n.removeprefix(_NOTE_PREFIX))
+            out.append(_display(undirected, n))
             if len(out) >= limit:
                 break
     return out
@@ -252,7 +273,7 @@ def _dangling_targets(
     """Wikilink targets without a backing note, ranked by how many notes name them."""
 
     ranked = sorted(
-        ((n.removeprefix(_NOTE_PREFIX), g.in_degree(n)) for n in dangling_nodes),
+        ((_strip_prefix(n), g.in_degree(n)) for n in dangling_nodes),
         key=lambda x: x[1],
         reverse=True,
     )[:limit]
@@ -272,10 +293,18 @@ def _warm_edges(
         weight = float(edata.get("weight", 1.0))
         if weight <= threshold:
             continue
+        # A warm edge is evidence in the letter; a daemon-authored tag edge is
+        # the daemon's own output, however reinforced it has become.
+        if any(
+            is_daemon_authored_tag(str(g.nodes[node].get("title", "")))
+            for node in (u, v)
+            if g.nodes[node].get("type") == "tag"
+        ):
+            continue
         ranked.append(
             WarmEdge(
-                src=_strip_prefix(u),
-                dst=_strip_prefix(v),
+                src=_display(g, u),
+                dst=_display(g, v),
                 kind=str(edata.get("kind", "unknown")),
                 weight=weight,
                 last_reinforced_at=edata.get("last_reinforced_at"),
@@ -285,9 +314,7 @@ def _warm_edges(
     return ranked[:limit]
 
 
-def _summarize_parallel_edges(
-    g: nx.MultiDiGraph, u: str, v: str
-) -> tuple[str, float]:
+def _summarize_parallel_edges(g: nx.MultiDiGraph, u: str, v: str) -> tuple[str, float]:
     """Collapse parallel edges between u and v into one (kind, max_weight) pair.
 
     ``nx.bridges`` returns undirected pairs; the underlying MultiDiGraph may
@@ -311,11 +338,23 @@ def _summarize_parallel_edges(
 
 
 def _strip_prefix(node: str) -> str:
-    if node.startswith(_NOTE_PREFIX):
-        return node.removeprefix(_NOTE_PREFIX)
-    if node.startswith(_TAG_PREFIX):
-        return node.removeprefix(_TAG_PREFIX)
+    for prefix in (_NOTE_PREFIX, _TAG_PREFIX, _DANGLING_PREFIX):
+        if node.startswith(prefix):
+            return node.removeprefix(prefix)
     return node
+
+
+def _display(g: nx.Graph, node: str) -> str:
+    """Human-readable name for a node.
+
+    Note nodes are keyed by uuid, but every string in a StructuralReport is
+    rendered into prose that an LLM and a person read — so resolve back to the
+    vault-relative path the graph carries on the node.
+    """
+
+    if node.startswith(_NOTE_PREFIX):
+        return g.nodes[node].get("rel_path") or g.nodes[node].get("title") or _strip_prefix(node)
+    return _strip_prefix(node)
 
 
 # ---------------------------------------------------------------------------
@@ -364,15 +403,17 @@ def simulate_evolution(
                 continue
             apply_selection(
                 shadow,
-                seed_note_path=seed_path,
-                selected_note_path=selected_path,
+                seed_note_uuid=seed_path,
+                selected_note_uuid=selected_path,
                 now=ev.timestamp,
             )
             replayed += 1
 
         edge_deltas, note_deltas = _diff_graphs(
-            snapshot_graph, shadow.graph,
-            max_edges=max_edges, max_notes=max_notes,
+            snapshot_graph,
+            shadow.graph,
+            max_edges=max_edges,
+            max_notes=max_notes,
         )
     finally:
         handle.close()
@@ -396,14 +437,14 @@ def _seed_and_selected(event: FeedbackEvent) -> tuple[str | None, str | None]:
     (older M1 rows might lack ``selected_note_path``).
     """
 
-    selected_note = event.selected_note_path
+    selected_note = event.selected_note_uuid
     ranked = (event.retrieval_summary or {}).get("ranked") or []
     seed_note: str | None = None
     if event.selected_rank and 1 <= event.selected_rank <= len(ranked):
         picked = ranked[event.selected_rank - 1] or {}
-        seed_note = picked.get("seed_note_path") or picked.get("note_path")
+        seed_note = picked.get("seed_note_uuid") or picked.get("note_uuid")
         if not selected_note:
-            selected_note = picked.get("note_path")
+            selected_note = picked.get("note_uuid")
     return seed_note, selected_note
 
 
@@ -435,8 +476,8 @@ def _diff_graphs(
             continue
         edge_deltas.append(
             EdgeWeightDelta(
-                src=_strip_prefix(u),
-                dst=_strip_prefix(v),
+                src=_display(snapshot, u),
+                dst=_display(snapshot, v),
                 kind=str(edata.get("kind", "unknown")),
                 before=before,
                 after=after,
@@ -451,7 +492,7 @@ def _diff_graphs(
     edge_deltas.sort(key=lambda d: abs(d.delta), reverse=True)
     note_summaries = [
         NoteWeightDelta(
-            note_path=node.removeprefix(_NOTE_PREFIX),
+            note_path=_display(snapshot, node),
             total_delta=sum(deltas),
             edges_changed=len(deltas),
         )

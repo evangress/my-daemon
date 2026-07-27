@@ -15,6 +15,10 @@ from my_daemon.stores.graph import GraphStore
 from my_daemon.vault import VaultReader
 from my_daemon.vault.chunker import chunk_note
 
+# Fixture notes carry no `uuid:` frontmatter, so their identity is the
+# deterministic path-derived fallback.
+from my_daemon.vault.identity import derive_path_uuid as _u
+
 
 def _vault_graph(vault_root: Path, store_path: Path) -> GraphStore:
     store = GraphStore(path=store_path)
@@ -30,17 +34,19 @@ def test_apply_selection_reinforces_direct_wikilink(tmp_path: Path, vault_root: 
 
     result = apply_selection(
         store,
-        seed_note_path="Designing AI Memory.md",
-        selected_note_path="Pullman Daemons.md",
+        seed_note_uuid=_u("Designing AI Memory.md"),
+        selected_note_uuid=_u("Pullman Daemons.md"),
     )
 
     assert result.edges_reinforced >= 1
     assert result.total_delta > 0
-    assert result.path[0].endswith("Designing AI Memory.md")
-    assert result.path[-1].endswith("Pullman Daemons.md")
+    assert result.path[0] == f"note::{_u('Designing AI Memory.md')}"
+    assert result.path[-1] == f"note::{_u('Pullman Daemons.md')}"
 
     # The wikilink edge from Designing AI Memory → Pullman Daemons should be > 1.0.
-    edge_data = store.graph["note::Designing AI Memory.md"]["note::Pullman Daemons.md"]
+    edge_data = store.graph[f"note::{_u('Designing AI Memory.md')}"][
+        f"note::{_u('Pullman Daemons.md')}"
+    ]
     weights = [d["weight"] for d in edge_data.values()]
     assert max(weights) > 1.0
     # Stamp set.
@@ -53,8 +59,8 @@ def test_apply_selection_self_is_noop(tmp_path: Path, vault_root: Path) -> None:
 
     result = apply_selection(
         store,
-        seed_note_path="Designing AI Memory.md",
-        selected_note_path="Designing AI Memory.md",
+        seed_note_uuid=_u("Designing AI Memory.md"),
+        selected_note_uuid=_u("Designing AI Memory.md"),
     )
 
     assert result.edges_reinforced == 0
@@ -68,11 +74,13 @@ def test_apply_selection_respects_ceiling(tmp_path: Path, vault_root: Path) -> N
     for _ in range(50):
         apply_selection(
             store,
-            seed_note_path="Designing AI Memory.md",
-            selected_note_path="Pullman Daemons.md",
+            seed_note_uuid=_u("Designing AI Memory.md"),
+            selected_note_uuid=_u("Pullman Daemons.md"),
         )
 
-    edge_data = store.graph["note::Designing AI Memory.md"]["note::Pullman Daemons.md"]
+    edge_data = store.graph[f"note::{_u('Designing AI Memory.md')}"][
+        f"note::{_u('Pullman Daemons.md')}"
+    ]
     for d in edge_data.values():
         assert d["weight"] <= DEFAULT_CEILING + 1e-6
 
@@ -82,18 +90,18 @@ def test_weighted_neighbors_ranks_reinforced_path_closer(tmp_path: Path, vault_r
     store = _vault_graph(vault_root, tmp_path / "g.gpickle")
 
     # Baseline: undirected hop distance from Designing AI Memory → Pullman Daemons is 1.
-    baseline = store.neighbors_within("Designing AI Memory.md", depth=2, weighted=True)
-    pullman_baseline = baseline["Pullman Daemons.md"]
+    baseline = store.neighbors_within(_u("Designing AI Memory.md"), depth=2, weighted=True)
+    pullman_baseline = baseline[_u("Pullman Daemons.md")]
 
     for _ in range(3):
         apply_selection(
             store,
-            seed_note_path="Designing AI Memory.md",
-            selected_note_path="Pullman Daemons.md",
+            seed_note_uuid=_u("Designing AI Memory.md"),
+            selected_note_uuid=_u("Pullman Daemons.md"),
         )
 
-    reinforced = store.neighbors_within("Designing AI Memory.md", depth=2, weighted=True)
-    assert reinforced["Pullman Daemons.md"] < pullman_baseline
+    reinforced = store.neighbors_within(_u("Designing AI Memory.md"), depth=2, weighted=True)
+    assert reinforced[_u("Pullman Daemons.md")] < pullman_baseline
 
 
 def test_decay_unused_edges_pulls_toward_baseline(tmp_path: Path, vault_root: Path) -> None:
@@ -102,10 +110,12 @@ def test_decay_unused_edges_pulls_toward_baseline(tmp_path: Path, vault_root: Pa
 
     apply_selection(
         store,
-        seed_note_path="Designing AI Memory.md",
-        selected_note_path="Pullman Daemons.md",
+        seed_note_uuid=_u("Designing AI Memory.md"),
+        selected_note_uuid=_u("Pullman Daemons.md"),
     )
-    edge_data = store.graph["note::Designing AI Memory.md"]["note::Pullman Daemons.md"]
+    edge_data = store.graph[f"note::{_u('Designing AI Memory.md')}"][
+        f"note::{_u('Pullman Daemons.md')}"
+    ]
     pre_weights = {k: d["weight"] for k, d in edge_data.items()}
     assert all(w > 1.0 for w in pre_weights.values())
 

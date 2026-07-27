@@ -33,6 +33,7 @@ from typing import Any
 
 from my_daemon.config import Settings, load_settings
 from my_daemon.integration.core import DaemonCore, build_core
+from my_daemon.stores.activations import HERMES_PREFETCH_SURFACE
 
 # Candidate import paths for Hermes's memory-provider ABC, most-likely first.
 _ABC_CANDIDATES = (
@@ -167,6 +168,11 @@ class MyDaemonProvider(_MemoryProviderBase):  # type: ignore[misc,valid-type]
 
         Logs a FeedbackEvent (inside ``recall``) and caches its id + candidates
         so ``sync_turn`` can reinforce whichever note the assistant actually used.
+
+        Recorded under the **ambient** surface. Nobody asked for this lookup —
+        it fires on every turn — so it must not be read back as evidence of what
+        the user has been thinking about (fingerprint recall, theme clustering).
+        The deliberate ``mydaemon_recall`` tool keeps the intentional surface.
         """
         if self._core is None:
             return ""
@@ -175,6 +181,7 @@ class MyDaemonProvider(_MemoryProviderBase):  # type: ignore[misc,valid-type]
             query,
             budget_chars=s.hermes.prefetch_budget_chars,
             top_k=s.hermes.recall_top_k,
+            surface=HERMES_PREFETCH_SURFACE,
         )
         self._last_prefetch[session_id or self._session_id] = {
             "feedback_event_id": block.feedback_event_id,
@@ -192,7 +199,9 @@ class MyDaemonProvider(_MemoryProviderBase):  # type: ignore[misc,valid-type]
             return
         sid = session_id or self._session_id
         thread = threading.Thread(
-            target=self._sync_turn_worker, args=(user, assistant, sid), daemon=True,
+            target=self._sync_turn_worker,
+            args=(user, assistant, sid),
+            daemon=True,
         )
         with self._pending_lock:
             self._pending.append(thread)
@@ -380,7 +389,9 @@ class MyDaemonProvider(_MemoryProviderBase):  # type: ignore[misc,valid-type]
         args = arguments or {}
         if name == "mydaemon_recall":
             data = self._core.recall(
-                args["query"], top_k=args.get("top_k"), synthesize=False,
+                args["query"],
+                top_k=args.get("top_k"),
+                synthesize=False,
             )
             return json.dumps(data, default=str)
         if name == "mydaemon_dream":

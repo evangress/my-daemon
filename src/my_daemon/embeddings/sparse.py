@@ -71,4 +71,8 @@ class SparseEmbedder:
     def download(self) -> Path:
         """Force-download the sparse model into ``cache_folder``."""
         self._model = self._load(local_files_only=False)
-        return self.cache_folder if self.cache_folder is not None else Path.home() / ".cache" / "fastembed"
+        return (
+            self.cache_folder
+            if self.cache_folder is not None
+            else Path.home() / ".cache" / "fastembed"
+        )
