@@ -1,0 +1,21 @@
+# Default: normalise everything to LF in the repository.
+# This must come FIRST — in .gitattributes the *last* matching pattern wins, so
+# a catch-all placed below would silently override the specific rules under it.
+* text=auto
+
+# Windows scripts must keep CRLF *in the committed blob*, not merely on
+# checkout. `install-my-daemon.bat` is downloaded straight from GitHub raw,
+# which serves the stored bytes and never applies git's checkout conversion —
+# so a repo that stores LF ships an LF batch file to every user who downloads
+# the installer.
+#
+# cmd.exe tolerates LF in simple scripts but not reliably in the two constructs
+# these files lean on: parenthesised `if (...)` blocks and `set /p`.
+#
+# `-text`, NOT `text eol=crlf`. The latter stores LF in the repository and only
+# converts on checkout, which does nothing for a file fetched over raw HTTP.
+# `-text` disables conversion entirely, so the CRLF bytes are what gets stored
+# and therefore what gets served. `diff` keeps them readable in patches.
+*.bat -text diff
+*.cmd -text diff
+*.vbs -text diff
