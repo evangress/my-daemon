@@ -464,3 +464,49 @@ def test_invalid_api_key_becomes_one_actionable_line(stores: FakeStores):
     assert "Traceback" not in result.output
     assert "ANTHROPIC_API_KEY" in result.output
     assert "rejected" in result.output
+
+
+# ---------------------------------------------------------------------------
+# store preflight
+# ---------------------------------------------------------------------------
+
+SERVER_MODE_CONFIG = """\
+vault:
+  path: {vault}
+vector_store:
+  backend: qdrant
+  qdrant:
+    url: http://127.0.0.1:9
+    collection: chunks
+graph:
+  path: ./data/graph.gpickle
+  manifest_path: ./data/manifest.json
+feedback:
+  db_path: ./data/feedback.db
+embeddings:
+  cache_folder: ./data/models
+"""
+
+
+def test_ingest_reports_an_unreachable_server_before_building_the_embedder(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+):
+    """Reported live 2026-07-28: a stale server-mode config downloaded 133MB of
+    embedding model, *then* failed with "cannot reach the vector store". The
+    connection is the cheap check and must come first.
+    """
+    from my_daemon import cli
+
+    vault = tmp_path / "vault"
+    vault.mkdir()
+    (tmp_path / "config.yaml").write_text(SERVER_MODE_CONFIG.format(vault=vault), encoding="utf-8")
+    monkeypatch.chdir(tmp_path)
+
+    built = []
+    monkeypatch.setattr(cli, "_build_embedder", lambda s: built.append("embedder"))
+
+    result = runner.invoke(app, ["ingest"])
+
+    assert result.exit_code == 1
+    assert built == [], "the embedder was built before the store was probed"
+    assert "Cannot reach the vector store" in result.output

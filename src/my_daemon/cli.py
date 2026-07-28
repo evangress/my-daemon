@@ -214,6 +214,32 @@ def _store_error_types() -> tuple[type[BaseException], ...]:
     return (LocalStoreLockedError, *connection_error_types())
 
 
+def _require_reachable_server(s: Settings) -> None:
+    """Fail on a dead Qdrant server before anything expensive happens.
+
+    Reported live 2026-07-28: a config still in server mode from before
+    embedded became the default downloaded ~130MB of embedding model and *then*
+    failed with "cannot reach the vector store", because `ingest` built the
+    embedder first to learn its dimension. The connection is the cheap check,
+    so it goes first.
+
+    Server mode only. Embedded mode has no server to probe, and opening the
+    folder just to test it would fight its single-process lock.
+    """
+
+    qdrant = s.vector_store.qdrant
+    # `is_embedded`, not `url is None`: `url` carries a historical default of
+    # http://localhost:6333, so it is never None and testing it would probe a
+    # server for every embedded config too.
+    if qdrant.is_embedded:
+        return
+    if not server_reachable(qdrant.url):
+        # Raised, not printed: `_store_errors` already renders exactly this
+        # condition in one place, and two spellings of "Qdrant is down" is the
+        # drift that wrapper exists to prevent.
+        raise ConnectionError("connection refused")
+
+
 @contextlib.contextmanager
 def _store_errors(s: Settings) -> Iterator[None]:
     """Turn a dead vector store into one actionable line, at the CLI boundary.
@@ -334,6 +360,10 @@ def ingest(
             console.log(f"[{i + 1}/{total}] {rel_path}")
 
     with _store_errors(s):
+        # Before the embedder: building that can pull ~130MB of model on a
+        # first run, and it only goes first because `_build_vector_store`
+        # needs its dimension. `_store_errors` renders whatever this raises.
+        _require_reachable_server(s)
         embedder = _build_embedder(s)
         sparse_embedder = _build_sparse_embedder(s)
         vector_store = _build_vector_store(s, dim=embedder.dimension)
