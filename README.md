@@ -1,228 +1,154 @@
 # My Daemon
 
-A personal knowledge and memory system over an Obsidian vault. Vector seeds, graph expansion, LLM synthesis — the kind of memory companion that grows with you over time.
+**A personal knowledge and memory system over an Obsidian vault.** Vector seeds, graph expansion, LLM synthesis — the kind of memory companion that grows with you over time.
 
-This is the **v0.1 first draft** following [`MY-DAEMON-SCAFFOLD.md`](MY-DAEMON-SCAFFOLD.md). The boring end-to-end pipeline works; adaptive weighting, nightly consolidation, and the observer LLM (Phase 4+) are intentionally deferred.
+Point it at your vault, ask it a question, and it answers from *your own notes* with citations — following both semantic similarity and the wikilinks you already drew by hand. Left running, it also writes back: summarizing notes, proposing links, and distilling themed memory files about who you are.
 
-## What's here
+Apache-2.0 · Python 3.11–3.14 · runs entirely on your machine, no external services to install.
+
+---
+
+## Documentation
+
+**→ Start at the [documentation index](docs-source/index.md).**
+
+| Page | What's in it |
+|---|---|
+| [Getting Started](docs-source/getting-started.md) | Step-by-step install (Windows 11, Linux, macOS), where your API key is stored, first ingest, first query |
+| [Architecture](docs-source/architecture.md) | The data flow from a `.md` file to a cited answer |
+| [CLI Reference](docs-source/cli.md) | Every `daemon` subcommand and flag |
+| [Configuration](docs-source/configuration.md) | Every key in `config.yaml`, path anchoring, env overrides |
+| [Background Agents](docs-source/background-agents.md) | The writeback jobs, the safety rules, scheduling |
+| [Roadmap](docs-source/roadmap.md) | Shipped, next, and deliberately deferred |
+| [Development](docs-source/development.md) | Test layout, linting, contributing |
+
+The docs also build as a site: `mkdocs serve`, then open `http://127.0.0.1:8000`.
+
+## How it works
+
+My Daemon builds two complementary representations of your vault and queries them together:
+
+| Layer | What it stores | What it's good at |
+|---|---|---|
+| **Vector store** (Qdrant, embedded) | Dense + sparse embeddings of every chunk | Paraphrased and conceptual recall; exact-token recall via BM42 |
+| **Graph** (NetworkX) | Note ↔ note (wikilinks) and note ↔ tag edges | Following the structure you already gave your notes |
+
+A query embeds, finds seed chunks by hybrid dense+sparse fusion, BFS-expands those seeds through the graph with distance decay, ranks and trims to a token budget, then sends the result to Claude with a "you are this person's daemon" prompt. Every query and the candidates it surfaced are logged to SQLite, so a later phase can learn which sources you actually found useful.
+
+[Architecture](docs-source/architecture.md) walks the whole path with the real function names.
+
+## Quickstart
+
+Full instructions — including the prerequisites and what to do when something goes wrong — are in [Getting Started](docs-source/getting-started.md).
+
+**Windows 11.** Double-click `setup.bat`, then `launch-setup.bat` to pick your vault and enter your API key. Then:
+
+```cmd
+.venv\Scripts\activate.bat
+daemon doctor
+daemon ingest -v
+daemon query "what was I thinking about last week"
+```
+
+**Linux / macOS.**
+
+```bash
+python setup.py     # creates .venv, installs deps, copies config templates
+daemon setup        # pick the vault, store the API key
+daemon doctor
+daemon ingest -v
+daemon query "what was I thinking about last week"
+```
+
+`daemon ingest` is incremental — re-running only re-embeds notes you've changed. `daemon doctor` is the thing to run whenever something looks wrong; it checks config, vault, vector store, API key, model cache, database schema, and graph, and tells you which one is unhappy.
+
+There is nothing to install alongside it and no server to start: the vector store runs **embedded**, in-process. (A standalone Qdrant server is supported for large vaults or concurrent CLI+GUI access — see [Getting Started](docs-source/getting-started.md#qdrant-embedded-or-server).)
+
+## Your API key
+
+Synthesis calls Claude, so you need an [Anthropic API key](https://console.anthropic.com/settings/keys). It is resolved from three places, first hit wins:
+
+| # | Source | Encrypted at rest | Set it with |
+|---|---|---|---|
+| 1 | `ANTHROPIC_API_KEY` env var | no | `export` / `$env:` — CI, containers, headless |
+| 2 | **OS credential store** | **yes** | `daemon setup` — Windows Credential Manager, macOS Keychain, Linux Secret Service |
+| 3 | `.env` beside `config.yaml` | **no — plaintext** | legacy only, kept so older installs keep working |
+
+`daemon setup` writes to layer 2 and nowhere else; a key found in a legacy `.env` is migrated and the plaintext line stripped. The key is never written to `config.yaml` (which is therefore safe to commit) and is never printed — `daemon doctor` reports only *which* layer supplied it, and warns when that layer is a plaintext file.
+
+Retrieval itself needs no key at all: `daemon search`, `daemon ingest`, and `daemon query --no-llm` all work without one.
+
+## Chat window
+
+`daemon chat` opens a native desktop window (pywebview), or `--no-native` for a browser tab at `http://127.0.0.1:8765`. Per-OS one-action launches — `launch-gui.vbs` on Windows, `my-daemon.desktop` on Linux, `launch-gui.command` on macOS — are generated by `setup.py`. Details and flags: [GUI module](docs-source/modules/gui.md).
+
+## Writing back to the vault
+
+Three optional jobs let the daemon *shape* the vault rather than only read it. All are gated behind `agent.enabled: true` and refuse to write until you flip it:
+
+- **`daemon extract`** — appends an `## Agent Notes` section (summary, themes, open questions) to recently-changed notes, between idempotent sentinels.
+- **`daemon link`** — applies high-confidence wikilinks and tags; queues borderline ones to `Agent/link-suggestions-*.md` for review.
+- **`daemon reflect`** — maintains themed memory files in `<vault>/Agent/` distilling who you are over time.
+
+Every write is snapshotted first, the daemon never touches its own `Agent/` folder, and a `daemon: ignore` frontmatter key opts any note out entirely. The full safety discipline and scheduling guidance is in [Background Agents](docs-source/background-agents.md) — read it before enabling anything.
+
+## Repository layout
 
 ```
 src/my_daemon/
 ├── cli.py               # `daemon` Typer entry point
-├── config.py            # Pydantic Settings (yaml + env)
+├── config.py            # layered Pydantic settings (defaults → yaml → env)
+├── secrets.py           # API key resolution: env → OS credential store → legacy .env
+├── paths.py             # config search order and platform state/log directories
+├── doctor.py            # `daemon doctor` — the 8 preflight checks
+├── supervisor.py        # `daemon run` — the long-lived foreground process
 ├── models.py            # Note, Chunk, RetrievedChunk, FeedbackEvent
 ├── vault/               # reader, parser, chunker — markdown → Chunks
 ├── embeddings/          # sentence-transformers wrapper
 ├── stores/              # Qdrant vectors, NetworkX graph, SQLite feedback
 ├── retrieval/           # seed → expand → orchestrate
-├── llm/                 # Anthropic client + synthesis prompt
-├── gui/                 # NiceGUI chat window (`daemon chat`)
+├── analysis/            # structural + theme analysis over frozen snapshots
+├── llm/                 # Anthropic client + synthesis prompts
+├── gui/                 # NiceGUI chat window, Tkinter setup window
 ├── integration/         # DaemonCore — the one adapter every front end shares
-├── hermes/              # Hermes memory-provider plugin (front-end agent)
+├── hermes/              # Hermes memory-provider plugin
 └── pipeline/            # ingest_vault, QueryEngine
+
+librarian/               # the Obsidian Librarian — a separate process that
+                         # shapes the vault, built on my_daemon as a library
+docs-source/             # the documentation in this README's index above
+tests/                   # 663 tests, no external services required
 ```
 
-> **Hermes front end.** My Daemon can act as the **memory & dream layer** for the
-> [Hermes agent](https://github.com/NousResearch/hermes-agent) (MIT) — Hermes
-> *acts*; My Daemon *remembers and dreams*. Ambient cited recall before every
-> turn, automatic injection of the daemon's latest observer letter, and
-> turn-by-turn capture, all off by default. See
-> [`docs-source/integrations/hermes.md`](docs-source/integrations/hermes.md) and
-> [`PLAN-HERMES.md`](PLAN-HERMES.md); preflight with `daemon hermes doctor`.
+Design and planning documents live at the repo root: [`MY-DAEMON-VISION.md`](MY-DAEMON-VISION.md) (intent), [`MY-DAEMON-RESEARCH.md`](MY-DAEMON-RESEARCH.md) (prior art), [`MY-DAEMON-SCAFFOLD.md`](MY-DAEMON-SCAFFOLD.md) (full design and phasing), [`PROJECT_MANAGEMENT.md`](PROJECT_MANAGEMENT.md) (milestones, known bugs, running to-do), and [`THEME.md`](THEME.md) (the visual language).
 
-## Quickstart
+## Hermes integration
 
-### Windows 11
+My Daemon can act as the **memory and dream layer** for the [Hermes agent](https://github.com/NousResearch/hermes-agent) (MIT) — Hermes *acts*; My Daemon *remembers and dreams*. Ambient cited recall before every turn, automatic injection of the daemon's latest observer letter, and turn-by-turn capture, all off by default. See [the integration guide](docs-source/integrations/hermes.md) and [`PLAN-HERMES.md`](PLAN-HERMES.md); preflight with `daemon hermes doctor`.
 
-No Docker required, and the API key never gets typed into a file.
-Full walkthrough: [`docs-source/getting-started.md`](docs-source/getting-started.md).
+## Status
 
-1. Install [Python 3.12](https://www.python.org/downloads/) — tick **Add python.exe to PATH** during install. Check with `py --version` in a new Command Prompt.
-2. Extract the project somewhere you own (e.g. `C:\Users\<you>\my-daemon`, **not** `C:\Program Files` — the daemon writes a `data\` folder).
-3. Double-click **`setup.bat`**. It creates `.venv`, installs dependencies, copies `config.example.yaml` → `config.yaml`, and *generates* the launcher scripts. Wait for `Setup complete`.
-4. Double-click **`launch-setup.bat`** to pick your vault folder and paste your API key. The key is saved to **Windows Credential Manager** (DPAPI-encrypted) — never to `config.yaml` or `.env`.
-5. Verify and run:
-   ```cmd
-   .venv\Scripts\activate.bat
-   daemon doctor
-   daemon ingest -v
-   daemon query "what was I thinking about last week"
-   ```
+v0.1. The end-to-end pipeline — ingest → retrieve → synthesize → log — works against real vaults, and the daemon envelope around it (config resolution, atomic state writes, preflight checks, backup/restore, supervisor, scheduling) is in place. Background-agent writeback is wired up but gated off until you confirm the thresholds with `--dry-run`.
 
-`daemon doctor` should report `api key — present via the OS credential store`.
-Then double-click `launch-gui.vbs` for the chat window.
-
-> The launcher scripts (`launch-setup.bat`, `launch-gui.vbs`, `launch-gui.bat`) are **generated by `setup.bat`** and are not in a fresh clone. Run step 3 before looking for them.
-
-### Linux / macOS
-
-```bash
-python setup.py                         # creates .venv, installs deps, copies config templates
-# or, if you prefer step-by-step:
-uv sync                                 # or: pip install -e .[dev]
-```
-
-### Qdrant (optional — any OS)
-
-Qdrant runs **embedded** by default, in-process against `./data/qdrant-local/`, so there is nothing to start. Only if you want the server (concurrent CLI + GUI access, or a large vault) do you need Docker:
-
-```bash
-docker compose up -d      # then swap `path:` for `url:` in config.yaml and re-run `daemon ingest --full`
-```
-
-### Configure
-
-`setup.py` (and `setup.bat`) already copy `config.example.yaml` → `config.yaml`. If you skipped that step, run:
-
-```bash
-daemon init --vault ~/Documents/Obsidian/MyVault
-```
-
-Then run `daemon setup` to store your `ANTHROPIC_API_KEY`.
-
-### Your API key
-
-Resolved from three places, first hit wins:
-
-| # | Source | Encrypted at rest | Set it with |
-|---|---|---|---|
-| 1 | `ANTHROPIC_API_KEY` env var | no | `export` / `$env:` — CI, containers, headless |
-| 2 | **OS credential store** | **yes** | `daemon setup` — Credential Manager / Keychain / Secret Service |
-| 3 | `.env` beside `config.yaml` | **no — plaintext** | legacy only, kept so old installs keep working |
-
-`daemon setup` writes to layer 2 and nowhere else; if it finds a key in a legacy `.env` it migrates it and strips the plaintext line. The key is never written to `config.yaml` (safe to commit) and never printed — `daemon doctor` reports only which layer supplied it, and **warns** when that layer is a plaintext `.env`.
-
-> Upgrading from an older install? Your `.env` keeps working. Run `daemon setup` once to migrate, then **rotate the key** at [console.anthropic.com](https://console.anthropic.com/settings/keys) — it has been readable on disk.
-
-### Ingest your vault
-
-```bash
-daemon ingest -v
-```
-
-Re-running is incremental — only modified notes get re-embedded.
-
-### Ask your daemon
-
-```bash
-daemon query "what was I working through about graph-augmented retrieval"
-```
-
-You'll see the synthesized answer plus at least three ranked candidate sources. Every query is logged to `data/feedback.db` so a later phase can learn from which one you picked.
-
-### Chat with your daemon (GUI)
-
-`daemon chat` opens a **native desktop window** by default (via `pywebview`, which now ships as a hard dependency). No browser tab, no terminal needed.
-
-| Platform | One-action launch |
-|---|---|
-| **Windows** | Double-click `launch-gui.vbs` — silent native window, no console flash. (`launch-gui.bat` is a debug fallback that keeps a visible console + browser tab for diagnosing startup errors.) |
-| **Linux** | `cp my-daemon.desktop ~/.local/share/applications/` once, then launch "My Daemon" from your activities menu. Or run `./launch-gui.sh` from anywhere. |
-| **macOS** | Double-click `launch-gui.command` from Finder. (For a fully terminal-free experience, wrap it in a 1-line AppleScript saved as a `.app` bundle.) |
-
-From a shell:
-
-```bash
-daemon chat                # native window (default)
-daemon chat --no-native    # browser tab at http://127.0.0.1:8765 — useful for remote dev
-```
-
-Flags:
-
-| Flag | Default | Notes |
-|---|---|---|
-| `--host` | `127.0.0.1` | Bind address. Stay on loopback unless you know what you're doing. |
-| `--port` | `8765` | Local port (browser mode) / loopback port (native mode). |
-| `--native` / `--no-native` | `--native` | Pass `--no-native` for a browser tab. |
-
-Close the window to stop the daemon (native mode); `Ctrl+C` in the terminal (browser mode).
-
-> Heads up: the first send after launch can take a few seconds — the embedding model and graph load lazily on the first query, then stay warm for the rest of the session.
-
-> Logs: because the native window hides stdout, the chat writes to a platform-standard log file — `%LOCALAPPDATA%\my-daemon\daemon.log` on Windows, `~/Library/Logs/my-daemon/daemon.log` on macOS, `$XDG_STATE_HOME/my-daemon/daemon.log` (or `~/.local/state/...`) on Linux. The setup window prints the resolved path.
-
-## Useful commands
-
-| Command | What it does |
-|---|---|
-| `daemon chat` | Launch the warm-themed NiceGUI chat window (browser or `--native` desktop window) |
-| `daemon setup` | Tkinter window: pick the vault folder, paste the API key, opt into daily reflection |
-| `daemon extract` | Write an `## Agent Notes` section into recently-changed notes (background agent) |
-| `daemon link` | Auto-link / tag notes at strict thresholds; review lower-confidence in `Agent/link-suggestions-*.md` |
-| `daemon reflect` | Update themed memory files in `<vault>/Agent/` (the "digital embodiment") |
-| `daemon models download` | Pre-pull the embedding model into the local cache so queries stay offline afterward |
-| `daemon status` | Vault path, note count, vector chunk count, graph stats |
-| `daemon graph stats` | Top-PageRank notes and top tags |
-| `daemon search "phrase"` | Vector-only debug search (no graph, no LLM) |
-| `daemon query "..." --no-llm` | Show ranked context without calling Claude |
-| `daemon query "..." -v` | Show seed/expanded counts, latency, feedback id |
-| `daemon ingest --full` | Force a full rebuild |
-| `daemon reset` | Wipe `data/`. The vault is never touched. |
-
-## Configuration
-
-Edit `config.yaml`. Any value can be overridden by an env var with the `MY_DAEMON_` prefix and double-underscore nesting:
-
-```bash
-export MY_DAEMON_LLM__MODEL=claude-sonnet-4-6
-export MY_DAEMON_GRAPH__EXPANSION_DEPTH=3
-```
-
-### Background agent jobs
-
-Three writeback jobs help the daemon **shape** the vault, not just read from it. All are gated behind `agent.enabled: true` in `config.yaml`; until you flip that, every command refuses to write and asks you to `--dry-run` first.
-
-| Job | What it writes | Where |
-|---|---|---|
-| `daemon extract` | An `## Agent Notes` section per recently-changed note: summary, key points, themes, feelings, open questions | inside the note itself, between `<!-- daemon:start -->` / `<!-- daemon:end -->` sentinels (idempotent on re-runs) |
-| `daemon link` | Wikilinks at cosine ≥ 0.85 AND verbatim-title match; tags shared by ≥ 4 graph neighbors | inside the note; lower-confidence suggestions accumulate to `Agent/link-suggestions-YYYY-MM-DD.md` for review |
-| `daemon reflect` | Themed memory files distilling who you are (personality, projects, relationships, themes) plus a rolling daily journal | `<vault>/Agent/memory-*.md` |
-
-**Safety discipline (built once, applied everywhere):**
-
-- The daemon never touches files inside `<vault>/Agent/` (its own folder).
-- A frontmatter `daemon: ignore` on any note removes it from every job.
-- Files modified within the last 30 minutes are skipped (avoid colliding with a save in progress).
-- Every write is preceded by a snapshot to `<vault>/Agent/backups/<rel>.<unix_ts>.md` — add `Agent/backups/` to your vault's `.gitignore` if you keep the vault in git.
-- All three jobs default to `claude-haiku-4-5` via `llm.batch_model` — ~15× cheaper than Opus. Flip back to Sonnet if you want richer extractions.
-
-**Scheduling.** Run on demand or schedule:
-
-- **Windows:** the `daemon setup` window has a checkbox "Run `daemon reflect` daily at 03:00 (Windows Task Scheduler)" that registers/removes the task for you.
-- **macOS / Linux:** add `crontab -e` lines like:
-  ```cron
-  0 3 * * *  /path/to/my-daemon/.venv/bin/daemon reflect
-  15 3 * * * /path/to/my-daemon/.venv/bin/daemon extract
-  ```
-
-First-time recommendation: `daemon extract --dry-run` against your real vault, eyeball the candidate notes, then `daemon extract --note <one>` on a single note to see the section format. Flip `agent.enabled` after that.
-
-### Hybrid retrieval
-
-Retrieval is **hybrid by default**: a dense embedding (BGE small) and a BM25-style sparse signal (BM42 via `fastembed`) are fused server-side in Qdrant using Reciprocal Rank Fusion. The dense side handles paraphrased / conceptual queries; the sparse side handles proper nouns, project names, and other exact-token recall. Graph expansion runs on the fused seeds as usual.
-
-Flip to dense-only by setting `embeddings.hybrid: false` in `config.yaml` and re-running `daemon ingest --full` (the collection schema differs between modes).
+Adaptive edge weighting, nightly consolidation, and the observer LLM have shipped as M1–M4; multi-embedding spaces, an Obsidian plugin with live file watching, and local-LLM synthesis remain deferred. See the [roadmap](docs-source/roadmap.md) for the current picture.
 
 ## Development
 
 ```bash
-pip install -e .[dev]
-ruff check .
-pytest                              # unit tests (no external services needed)
-MY_DAEMON_E2E=1 pytest tests/test_e2e.py  # full pipeline; needs Qdrant
+uv sync --all-extras       # or: pip install -e .[dev]
+pytest -q                  # 663 tests, no external services needed
+ruff check . && ruff format --check .
+mypy src/my_daemon
 ```
 
-## What's deferred (Phase 4+)
+CI runs exactly these four on every push. More in [Development](docs-source/development.md).
 
-- Adaptive edge weighting from feedback signals
-- Nightly snapshot consolidation
-- Observer LLM that interprets graph structure
-- Multi-embedding spaces (emotional, entity-based)
-- Obsidian plugin / live file watching
-- Local LLM for synthesis
+## License
 
-See `MY-DAEMON-SCAFFOLD.md` for the full design and phasing.
+Apache-2.0 — see [`LICENSE`](LICENSE). Also available under a commercial license; see [`COMMERCIAL-LICENSE.md`](COMMERCIAL-LICENSE.md).
 
 ## Why "Daemon"?
 
-From Pullman's *His Dark Materials* — a daemon is the external soul-companion that knows you completely. Also Socrates' *daimonion*, the inner advisory voice. Both are companions that know the self. That's the intent here: not a tool you operate, but a companion that grows with you.
+A triple pun. Philip Pullman's *daemon*, the external soul-companion in *His Dark Materials* that knows its human completely. Socrates' *daimonion*, the inner advisory voice. And the Unix sense — a background process that runs quietly on your behalf.
+
+The intent is all three: not a tool you operate, but a companion that grows with you — sometimes whispering, sometimes working quietly while you sleep.

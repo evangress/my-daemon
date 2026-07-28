@@ -2,11 +2,14 @@
 
 ## Status
 
-v0.1 is feature-complete against `MY-DAEMON-SCAFFOLD.md`'s Phase 0–3 spec
-and the project-level acceptance criteria. The end-to-end pipeline (ingest
-→ retrieve → synthesize → log) works against a real Obsidian vault. The
-three background-agent writeback jobs ship but are gated behind
-`agent.enabled: false` until you confirm their thresholds with `--dry-run`.
+v0.1 is feature-complete against `MY-DAEMON-SCAFFOLD.md`'s Phase 0–3 spec,
+the M1–M4 adaptive-memory milestones, and the project-level acceptance
+criteria. The end-to-end pipeline (ingest → retrieve → synthesize → log)
+works against a real Obsidian vault, and the daemon envelope around it —
+config resolution, atomic state writes, preflight checks, backup/restore,
+supervisor, scheduling — is in place. The three background-agent writeback
+jobs ship but are gated behind `agent.enabled: false` until you confirm
+their thresholds with `--dry-run`.
 
 ## Done
 
@@ -30,38 +33,40 @@ three background-agent writeback jobs ship but are gated behind
   checkbox for daily reflection.
 - **NiceGUI chat (`daemon chat`).** Streaming responses, brand-aligned dark
   theme, lazy retrieval pipeline.
-- **Setup window (`daemon setup`).** Vault picker + API-key persistence
-  (`.env` always; on Windows also `setx`).
+- **Setup window (`daemon setup`).** Vault picker + API-key persistence.
+- **Adaptive memory loop, M1–M4 (2026-05-17).** Adaptive edge weighting from
+  feedback signals; the snapshot mechanism; structural-pattern analysis over
+  frozen snapshots (Louvain communities, edge betweenness); and the observer
+  LLM that reads those reports and writes the user-facing letter.
+- **Daemon envelope (2026-07-26).** Config search order with loud
+  missing-config failure and config-dir-anchored paths, atomic graph and
+  manifest writes with an inter-process lock, embedded Qdrant as the default,
+  `daemon doctor`, `backup`/`restore`, and the `daemon run` supervisor plus
+  `daemon schedule`.
+- **API key out of plaintext (2026-07-27).** The key resolves environment → OS
+  credential store → legacy `.env`, and `daemon setup` writes only to the
+  credential store, migrating and stripping any plaintext copy it finds. See
+  [Getting Started](getting-started.md#where-your-api-key-is-stored).
 
 ## Next
 
-In priority order, drawn from the project's "Next Steps" list:
+In priority order:
 
-1. **Adaptive edge weighting from feedback signals.** The feedback DB
-   already records every query and ranked candidate. A `daemon select
-   <id> <#>` command writes a `candidate_selected` signal; a background
-   pass mutates `weight` on the graph edges that connected the chosen
-   candidate. The pieces are all in place — what's deferred is the *shape*
-   of the signal (per-chunk? per-note? does picking candidate #2
-   down-weight #1?).
-2. **Snapshot-based nightly consolidation.** A scheduled job that snapshots
-   the graph, runs classical graph algorithms (Louvain communities, edge
-   betweenness, the rest of `python-louvain`), and writes summaries to a
-   consolidation log. Distinct from reflection in that it operates on the
-   *graph*, not the prose.
-3. **Observer LLM that interprets graph structure.** A higher-order pass
-   that reads the consolidation log + recent reflection memory and writes
-   higher-level pattern files ("you keep returning to X every spring,"
-   "this cluster of notes feels load-bearing in your project").
-4. **Multi-embedding spaces.** A second embedding alongside the semantic
+1. **Multi-embedding spaces.** A second embedding alongside the semantic
    one — emotional valence, entity-based, code-vs-prose. Hybrid retrieval
    already proves the multi-signal plumbing; this just adds another slot.
-5. **Obsidian plugin / file watcher.** Live ingest as you save. Currently
-   re-ingest is a manual or scheduled step.
-6. **Local LLM for synthesis.** For users who want fully-offline operation
+2. **Obsidian plugin / file watcher.** Live ingest as you save. `daemon run`
+   already watches the vault; the remaining work is the editor-side plugin.
+3. **Local LLM for synthesis.** For users who want fully-offline operation
    end-to-end. The streaming surface already abstracts the provider; a
    local-model client implementing `synthesize` / `synthesize_stream`
    slots in.
+
+**The open design question behind all of it:** seeds dominate the candidate
+pool and seed-picks currently reinforce nothing, so the learning loop closes
+mechanically but has little to learn from. Deciding what "picking" should mean
+comes before scaling any more learning machinery — see the AI Suggestions
+section of [`PROJECT_MANAGEMENT.md`](https://github.com/evangress/my-daemon/blob/master/PROJECT_MANAGEMENT.md).
 
 ## Deferred indefinitely (for a reason)
 
