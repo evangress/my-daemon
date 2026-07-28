@@ -27,6 +27,17 @@ The initial scaffold phase is done. For reference, the linked MY-DAEMON-SCAFFOLD
 
 I have asked Claude to create human cognition and technology/software mappings for reference. When thinking about how to improve or strengthen the capabilities of this application, please read and reference the [MY-DAEMON-RESEARCH.md](MY-DAEMON-RESEARCH.md) document.
 
+**[MY-DAEMON-RESEARCH-APPLIED.md](MY-DAEMON-RESEARCH-APPLIED.md) (2026-07-28)** is
+the post-implementation companion. Where the document above surveys the
+landscape, this one starts from the mechanisms *actually running in the repo* —
+hybrid RRF seeding, weighted-Dijkstra expansion, path reinforcement and half-life
+decay, the IDF-weighted activation ledger, HDBSCAN themes with centroid matching,
+Louvain structural analysis, snapshot-isolated consolidation — cites each to
+`file:line`, pairs it with verified memory-science and ML literature, names four
+honest gaps, and lists costed candidate methods in three tiers. It also carries a
+parameter-provenance appendix separating the principled constants from the
+judgement calls. Read it before adding any new learning machinery.
+
 ## Milestone Plan — Adaptive Memory Loop
 
 Four connected milestones that take the daemon from "answers questions" to
@@ -398,4 +409,71 @@ still uniform, this is why.
   a habit.
 - **`config.yaml` is now genuinely secret-free**, which makes it a candidate
   for being committed as a real template — worth deciding before v0.2.
+
+### 2026-07-28 — After the applied-research pass
+
+Full write-up in
+[MY-DAEMON-RESEARCH-APPLIED.md](MY-DAEMON-RESEARCH-APPLIED.md). The items that
+turned into concrete work, in priority order:
+
+- **⚠ Licence decision needed (CLAUDE.md rule 10).** The published fix for
+  Louvain's badly-connected-communities defect (Traag et al., *Sci Rep* 2019 —
+  up to 25% badly connected, up to 16% *disconnected*) is the Leiden algorithm,
+  and every Python implementation is GPL: `leidenalg` is GPL-3.0 and its
+  dependency `python-igraph` is GPL-2.0. **Both are incompatible with shipping
+  this project under Apache-2.0.** Not adopted; raising it for your call. Three
+  Apache-compatible alternatives are costed in §IV.3, and the cheapest —
+  splitting any disconnected Louvain community into its connected components
+  with `nx.connected_components` — removes the more damaging half of the defect
+  in about ten lines with no new dependency. Recommended default unless you want
+  to relicense.
+
+- **Fix the `similar()` IDF asymmetry first.** Already logged under Known Bugs
+  (eval §2 "3.6"); the research pass sharpened *why* it matters. `record()`
+  stores a **pre-IDF** `l2_norm` (`activations.py:171`) while `similar()`
+  accumulates an **IDF-weighted** dot product against it (`activations.py:354`).
+  The error is not random — it systematically inflates scores for queries built
+  from rare notes. Recall, themes, and the observer letter all inherit it, so
+  every other proposal below is blocked on this.
+
+- **Team-draft interleaving is the answer to the seed-starvation question.**
+  The "seeds dominate the pool and seed-picks reinforce nothing" question has
+  been open since the maturity eval. The IR field solved this shape of problem:
+  clicks measure examination *and* relevance jointly, so no amount of tuning the
+  reinforcement constant fixes it (Radlinski/Kurup/Joachims, CIKM 2008 —
+  absolute click metrics don't track quality at realistic sample sizes; Joachims
+  et al., WSDM 2017 for the propensity-weighted alternative). Building the
+  candidate pool by team-draft between the seed-ranked and expansion-ranked
+  lists makes a selection attributable to a *policy* rather than a rank — which
+  means a seed-pick stops being a no-op, because it is evidence for the seed
+  policy even when there is no path to reinforce. §IV.7.
+
+- **Cheap wins queued:** MMR over the candidate pool before the token trim
+  (§IV.2, no new deps); Hungarian matching via
+  `scipy.optimize.linear_sum_assignment` instead of greedy theme reconciliation
+  (§IV.4, scipy is BSD-3 and already transitive via scikit-learn); building the
+  nightly `O(n²)` fingerprint distance matrix from an inverted index instead of
+  a Python double loop, since most pairs share zero notes.
+
+- **Personalized PageRank as an alternative expansion operator** (§IV.6) —
+  `nx.pagerank(personalization=...)` needs zero new dependencies, and this is
+  exactly the comparison `simulate_evolution` exists to make. Keep the integer
+  hop budget as a pre-filter either way.
+
+- **The amygdala gap is still the biggest one** (§III.1, §IV.9). Nothing in the
+  system asks whether a note *mattered*; `STRENGTH_BY_SOURCE` describes which
+  retrieval route found it, which is a fact about the machinery. Retrieval by
+  recency and match is the wrong affordance for the assistive use case — a
+  person with cognitive decline doesn't need help finding yesterday's note, they
+  need help finding the one that mattered. The behavioural and structural
+  components of a salience score are free from data already logged; the
+  LLM-scored semantic component should be opt-in.
+
+- **Three other honest gaps** worth keeping visible: no episodic time-binding
+  (chunks carry no timestamp, so "what was I working on last spring?" isn't
+  answerable by retrieval — §III.3); forgetting exists only for graph edges and
+  only as one scalar, collapsing Bjork & Bjork's storage-strength /
+  retrieval-strength distinction (§III.4); and the 30-day half-life applies one
+  forgetting curve to a passing curiosity and a decade-long preoccupation alike
+  (§IV.5 — `py-fsrs` is MIT, verified, if you want a learned version).
 

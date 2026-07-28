@@ -1,3 +1,12 @@
+> **Note (2026-07-28).** This document was written *before* the system was built —
+> it maps human neural systems onto the technology landscape in general. Its
+> companion, [MY-DAEMON-RESEARCH-APPLIED.md](MY-DAEMON-RESEARCH-APPLIED.md),
+> does the reverse: it starts from the mechanisms actually running in this
+> repository (cited to `file:line`), names the verified cognitive-science and
+> ML literature each one lands in, and proposes costed next steps. Read this one
+> for the landscape; read that one for what the code is doing and what to build
+> next.
+
 This is exactly the kind of mapping that's worth doing carefully, because the gaps in the analogy are often where the most useful design insight hides. I'll work through the major neural systems and pair each with current technology, then close with what this means for assistive applications.
 
 ## 1. Memory systems
