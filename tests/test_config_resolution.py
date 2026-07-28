@@ -21,11 +21,13 @@ from __future__ import annotations
 from pathlib import Path
 
 import pytest
+from conftest import requires_tkinter
 from typer.testing import CliRunner
 
 from my_daemon.cli import app
 from my_daemon.config import ConfigNotFoundError, load_settings
 from my_daemon.paths import config_search_paths, find_config, user_config_dir
+from my_daemon.secrets import KEYCHAIN_SERVICE, KEYCHAIN_USERNAME
 
 runner = CliRunner()
 
@@ -320,6 +322,72 @@ def test_dotenv_beside_the_config_supplies_the_api_key(
     assert settings.anthropic_api_key == "sk-from-config-dir"
 
 
+def test_the_os_keychain_supplies_the_api_key(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, memory_keyring
+):
+    """The intended path: no plaintext anywhere, key encrypted at rest."""
+    monkeypatch.delenv("ANTHROPIC_API_KEY", raising=False)
+    memory_keyring.set_password(KEYCHAIN_SERVICE, KEYCHAIN_USERNAME, "sk-from-keychain")
+    config = _write_config(tmp_path / "project")
+
+    settings = load_settings(config)
+
+    assert settings.anthropic_api_key == "sk-from-keychain"
+    assert settings.api_key_source == "keychain"
+
+
+def test_the_keychain_beats_a_dotenv_beside_the_config(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, memory_keyring
+):
+    """Upgrading must not be silently undone by a leftover .env."""
+    monkeypatch.delenv("ANTHROPIC_API_KEY", raising=False)
+    memory_keyring.set_password(KEYCHAIN_SERVICE, KEYCHAIN_USERNAME, "sk-from-keychain")
+    project = tmp_path / "project"
+    config = _write_config(project)
+    (project / ".env").write_text("ANTHROPIC_API_KEY=sk-stale-plaintext\n", encoding="utf-8")
+
+    settings = load_settings(config)
+
+    assert settings.anthropic_api_key == "sk-from-keychain"
+
+
+def test_a_real_environment_variable_still_wins_over_the_keychain(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, memory_keyring
+):
+    """CI and containers set the env var and must keep overriding everything."""
+    monkeypatch.setenv("ANTHROPIC_API_KEY", "sk-from-env")
+    memory_keyring.set_password(KEYCHAIN_SERVICE, KEYCHAIN_USERNAME, "sk-from-keychain")
+    config = _write_config(tmp_path / "project")
+
+    settings = load_settings(config)
+
+    assert settings.anthropic_api_key == "sk-from-env"
+    assert settings.api_key_source == "environment"
+
+
+def test_a_dotenv_key_is_reported_as_plaintext_so_the_user_can_be_warned(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+):
+    monkeypatch.delenv("ANTHROPIC_API_KEY", raising=False)
+    project = tmp_path / "project"
+    config = _write_config(project)
+    (project / ".env").write_text("ANTHROPIC_API_KEY=sk-from-config-dir\n", encoding="utf-8")
+
+    settings = load_settings(config)
+
+    assert settings.api_key_source == "dotenv"
+
+
+def test_no_key_anywhere_leaves_the_setting_none(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
+    monkeypatch.delenv("ANTHROPIC_API_KEY", raising=False)
+    config = _write_config(tmp_path / "project")
+
+    settings = load_settings(config)
+
+    assert settings.anthropic_api_key is None
+    assert settings.api_key_source == "missing"
+
+
 # ---------------------------------------------------------------------------
 # daemon init --user
 # ---------------------------------------------------------------------------
@@ -380,6 +448,7 @@ def test_init_without_user_still_writes_to_the_cwd(tmp_path: Path):
 # ---------------------------------------------------------------------------
 
 
+@requires_tkinter
 def test_the_windows_reflect_task_names_its_config_absolutely(tmp_path: Path):
     """A scheduled task starts in system32; the command must not depend on CWD."""
     from my_daemon.gui.setup import reflect_task_command
@@ -390,6 +459,7 @@ def test_the_windows_reflect_task_names_its_config_absolutely(tmp_path: Path):
     assert reflect_task_command(exe, cfg) == f'"{exe}" --config "{cfg}" reflect'
 
 
+@requires_tkinter
 def test_the_setup_window_edits_the_config_the_daemon_reads(tmp_path: Path):
     from my_daemon.gui import setup as setup_gui
 
@@ -399,6 +469,7 @@ def test_the_setup_window_edits_the_config_the_daemon_reads(tmp_path: Path):
     assert setup_gui.project_root() == user_config_dir()
 
 
+@requires_tkinter
 def test_the_setup_window_falls_back_to_the_cwd_when_nothing_exists(tmp_path: Path):
     from my_daemon.gui import setup as setup_gui
 

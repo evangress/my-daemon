@@ -293,8 +293,29 @@ the config instead:
 
 or equivalently `daemon --config /path/to/my-daemon/config.yaml reflect`.
 
-Either form also puts the `.env` beside that config back in scope, which is
-where `ANTHROPIC_API_KEY` lives — cron inherits almost no environment.
+Either form also puts the `.env` beside that config back in scope — cron
+inherits almost no environment.
+
+!!! warning "Scheduled jobs and the OS credential store"
+    `daemon setup` stores `ANTHROPIC_API_KEY` in the OS credential store, and a
+    scheduled job cannot always reach it:
+
+    - **Linux cron** has no session D-Bus, so the Secret Service is usually
+      locked or absent. `resolve_api_key` degrades quietly to the next layer,
+      so give cron the key explicitly — either `ANTHROPIC_API_KEY=...` on the
+      crontab line, or a `.env` beside the config (plaintext; chmod it `600`).
+      A **systemd user unit** (`daemon schedule`) is the better answer: with
+      `loginctl enable-linger` the session keyring is available and the
+      credential store works normally.
+    - **Windows Task Scheduler** reads DPAPI-protected credentials fine when
+      the task runs as your own user with the profile loaded — which is how the
+      `MyDaemonReflect` task registered by `daemon setup` is configured. A task
+      set to run under `SYSTEM` will not see your Credential Manager entry.
+    - **macOS launchd** prompts for Keychain access on first run from a new
+      context; approve it once with *Always Allow*.
+
+    Whichever you pick, confirm it with `daemon doctor` run *the same way* the
+    job runs — the `api key` row tells you which layer answered.
 
 ## Recommended rollout
 

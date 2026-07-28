@@ -245,6 +245,27 @@ NiceGUI's long-term fate) are not yet decided.
 
 ## Done
 
+- **API key out of plaintext + Windows 11 install rewrite (2026-07-27).**
+  The key was written to `.env` in the clear on *every* platform — including
+  Windows, where `setx` had already stored it — and two of the three
+  documented install paths never created a real env var at all. New
+  `my_daemon/secrets.py` resolves the key **environment → OS credential store
+  (`keyring`, MIT) → legacy plaintext `.env`**, and records *which* layer
+  answered in `Settings.api_key_source`; `.env` is read directly rather than
+  through `load_dotenv`, because once dotenv merges it into `os.environ` a
+  plaintext key is indistinguishable from a safe one. `daemon setup` now
+  writes to the credential store **and nowhere else**, migrates + strips any
+  key it finds in a legacy `.env`, and fails loudly when no store exists
+  rather than silently falling back to a file. `daemon doctor` warns on the
+  plaintext case and names the source on pass; `setx` is gone (it also leaked
+  the key through the process command line into event 4688). Docs: README and
+  `getting-started.md` had contradicted each other on Docker (required vs.
+  optional), on where the key goes, and on the Python band — now one numbered
+  Windows 11 flow, with the `setup.bat`-generated launchers called out as
+  generated. 631 → 663 tests, TDD throughout; keyring's tree verified MIT /
+  BSD-3-Clause by hand (`pip-licenses` not installed, so
+  `debug/license-compliance.md` is still the 2026-05-17 generation).
+
 - **Maturity-evaluation fix waves, Arcs 1+2 (2026-07-26).** Five-agent audit
   ([MATURITY-EVALUATION-2026-07-26.md](MATURITY-EVALUATION-2026-07-26.md))
   followed by four fix waves, all Opus sub-agents, TDD throughout;
@@ -352,4 +373,29 @@ reinforce seed retrieval features, or widen the pool with a damped seed
 advantage — before scaling any more learning machinery. Watch
 `daemon analyze` after a week of real use: if the weight distribution is
 still uniform, this is why.
+
+### 2026-07-27 — After moving the API key into the OS credential store
+
+**Follow-ups this opened, none blocking:**
+
+- **`daemon setup` is now the only supported way to set the key, but it is a
+  Tkinter window.** A headless box has no way to store a key except the env
+  var. A `daemon key set` / `daemon key clear` CLI pair (reading from stdin or
+  a prompt, never argv) would close that gap and make the credential store
+  reachable over SSH.
+- **Scheduled jobs are the weak spot.** Linux cron cannot reach the Secret
+  Service; that is documented in `background-agents.md` now, but the honest
+  fix is to point people at the systemd user unit (`daemon schedule` +
+  `loginctl enable-linger`) as the default rather than crontab. Worth
+  validating on a real machine before v0.2.
+- **Nothing rotates keys.** `doctor` tells the user to rotate after a
+  plaintext exposure and links the console, but a `daemon key rotate` that
+  re-prompts and overwrites would make the remediation a single step.
+- **`pip-licenses` is not in the dev extra**, so `scripts/license_check.py`
+  cannot run without a manual install and `debug/license-compliance.md` has
+  drifted since 2026-05-17. Adding it to `[project.optional-dependencies].dev`
+  and running it in CI would make CLAUDE.md rule 10 self-enforcing instead of
+  a habit.
+- **`config.yaml` is now genuinely secret-free**, which makes it a candidate
+  for being committed as a real template — worth deciding before v0.2.
 

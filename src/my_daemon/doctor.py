@@ -396,19 +396,45 @@ def check_collection(settings: Settings, store: VectorStore | None) -> CheckResu
     )
 
 
+# How each resolution layer should read in `daemon doctor` output.
+_KEY_SOURCE_LABELS = {
+    "environment": "the ANTHROPIC_API_KEY environment variable",
+    "keychain": "the OS credential store (encrypted at rest)",
+    # A Settings built programmatically (tests, library callers) carries a key
+    # with no recorded provenance; describe it without claiming a source.
+    "missing": "the environment",
+}
+
+
 def check_api_key(settings: Settings) -> CheckResult:
-    if settings.anthropic_api_key:
-        return CheckResult("api key", PASS, "ANTHROPIC_API_KEY present in the environment")
-    return CheckResult(
-        "api key",
-        WARN,
-        "ANTHROPIC_API_KEY is not set",
-        hint=(
-            "needed by `query`/`ask` synthesis and by `extract`, `reflect`, `consolidate`; "
-            "retrieval (`search`, `ingest`, `query --no-llm`) works without it. "
-            "Set it in the environment or in the .env beside your config."
-        ),
-    )
+    if not settings.anthropic_api_key:
+        return CheckResult(
+            "api key",
+            WARN,
+            "ANTHROPIC_API_KEY is not set",
+            hint=(
+                "needed by `query`/`ask` synthesis and by `extract`, `reflect`, `consolidate`; "
+                "retrieval (`search`, `ingest`, `query --no-llm`) works without it. "
+                "Run `daemon setup` to store it in the OS credential store."
+            ),
+        )
+
+    # It authenticates either way — this warns about where it is sitting, not
+    # about whether it works.
+    if settings.api_key_source == "dotenv":
+        return CheckResult(
+            "api key",
+            WARN,
+            "present, but read from a plaintext .env file",
+            hint=(
+                "anyone who can read that file has your key. Run `daemon setup` to move it "
+                "into the OS credential store and strip the plaintext copy, then rotate the "
+                "key at https://console.anthropic.com/settings/keys since it has been on disk."
+            ),
+        )
+
+    label = _KEY_SOURCE_LABELS.get(settings.api_key_source, "the environment")
+    return CheckResult("api key", PASS, f"present via {label}")
 
 
 def check_model_cache(settings: Settings) -> CheckResult:

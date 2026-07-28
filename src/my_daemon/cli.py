@@ -214,6 +214,32 @@ def _store_error_types() -> tuple[type[BaseException], ...]:
     return (LocalStoreLockedError, *connection_error_types())
 
 
+def _require_reachable_server(s: Settings) -> None:
+    """Fail on a dead Qdrant server before anything expensive happens.
+
+    Reported live 2026-07-28: a config still in server mode from before
+    embedded became the default downloaded ~130MB of embedding model and *then*
+    failed with "cannot reach the vector store", because `ingest` built the
+    embedder first to learn its dimension. The connection is the cheap check,
+    so it goes first.
+
+    Server mode only. Embedded mode has no server to probe, and opening the
+    folder just to test it would fight its single-process lock.
+    """
+
+    qdrant = s.vector_store.qdrant
+    # `is_embedded`, not `url is None`: `url` carries a historical default of
+    # http://localhost:6333, so it is never None and testing it would probe a
+    # server for every embedded config too.
+    if qdrant.is_embedded:
+        return
+    if not server_reachable(qdrant.url):
+        # Raised, not printed: `_store_errors` already renders exactly this
+        # condition in one place, and two spellings of "Qdrant is down" is the
+        # drift that wrapper exists to prevent.
+        raise ConnectionError("connection refused")
+
+
 @contextlib.contextmanager
 def _store_errors(s: Settings) -> Iterator[None]:
     """Turn a dead vector store into one actionable line, at the CLI boundary.
@@ -238,15 +264,15 @@ def _store_errors(s: Settings) -> Iterator[None]:
         raise typer.Exit(code=1) from exc
     except Exception as exc:
         # Doctor checks that a key is *present*; only Anthropic can say whether
-        # it's *valid*. A placeholder key in .env therefore surfaces here, at
-        # first synthesis — same contract as Qdrant-down: one line, exit 1.
+        # it's *valid*. A placeholder key therefore surfaces here, at first
+        # synthesis — same contract as Qdrant-down: one line, exit 1.
         from anthropic import AuthenticationError
 
         if not isinstance(exc, AuthenticationError):
             raise
         console.print(
             "ANTHROPIC_API_KEY was rejected by the API (401). The key is set "
-            "but not valid — put your real key in the .env beside config.yaml "
+            "but not valid — run `daemon setup` to store the real one "
             "(retrieval still works without one: `daemon query --no-llm`).",
             style="red",
             soft_wrap=True,
@@ -310,7 +336,12 @@ def init(
 
     if not env_path.exists() and env_example.is_file():
         shutil.copy(env_example, env_path)
-        console.print(f"[green]Wrote {env_path} — add your ANTHROPIC_API_KEY there.[/green]")
+        console.print(f"[green]Wrote {env_path} — for optional MY_DAEMON_* overrides.[/green]")
+
+    console.print(
+        "[cyan]Next:[/cyan] run [bold]daemon setup[/bold] to store your ANTHROPIC_API_KEY "
+        "in the OS credential store (it is never written to a file)."
+    )
 
     if user:
         console.print(f"Relative paths in that file (./data/…) now resolve under {dest}.")
@@ -329,6 +360,10 @@ def ingest(
             console.log(f"[{i + 1}/{total}] {rel_path}")
 
     with _store_errors(s):
+        # Before the embedder: building that can pull ~130MB of model on a
+        # first run, and it only goes first because `_build_vector_store`
+        # needs its dimension. `_store_errors` renders whatever this raises.
+        _require_reachable_server(s)
         embedder = _build_embedder(s)
         sparse_embedder = _build_sparse_embedder(s)
         vector_store = _build_vector_store(s, dim=embedder.dimension)

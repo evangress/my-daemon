@@ -27,9 +27,11 @@ a markdown label so the response appears progressively.
 ### API key resolution
 
 The key comes from `Settings.anthropic_api_key`, which `load_settings()`
-populates from `os.environ["ANTHROPIC_API_KEY"]` after loading `.env`.
-If the key is missing at first call, the client raises a clear error
-asking the user to set it.
+populates via `my_daemon.secrets.resolve_api_key()`: the `ANTHROPIC_API_KEY`
+environment variable, then the OS credential store, then a legacy plaintext
+`.env`. `Settings.api_key_source` records which layer answered so `daemon
+doctor` can warn about the plaintext case. If the key is missing at first
+call, the client raises a clear error pointing at `daemon setup`.
 
 ## `llm.prompts`
 

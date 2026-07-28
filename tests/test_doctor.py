@@ -378,6 +378,31 @@ def test_a_missing_key_warns_and_names_the_commands(settings: Settings):
     assert "retrieval" in result.hint
 
 
+def test_a_key_from_the_os_keychain_passes_and_says_so(settings: Settings):
+    settings.anthropic_api_key = "sk-ant-secret-value"
+    settings.api_key_source = "keychain"
+
+    result = doctor.check_api_key(settings)
+
+    assert result.status == doctor.PASS
+    assert "credential store" in result.detail
+    assert "secret-value" not in result.detail
+
+
+def test_a_key_read_from_a_plaintext_dotenv_warns_even_though_it_works(settings: Settings):
+    """It authenticates fine — the warning is about it being readable on disk."""
+    settings.anthropic_api_key = "sk-ant-secret-value"
+    settings.api_key_source = "dotenv"
+
+    result = doctor.check_api_key(settings)
+
+    assert result.status == doctor.WARN
+    assert "plaintext" in result.detail.lower()
+    assert "daemon setup" in result.hint
+    assert "secret-value" not in result.detail
+    assert "secret-value" not in result.hint
+
+
 # ---------------------------------------------------------------------------
 # state db
 # ---------------------------------------------------------------------------
