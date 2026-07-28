@@ -402,6 +402,9 @@ Each phase ends with something usable. Don't start the next until the current on
 ### Phase 3: Incremental ingest + polish (1 session)
 - Manifest-based incremental ingestion (only re-embed changed notes).
 - `daemon graph stats` with PageRank + community detection (Louvain via `python-louvain`).
+  *(Superseded: the implementation uses NetworkX's built-in
+  `nx.community.louvain_communities`; the unused `python-louvain` declaration was
+  dropped from `pyproject.toml` on 2026-07-28.)*
 - README with quickstart.
 - End-to-end test: ingest fixture vault, run a query, assert citation structure.
 
