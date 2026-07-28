@@ -74,6 +74,7 @@ def cluster_fingerprints(
     min_member_similarity: float = DEFAULT_MIN_MEMBER_SIMILARITY,
     limit: int = 4000,
     since=None,  # noqa: ANN001
+    until=None,  # noqa: ANN001 — right edge; only the tuning replay needs it
     surfaces: tuple[str, ...] = INTENTIONAL_SURFACES,
 ) -> list[FingerprintCluster]:
     """HDBSCAN over cosine distance between query fingerprints.
@@ -82,7 +83,7 @@ def cluster_fingerprints(
     Forcing every query into a cluster is how you get meaningless ones.
     """
 
-    rows = ledger.query_fingerprints(limit=limit, since=since, surfaces=surfaces)
+    rows = ledger.query_fingerprints(limit=limit, since=since, until=until, surfaces=surfaces)
     if len(rows) < min_cluster_size:
         return []
 

@@ -75,6 +75,7 @@ from my_daemon.stores.db import SCHEMA_VERSION as DB_SCHEMA_VERSION
 from my_daemon.stores.db import migrate as db_migrate
 from my_daemon.stores.db import schema_version as db_schema_version
 from my_daemon.stores.graph import GraphLockTimeout
+from my_daemon.stores.policy import RetrievalPolicyStore
 from my_daemon.stores.snapshot import _backup_sqlite
 from my_daemon.stores.themes import ThemeStore
 from my_daemon.stores.vector import MEMORY_LOCATION, LocalStoreLockedError
@@ -2200,3 +2201,132 @@ def migrate_rollback_uuids(
 
 if __name__ == "__main__":
     app()
+
+
+@themes_app.command("tune")
+def themes_tune(
+    windows: int = typer.Option(
+        4, "--windows", help="How many sequential replays of your history to score."
+    ),
+    min_cluster_size: int = typer.Option(3, "--min-cluster-size"),
+    apply: bool = typer.Option(
+        False, "--apply", help="Print the config edit for the recommended threshold."
+    ),
+) -> None:
+    """Measure the theme match threshold against your own history.
+
+    The threshold decides whether tonight's cluster inherits an existing
+    theme's label or mints a new one, so it is what makes your themes stable or
+    churny. It shipped as a judgement call; this replays your ledger at a range
+    of values and reports what each would have done. Reads only — no themes are
+    created, and your live theme store is untouched.
+    """
+
+    from my_daemon.analysis.theme_tuning import (
+        DEFAULT_MATCH_THRESHOLD_SWEEP,
+        recommend,
+        sweep_match_threshold,
+    )
+
+    s = _load()
+    ledger = ActivationLedger(db_path=s.feedback.db_path)
+    if ledger.total_queries() == 0:
+        console.print("[yellow]No queries recorded yet — nothing to tune against.[/yellow]")
+        return
+
+    with console.status("replaying your ledger…"):
+        reports = sweep_match_threshold(
+            ledger,
+            thresholds=DEFAULT_MATCH_THRESHOLD_SWEEP,
+            windows=windows,
+            min_cluster_size=min_cluster_size,
+        )
+
+    best = recommend(reports)
+    table = Table(title=f"Theme match threshold over {windows} windows")
+    table.add_column("threshold", justify="right")
+    table.add_column("mean churn", justify="right")
+    table.add_column("themes", justify="right")
+    table.add_column("created", justify="right")
+    table.add_column("matched", justify="right")
+    table.add_column("dormant", justify="right")
+    table.add_column("avg cluster", justify="right")
+    for report in reports:
+        mark = " ←" if best and report.threshold == best.threshold else ""
+        style = "green" if mark else ""
+        table.add_row(
+            f"{report.threshold:.2f}{mark}",
+            f"{report.mean_churn:.2f}",
+            str(report.themes_final),
+            str(report.themes_created),
+            str(report.themes_matched),
+            str(report.themes_dormant),
+            f"{report.mean_cluster_size:.1f}",
+            style=style,
+        )
+    console.print(table)
+
+    current = s.consolidation.theme_match_threshold
+    if best is None:
+        console.print(
+            "[yellow]Not enough history to recommend a threshold yet.[/yellow] "
+            "Themes need several consolidate runs' worth of queries before churn "
+            f"means anything. Keeping [bold]{current:.2f}[/bold]."
+        )
+        return
+
+    console.print(
+        f"\nLowest churn with themes surviving: [bold green]{best.threshold:.2f}[/bold green] "
+        f"(churn {best.mean_churn:.2f}, {best.themes_final} themes). "
+        f"Currently configured: [bold]{current:.2f}[/bold]."
+    )
+    if apply:
+        console.print(
+            "\nAdd to your config.yaml:\n\n"
+            "[dim]consolidation:\n"
+            f"  theme_match_threshold: {best.threshold}[/dim]"
+        )
+    elif abs(best.threshold - current) > 1e-9:
+        console.print("[dim]Re-run with --apply to see the config edit.[/dim]")
+
+
+@app.command()
+def policy() -> None:
+    """Which retrieval policy your picks actually favour.
+
+    Team-draft interleaving shows the seed ranking and the graph-expansion
+    ranking equally often, so the win rates below are a fair comparison rather
+    than a reflection of which one got the top slot.
+    """
+
+    s = _load()
+    stats = RetrievalPolicyStore(db_path=s.feedback.db_path).stats()
+    if not stats:
+        console.print(
+            "[yellow]No picks recorded yet.[/yellow] Use `daemon select` or click a "
+            "candidate in the GUI, and this fills in."
+        )
+        return
+
+    table = Table(title="Retrieval policy win rates")
+    table.add_column("policy")
+    table.add_column("shown", justify="right")
+    table.add_column("picked", justify="right")
+    table.add_column("win rate", justify="right")
+    table.add_column("last win")
+    for stat in stats:
+        table.add_row(
+            stat.policy,
+            str(stat.impressions),
+            str(stat.wins),
+            f"{stat.win_rate:.1%}",
+            stat.last_win_at.strftime("%Y-%m-%d") if stat.last_win_at else "—",
+        )
+    console.print(table)
+
+    total = sum(stat.wins for stat in stats)
+    if total < 20:
+        console.print(
+            f"[dim]{total} pick(s) so far — too few to read much into. "
+            "Interleaving removes position bias, not sampling error.[/dim]"
+        )

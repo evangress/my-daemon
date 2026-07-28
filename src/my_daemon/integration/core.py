@@ -36,6 +36,7 @@ from my_daemon.pipeline.query import QueryEngine, build_retrieval_summary
 from my_daemon.retrieval.weights import apply_selection
 from my_daemon.stores import FeedbackStore, GraphStore, VectorStore
 from my_daemon.stores.activations import HERMES_RECALL_SURFACE, ActivationLedger
+from my_daemon.stores.policy import RetrievalPolicyStore
 from my_daemon.stores.registry import NoteRegistry
 from my_daemon.vault.identity import derive_path_uuid
 from my_daemon.vault.parser import parse_note
@@ -97,6 +98,7 @@ class DaemonCore:
         self.feedback = feedback_store
         self.registry = NoteRegistry(db_path=settings.feedback.db_path)
         self.ledger = ActivationLedger(db_path=settings.feedback.db_path)
+        self.policy = RetrievalPolicyStore(db_path=settings.feedback.db_path)
         self.llm = llm_client
         self.engine = QueryEngine(
             settings,
@@ -423,6 +425,16 @@ class DaemonCore:
                 selected_note_path=picked.get("note_path"),
             )
 
+        # The half of the signal the graph cannot hold. When the seed *is* the
+        # selection there are no edges on the path and `apply_selection` no-ops
+        # — which used to mean the most confident thing the user can say was
+        # discarded. The pick is still an unbiased comparison of the two
+        # rankings, because team-draft gave them symmetric exposure, so record
+        # it against the policy that earned it.
+        team = picked.get("team")
+        if team:
+            self.policy.record_win(team)
+
         return {
             "ok": True,
             "selected_note_uuid": selected_note,
@@ -430,6 +442,7 @@ class DaemonCore:
             "path": result.path,
             "edges_reinforced": result.edges_reinforced,
             "total_delta": result.total_delta,
+            "policy": team,
         }
 
     def remember(

@@ -300,12 +300,33 @@ def _m005_themes(conn: sqlite3.Connection) -> None:
     conn.execute("CREATE INDEX IF NOT EXISTS idx_queries_theme ON queries(theme_id)")
 
 
+# ---------------------------------------------------------------------------
+# Migration 6 — retrieval-policy stats. Which ranking (seed or graph expansion)
+# earned the user's picks, given that team-draft interleaving now shows the two
+# equally often. Counts only; the interpretation lives in `stores/policy.py`.
+# ---------------------------------------------------------------------------
+
+_M006_SCHEMA = """
+CREATE TABLE IF NOT EXISTS retrieval_policy_stats (
+    policy       TEXT PRIMARY KEY,
+    impressions  INTEGER NOT NULL DEFAULT 0,
+    wins         INTEGER NOT NULL DEFAULT 0,
+    last_win_at  TEXT
+);
+"""
+
+
+def _m006_retrieval_policy(conn: sqlite3.Connection) -> None:
+    exec_script(conn, _M006_SCHEMA)
+
+
 MIGRATIONS: list[tuple[int, str, Migration]] = [
     (1, "baseline_feedback_and_agent_state", _m001_baseline),
     (2, "note_registry_and_ordinals", _m002_registry),
     (3, "feedback_note_identity", _m003_feedback_identity),
     (4, "activation_ledger", _m004_activation_ledger),
     (5, "themes_and_tag_proposals", _m005_themes),
+    (6, "retrieval_policy_stats", _m006_retrieval_policy),
 ]
 
 SCHEMA_VERSION = MIGRATIONS[-1][0]

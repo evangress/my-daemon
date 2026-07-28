@@ -70,6 +70,10 @@ def build_retrieval_summary(result: RetrievalResult) -> dict:
                 "seed_chunk_id": seed_chunk_id,
                 "seed_note_uuid": seed_uuid,
                 "seed_note_path": seed_note,
+                # Which ranking drafted this candidate. `daemon select` runs
+                # long after the retrieval, from this row alone, so the
+                # attribution has to be persisted here or it is lost.
+                "team": rc.team,
             }
         )
 

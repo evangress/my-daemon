@@ -278,10 +278,26 @@ class ActivationLedger:
             raw[r.note_uuid] = raw.get(r.note_uuid, 0.0) + r.strength
         return self._weight_and_normalize(raw)
 
+    def idf(self, note_uuids: Iterable[str], *, total: int | None = None) -> dict[str, float]:
+        """Smoothed inverse document frequency, ``log(1 + N / (1 + df))``.
+
+        Public because *both* sides of a fingerprint comparison have to be
+        weighted by it. Weighting only the probe and dividing by an unweighted
+        magnitude is not a cosine — it inflates whichever query is built from
+        rarer notes — and that was the bug this method exists to make hard to
+        reintroduce.
+        """
+
+        wanted = list(dict.fromkeys(note_uuids))
+        if not wanted:
+            return {}
+        n = max(total if total is not None else self.total_queries(), 1)
+        df = self.note_df(wanted)
+        return {u: math.log(1 + n / (1 + df.get(u, 0))) for u in wanted}
+
     def _weight_and_normalize(self, raw: Mapping[str, float]) -> dict[str, float]:
-        total = max(self.total_queries(), 1)
-        df = self.note_df(raw.keys())
-        weighted = {u: v * math.log(1 + total / (1 + df.get(u, 0))) for u, v in raw.items()}
+        idf = self.idf(raw.keys())
+        weighted = {u: v * idf.get(u, 0.0) for u, v in raw.items()}
         magnitude = math.sqrt(sum(v * v for v in weighted.values()))
         if magnitude == 0:
             return {}
@@ -304,6 +320,16 @@ class ActivationLedger:
         probe's notes. Terms above ``max_df_ratio`` are dropped first — a note
         present in a quarter of all queries carries no information and only
         costs scan.
+
+        Two passes, and the second one is load-bearing. The first finds *which*
+        queries share a note with the probe. The second reads those queries'
+        **full** activation sets, because a candidate's magnitude cannot be
+        computed from the shared notes alone — and it is a genuine cosine only
+        when the candidate is IDF-weighted and normalized in the same space as
+        the probe. The pre-IDF ``queries.l2_norm`` is still written by
+        :meth:`record` (a vector backend would want it) but is deliberately not
+        used here: mixing it with an IDF-weighted numerator is exactly the
+        asymmetry this method used to have.
         """
 
         if not probe:
@@ -319,8 +345,7 @@ class ActivationLedger:
 
         placeholders = ",".join("?" * len(terms))
         sql = [
-            "SELECT qa.query_id, qa.note_uuid, qa.strength, q.l2_norm, q.query_uid, "
-            "       q.text, q.ts",
+            "SELECT DISTINCT qa.query_id, q.query_uid, q.text, q.ts",
             "FROM query_activations qa JOIN queries q ON q.id = qa.query_id",
             f"WHERE qa.note_uuid IN ({placeholders})",
         ]
@@ -336,39 +361,53 @@ class ActivationLedger:
             params.extend(surfaces)
 
         with self._connect() as conn:
-            rows = conn.execute(" ".join(sql), params).fetchall()
+            candidates = {
+                int(r["query_id"]): (r["query_uid"], r["text"], r["ts"])
+                for r in conn.execute(" ".join(sql), params).fetchall()
+            }
+            if not candidates:
+                return []
+            ids = ",".join("?" * len(candidates))
+            rows = conn.execute(
+                f"SELECT query_id, note_uuid, strength FROM query_activations "
+                f"WHERE query_id IN ({ids})",
+                list(candidates),
+            ).fetchall()
 
-        acc: dict[int, dict] = {}
+        # Sum per (query, note) before weighting: one note reached by two routes
+        # is one component of the vector, not two. `fingerprint` sums the same
+        # way, and the two representations have to agree or the cosine is taken
+        # against a vector that never existed.
+        summed: dict[int, dict[str, float]] = {}
         for r in rows:
-            entry = acc.setdefault(
-                r["query_id"],
-                {
-                    "dot": 0.0,
-                    "shared": [],
-                    "norm": r["l2_norm"] or 1.0,
-                    "uid": r["query_uid"],
-                    "text": r["text"],
-                    "ts": r["ts"],
-                },
-            )
-            contribution = terms[r["note_uuid"]] * r["strength"]
-            entry["dot"] += contribution
-            entry["shared"].append((r["note_uuid"], contribution))
+            per_note = summed.setdefault(int(r["query_id"]), {})
+            per_note[r["note_uuid"]] = per_note.get(r["note_uuid"], 0.0) + float(r["strength"])
+
+        idf = self.idf({u for per_note in summed.values() for u in per_note}, total=total)
 
         hits = []
-        for query_id, entry in acc.items():
-            score = entry["dot"] / (entry["norm"] or 1.0)
+        for query_id, per_note in summed.items():
+            weighted = {u: v * idf.get(u, 0.0) for u, v in per_note.items()}
+            magnitude = math.sqrt(sum(v * v for v in weighted.values()))
+            if not magnitude:
+                continue
+            # The probe arrives already IDF-weighted and unit-normalized, so
+            # dividing the candidate by its own magnitude completes the cosine.
+            shared = [
+                (u, terms[u] * w / magnitude) for u, w in weighted.items() if u in terms and w
+            ]
+            score = sum(contribution for _, contribution in shared)
             if score < min_score:
                 continue
-            shared = [u for u, _ in sorted(entry["shared"], key=lambda x: -x[1])]
+            uid, text, ts = candidates[query_id]
             hits.append(
                 FingerprintHit(
                     query_id=query_id,
-                    query_uid=entry["uid"],
-                    text=entry["text"],
-                    ts=datetime.fromisoformat(entry["ts"]),
+                    query_uid=uid,
+                    text=text,
+                    ts=datetime.fromisoformat(ts),
                     score=score,
-                    shared_notes=shared,
+                    shared_notes=[u for u, _ in sorted(shared, key=lambda x: -x[1])],
                 )
             )
         hits.sort(key=lambda h: h.score, reverse=True)
@@ -379,12 +418,19 @@ class ActivationLedger:
         *,
         limit: int = 4000,
         since: datetime | None = None,
+        until: datetime | None = None,
         surfaces: Sequence[str] | None = None,
     ) -> list[tuple[int, str, dict[str, float]]]:
         """(query_id, text, fingerprint) for the offline clustering phase.
 
         Weighting and normalization happen here in one pass so the caller gets
         directly comparable vectors.
+
+        ``until`` bounds the window on the *right*. Consolidation never needs
+        it — "now" is always the right edge — but replaying history to tune a
+        parameter does, and a post-hoc filter is not a substitute: clusters
+        computed over the whole corpus and then discarded for containing later
+        queries are not the clusters the earlier run would have found.
         """
 
         sql = ["SELECT id, text FROM queries WHERE 1=1"]
@@ -392,6 +438,9 @@ class ActivationLedger:
         if since is not None:
             sql.append("AND ts >= ?")
             params.append(since.isoformat())
+        if until is not None:
+            sql.append("AND ts <= ?")
+            params.append(until.isoformat())
         if surfaces:
             sql.append(f"AND surface IN ({','.join('?' * len(surfaces))})")
             params.extend(surfaces)

@@ -510,3 +510,36 @@ def test_ingest_reports_an_unreachable_server_before_building_the_embedder(
     assert result.exit_code == 1
     assert built == [], "the embedder was built before the store was probed"
     assert "Cannot reach the vector store" in result.output
+
+
+# ---------------------------------------------------------------------------
+# `daemon policy` and `daemon themes tune`
+# ---------------------------------------------------------------------------
+
+
+def test_policy_says_so_when_nothing_has_been_picked(settings: Settings):
+    result = runner.invoke(app, ["policy"])
+
+    assert result.exit_code == 0
+    assert "No picks recorded yet" in result.output
+
+
+def test_policy_reports_a_recorded_win(settings: Settings):
+    from my_daemon.retrieval.interleave import SEED_TEAM
+    from my_daemon.stores.policy import RetrievalPolicyStore
+
+    store = RetrievalPolicyStore(db_path=settings.feedback.db_path)
+    store.record_impressions({SEED_TEAM: 4})
+    store.record_win(SEED_TEAM)
+
+    result = runner.invoke(app, ["policy"])
+
+    assert result.exit_code == 0
+    assert "25.0%" in result.output
+
+
+def test_themes_tune_declines_on_an_empty_ledger(settings: Settings):
+    result = runner.invoke(app, ["themes", "tune"])
+
+    assert result.exit_code == 0
+    assert "No queries recorded yet" in result.output

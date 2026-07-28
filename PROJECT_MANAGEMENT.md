@@ -256,6 +256,48 @@ NiceGUI's long-term fate) are not yet decided.
 
 ## Done
 
+- **Applied-research fix wave (2026-07-28).** The first three recommendations
+  out of [MY-DAEMON-RESEARCH-APPLIED.md](MY-DAEMON-RESEARCH-APPLIED.md),
+  TDD throughout; 683 → 730 passing tests, ruff + mypy clean.
+  **(1) The `similar()` IDF asymmetry is fixed** (§IV.1). `record()` stored a
+  pre-IDF `l2_norm` while `similar()` divided an IDF-weighted dot product by it,
+  which systematically inflated queries built from rare notes and poisoned
+  recall → themes → the observer letter. The fix is structural, not a
+  coefficient: a candidate's magnitude cannot be derived from the notes it
+  shares with the probe, so `similar()` now runs two passes and weights both
+  sides through one new public `ActivationLedger.idf()`. Pinned by a
+  self-similarity test (identical fingerprints score 1.0) and a symmetry test
+  (score(A→B) == score(B→A) across unequal document frequency) — the first
+  version of both passed against the *broken* code because the fixture gave
+  every note the same df and the IDF factors cancelled. Scores are now true
+  cosines and generally lower than before, so `memory.min_score` (0.15) may want
+  revisiting against real usage.
+  **(2) The seed-starvation question is closed** (§IV.7) — team-draft
+  interleaving, `retrieval.interleave` on by default. New
+  `retrieval/interleave.py`; `RetrievedChunk.team` persisted through
+  `build_retrieval_summary` so a pick attributes days later; new
+  `stores/policy.py` + migration 6 (`retrieval_policy_stats`); new
+  `pipeline/policy.py` listener on the existing retrieval seam (separate from
+  `ActivationRecorder` — different questions, independent failure); `daemon
+  policy` to read the win rates. **A seed pick is no longer a no-op:** it still
+  reinforces no edge, but it is recorded as a win for the seed *policy*, which
+  is an unbiased comparison because the draft gave both rankings symmetric
+  exposure. Nothing feeds the win rate back into ranking — a policy tuned on its
+  own win rate is a closed loop. Zero-count impressions are skipped and a
+  missing team is never guessed, both so the measurement stays honest.
+  **(3) The theme match threshold is measurable** (new §IV.15) —
+  `analysis/theme_tuning.py` + `daemon themes tune` replays your ledger in
+  sequential windows at a range of thresholds and reports mean churn, surviving
+  themes, and created/matched/dormant. Read-only against the live theme store,
+  and each threshold starts from an empty one. Needed `query_fingerprints(until=)`
+  because bounding the window by filtering *after* clustering gives a different
+  and wrong answer; and excludes the first window's churn, which is 0.0 only
+  because there was no prior partition and whose inclusion made the score depend
+  on `--windows`.
+  Also: `retrieval.interleave` documented in both yamls. **Found, not fixed:**
+  `python-louvain>=0.16` is a declared dependency that is never imported (the
+  code uses NetworkX's built-in).
+
 - **API key out of plaintext + Windows 11 install rewrite (2026-07-27).**
   The key was written to `.env` in the clear on *every* platform — including
   Windows, where `setx` had already stored it — and two of the three
@@ -416,37 +458,27 @@ Full write-up in
 [MY-DAEMON-RESEARCH-APPLIED.md](MY-DAEMON-RESEARCH-APPLIED.md). The items that
 turned into concrete work, in priority order:
 
-- **⚠ Licence decision needed (CLAUDE.md rule 10).** The published fix for
-  Louvain's badly-connected-communities defect (Traag et al., *Sci Rep* 2019 —
-  up to 25% badly connected, up to 16% *disconnected*) is the Leiden algorithm,
-  and every Python implementation is GPL: `leidenalg` is GPL-3.0 and its
-  dependency `python-igraph` is GPL-2.0. **Both are incompatible with shipping
-  this project under Apache-2.0.** Not adopted; raising it for your call. Three
-  Apache-compatible alternatives are costed in §IV.3, and the cheapest —
-  splitting any disconnected Louvain community into its connected components
-  with `nx.connected_components` — removes the more damaging half of the defect
-  in about ten lines with no new dependency. Recommended default unless you want
-  to relicense.
+- **~~⚠ Licence decision needed~~ — resolved, and my first answer was wrong.**
+  The published fix for Louvain's badly-connected-communities defect (Traag et
+  al., *Sci Rep* 2019 — up to 25% badly connected, up to 16% *disconnected*) is
+  Leiden, and I reported that every Python implementation is GPL. That is
+  incorrect. `leidenalg` (GPL-3.0) and `python-igraph` (GPL-2.0) are, but
+  **`graspologic-native` is MIT** — verified on PyPI, v1.3.1, June 2026 — it
+  implements Leiden and hierarchical Leiden in Rust, and it is what Microsoft's
+  GraphRAG runs on. **No licence change is needed for correctness here.** The
+  real constraint is Python versions: it ships wheels for 3.9–3.13, and this
+  project declares `>=3.11,<3.15` with the librarian pinned `>=3.14`.
+  Recommended sequence regardless: do the free fix first (split any disconnected
+  Louvain community with `nx.connected_components`, ~10 lines, no dependency)
+  and measure whether Leiden still earns its place. §IV.3.
 
-- **Fix the `similar()` IDF asymmetry first.** Already logged under Known Bugs
-  (eval §2 "3.6"); the research pass sharpened *why* it matters. `record()`
-  stores a **pre-IDF** `l2_norm` (`activations.py:171`) while `similar()`
-  accumulates an **IDF-weighted** dot product against it (`activations.py:354`).
-  The error is not random — it systematically inflates scores for queries built
-  from rare notes. Recall, themes, and the observer letter all inherit it, so
-  every other proposal below is blocked on this.
+- **~~Fix the `similar()` IDF asymmetry first~~ — shipped 2026-07-28.** See Done.
 
-- **Team-draft interleaving is the answer to the seed-starvation question.**
-  The "seeds dominate the pool and seed-picks reinforce nothing" question has
-  been open since the maturity eval. The IR field solved this shape of problem:
-  clicks measure examination *and* relevance jointly, so no amount of tuning the
-  reinforcement constant fixes it (Radlinski/Kurup/Joachims, CIKM 2008 —
-  absolute click metrics don't track quality at realistic sample sizes; Joachims
-  et al., WSDM 2017 for the propensity-weighted alternative). Building the
-  candidate pool by team-draft between the seed-ranked and expansion-ranked
-  lists makes a selection attributable to a *policy* rather than a rank — which
-  means a seed-pick stops being a no-op, because it is evidence for the seed
-  policy even when there is no path to reinforce. §IV.7.
+- **~~Team-draft interleaving is the answer to the seed-starvation question~~ —
+  shipped 2026-07-28.** See Done. What remains open is deliberately *not* the
+  mechanism but the interpretation: interleaving removes position bias, not
+  sampling error, so the `daemon policy` win rates will be noise until there are
+  well over twenty picks — and nothing should be wired to them before then.
 
 - **Cheap wins queued:** MMR over the candidate pool before the token trim
   (§IV.2, no new deps); Hungarian matching via

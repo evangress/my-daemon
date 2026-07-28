@@ -146,6 +146,13 @@ class RetrievalConfig(BaseModel):
     seed_top_k: int = 8
     context_token_budget: int = 6000
     candidate_pool: int = 3
+    # Build the candidate pool by team draft between the seed and expansion
+    # rankings instead of by raw score (see `retrieval.interleave`). On by
+    # default: an expanded chunk's score is its seed's score decayed by graph
+    # distance, so under a pure score sort expansion can never outrank the seed
+    # that produced it and the expansion policy is never examined — which is
+    # why picks taught the graph nothing. Set false to restore score order.
+    interleave: bool = True
 
 
 class LLMConfig(BaseModel):

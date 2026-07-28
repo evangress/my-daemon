@@ -123,6 +123,11 @@ class RetrievedChunk(BaseModel):
     graph_distance: float | None = None
     seed_chunk_id: str | None = None
     combined_score: float = 0.0
+    # Which ranking drafted this candidate into the presented pool — "seed" or
+    # "expansion" (see `retrieval.interleave`). ``None`` when interleaving is
+    # off, which is also every historical row: the reinforcement path treats a
+    # missing team as "unattributable" rather than guessing.
+    team: str | None = None
 
 
 def is_seed_distance(graph_distance: float | None) -> bool:

@@ -17,9 +17,12 @@ from my_daemon.config import Settings
 from my_daemon.embeddings import Embedder, SparseEmbedder
 from my_daemon.llm import LLMClient
 from my_daemon.pipeline.activation import ActivationRecorder
+from my_daemon.pipeline.policy import PolicyRecorder
 from my_daemon.retrieval import RetrievalOrchestrator
+from my_daemon.retrieval.trace import RetrievalListener
 from my_daemon.stores import FeedbackStore, GraphStore, NoteRegistry, VectorStore
 from my_daemon.stores.activations import ActivationLedger
+from my_daemon.stores.policy import RetrievalPolicyStore
 
 
 @dataclass
@@ -32,6 +35,7 @@ class Stores:
     feedback_store: FeedbackStore
     registry: NoteRegistry
     ledger: ActivationLedger
+    policy: RetrievalPolicyStore
     llm: LLMClient
 
 
@@ -84,6 +88,7 @@ def build_stores(
         feedback_store=FeedbackStore(db_path=db_path),
         registry=NoteRegistry(db_path=db_path),
         ledger=ActivationLedger(db_path=db_path),
+        policy=RetrievalPolicyStore(db_path=db_path),
         llm=LLMClient(settings.llm, api_key=settings.anthropic_api_key),
     )
 
@@ -100,7 +105,11 @@ def build_orchestrator(
     space.
     """
 
-    listeners = [ActivationRecorder(stores.ledger)] if record_activations else []
+    listeners: list[RetrievalListener] = (
+        [ActivationRecorder(stores.ledger), PolicyRecorder(stores.policy)]
+        if record_activations
+        else []
+    )
     return RetrievalOrchestrator(
         stores.settings,
         stores.embedder,

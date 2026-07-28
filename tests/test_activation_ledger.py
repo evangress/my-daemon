@@ -213,3 +213,78 @@ def test_hot_notes_ranks_what_attention_actually_lands_on(ledger: ActivationLedg
     hot = ledger.hot_notes(limit=5)
 
     assert [n for n, _count, _strength in hot][:2] == [A, B]
+
+
+# ---------------------------------------------------------------------------
+# Cosine symmetry (the IDF asymmetry fix)
+#
+# `similar()` scores an IDF-weighted probe against candidates. Both sides must
+# live in the same weighted space, or the score is not a cosine and the ranking
+# it produces is systematically skewed by how rare the probe's notes are.
+# ---------------------------------------------------------------------------
+
+
+def test_identical_activation_patterns_score_one(ledger: ActivationLedger):
+    """A query whose fingerprint matches another's exactly is a perfect match.
+
+    Cosine of a unit vector with itself is 1.0. Any other answer means the two
+    sides of the dot product were not weighted the same way.
+
+    The notes must differ in document frequency, or the IDF factors are equal
+    and cancel — which is how a broken denominator can still score 1.0.
+    """
+
+    # Make C common and A rare, so idf(A) != idf(C) and the weighting bites.
+    for i in range(4):
+        _record(ledger, f"filler-{i}", [(C, "vector_seed", 1)])
+
+    _record(ledger, "first", [(A, "vector_seed", 1), (C, "graph_expansion", 2)])
+    second = _record(ledger, "second", [(A, "vector_seed", 1), (C, "graph_expansion", 2)])
+
+    hits = ledger.similar(ledger.fingerprint(second), exclude_query_id=second, min_score=0.0)
+
+    best = max(hits, key=lambda h: h.score)
+    assert best.score == pytest.approx(1.0, abs=1e-6)
+
+
+def test_similarity_is_symmetric_across_rare_and_common_notes(ledger: ActivationLedger):
+    """score(A→B) must equal score(B→A) even when the notes differ in rarity.
+
+    The failure this pins: a pre-IDF magnitude in the denominator against an
+    IDF-weighted numerator inflates whichever query is built from rarer notes,
+    so the relation stops being symmetric.
+    """
+
+    # C is common — it fires for a third query too, so its df is higher.
+    left = _record(ledger, "left", [(A, "vector_seed", 1), (C, "graph_expansion", 3)])
+    right = _record(ledger, "right", [(A, "vector_seed", 2), (C, "vector_seed", 1)])
+    _record(ledger, "third", [(C, "vector_seed", 1)])
+
+    left_to_right = ledger.similar(ledger.fingerprint(left), exclude_query_id=left, min_score=0.0)
+    right_to_left = ledger.similar(ledger.fingerprint(right), exclude_query_id=right, min_score=0.0)
+
+    forward = next(h.score for h in left_to_right if h.query_id == right)
+    backward = next(h.score for h in right_to_left if h.query_id == left)
+
+    assert forward == pytest.approx(backward, abs=1e-9)
+
+
+def test_shared_notes_are_not_duplicated_per_source(ledger: ActivationLedger):
+    """One note reached by two routes is still one shared note."""
+
+    probe = _record(ledger, "probe", [(A, "vector_seed", 1)])
+    ledger.record(
+        query_uid="uid-multi",
+        text="multi",
+        surface="cli",
+        ts=datetime(2026, 7, 26, 12, 0, tzinfo=UTC),
+        activations=[
+            Activation(note_uuid=A, source="vector_seed", rank=1),
+            Activation(note_uuid=A, source="graph_expansion", rank=2),
+        ],
+    )
+
+    hits = ledger.similar(ledger.fingerprint(probe), exclude_query_id=probe, min_score=0.0)
+
+    assert hits
+    assert hits[0].shared_notes == [A]

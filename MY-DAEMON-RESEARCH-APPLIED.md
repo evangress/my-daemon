@@ -1,7 +1,16 @@
 # My Daemon — Applied Research
 
 **Companion to [MY-DAEMON-RESEARCH.md](MY-DAEMON-RESEARCH.md).**
-Written 2026-07-28 against the code as it stands at commit `f0ebb3d`.
+Written 2026-07-28 against the code as it stands at commit `f0ebb3d`, and
+revised the same day after the first three recommendations were implemented.
+
+> **Revision note (2026-07-28, later).** Three items from Part IV shipped
+> immediately: the fingerprint cosine fix (§IV.1), team-draft interleaving plus
+> the policy ledger (§IV.7), and the threshold sweep that turns the theme match
+> constant into a measurement (new §IV.15). Those sections have been rewritten
+> to describe what the code now does rather than what it might do, and the
+> parameter-provenance appendix updated to match. §IV.3's licence problem also
+> turned out to have a clean answer — see that section.
 
 The earlier research document was written *before* the system existed. It maps
 human neural systems onto the technology landscape in general — a survey, and
@@ -34,14 +43,17 @@ attach to.
 | 1 | Heading-aware chunking with identity-stable ids | `vault/chunker.py:37` | 512 tok max, 50 tok overlap, h1–h3 splits |
 | 2 | Dense + sparse hybrid seed retrieval, server-side RRF | `retrieval/seed.py:11` | BGE-small-en-v1.5, BM42, top_k=8 |
 | 3 | Graph expansion by weighted Dijkstra over `1/weight` | `retrieval/expand.py:10`, `stores/graph.py:493` | depth=2 hops, decay=0.5 |
-| 4 | Score merge, max-dedupe, greedy token-budget trim | `retrieval/orchestrator.py:70` | 6000 tok budget, floor of 3 candidates |
+| 4 | Team-draft interleaving of the two rankings | `retrieval/interleave.py:47`, `orchestrator.py:_pool` | `retrieval.interleave`, default on |
+| 4b | Score merge, max-dedupe, greedy token-budget trim | `retrieval/orchestrator.py` | 6000 tok budget, floor of 3 candidates |
 | 5 | Path reinforcement from implicit selection | `retrieval/weights.py:45` | α=0.5, hop_decay=0.7, ceiling=5.0 |
+| 5b | Retrieval-policy ledger — which ranking wins picks | `stores/policy.py`, `pipeline/policy.py` | impressions + wins, `daemon policy` |
 | 6 | Half-life decay of reinforced edges | `retrieval/weights.py:99` | 30-day half-life, toward 1.0 |
 | 7 | Activation ledger — per-query sparse note fingerprints | `stores/activations.py:134` | rank-based strength, per-source weights |
-| 8 | IDF weighting + inverted-index cosine over fingerprints | `stores/activations.py:281`, `:290` | max_df_ratio=0.25, df-pruning above 50 queries |
+| 8 | IDF weighting + two-pass inverted-index cosine | `stores/activations.py:idf`, `:similar` | max_df_ratio=0.25, df-pruning above 50 queries |
 | 9 | Fingerprint recall — "you've been here before" | `pipeline/recall.py:32` | top_k=3, min_score=0.15, 180-day lookback |
 | 10 | Emergent themes — HDBSCAN over fingerprint cosine | `analysis/themes.py:70` | min_cluster_size=3, leave-one-out filter 0.10 |
 | 11 | Theme stability — centroid matching, dormancy, churn | `analysis/themes.py:163`, `:235` | match threshold 0.60, churn = 1 − mean Jaccard |
+| 11b | Threshold sweep against replayed ledger history | `analysis/theme_tuning.py` | `daemon themes tune`, read-only |
 | 12 | Structural analysis — Louvain, betweenness, bridges | `analysis/structural.py:133`, `:185`, `:212` | 8 communities, BC sample k=200, warm > 1.5 |
 | 13 | Counterfactual weight-evolution replay on a shadow graph | `analysis/structural.py:365` | 7-day lookback |
 | 14 | Snapshot isolation — writes raise, not warn | `stores/snapshot.py` | 14-day retention |
@@ -231,14 +243,37 @@ Radlinski, Kurup & Joachims (CIKM 2008) show that no absolute click metric
 reliably reflects retrieval quality at realistic sample sizes, and introduce
 Team-Draft interleaving as the alternative.
 
-**What it tells you.** This is the sharpest finding in the document, and it lands
-directly on the open design question already recorded in PROJECT_MANAGEMENT.md
-("seeds dominate the candidate pool and seed-picks reinforce nothing"). The IR
-field went through this exact problem twenty years ago and the answer is *not* to
-tune the reinforcement constant. It is that clicks measure examination and
-relevance jointly, so you must either model the examination term (propensity
-weighting) or design the presentation so that it cancels (interleaving). At
-single-user scale, interleaving is the more tractable of the two. Part IV.7.
+**What it tells you — and what was done about it.** This was the sharpest
+finding in the first draft, and it landed directly on the open design question
+recorded in PROJECT_MANAGEMENT.md ("seeds dominate the candidate pool and
+seed-picks reinforce nothing"). The IR field went through this exact problem
+twenty years ago and the answer is *not* to tune the reinforcement constant. It
+is that clicks measure examination and relevance jointly, so you must either
+model the examination term (propensity weighting) or design the presentation so
+that it cancels (interleaving).
+
+**Interleaving is now implemented** — `retrieval/interleave.py`, on by default
+via `retrieval.interleave`. Propensity weighting was the other option and was
+rejected on evidence: it needs an examination-probability estimate per rank,
+which needs either result randomization or a large click corpus, and Radlinski
+et al.'s negative result is specifically that absolute click metrics do not
+track quality at realistic sample sizes. At one user there is no corpus to
+estimate from. Team draft sidesteps the estimate entirely.
+
+The mechanism: the seed ranking and the expansion ranking alternate picks,
+whichever team has drafted fewer goes next, ties are broken by a coin, and each
+drafted candidate carries the team that took it (`RetrievedChunk.team`,
+persisted into the feedback row by `build_retrieval_summary`). Because both
+teams contribute equally often and their positions are symmetric in
+expectation, a pick is an unbiased comparison of the two policies.
+
+The second half is `stores/policy.py`, and it is what actually closes the loop.
+`DaemonCore.endorse` now records a win against the picking candidate's team.
+A seed pick still reinforces no edge — a zero-length path has none — but it is
+no longer discarded: it is recorded as evidence that the seed policy beat the
+expansion policy on that query. `daemon policy` shows the win rates. The store
+deliberately only counts; it does not feed back into ranking, because tuning the
+draft from its own win rate would be a closed loop with nothing outside it.
 
 ### II.5 — The activation ledger and query fingerprints
 
@@ -289,22 +324,35 @@ is genuinely useful — it tells you which parts of the CF literature transfer
 (implicit-feedback weighting, popularity debiasing, cold-start) and which do not
 (anything relying on cross-user signal).
 
-**What it tells you.** Two things, one a bug and one a design lever.
+**What it tells you.** Two things, one a bug that has since been fixed and one
+a design lever that is still open.
 
-The bug is already on your list and worth restating precisely: `record()`
-computes `l2_norm` at `activations.py:171` from **pre-IDF** strengths, but
-`similar()` at `activations.py:354-360` accumulates an **IDF-weighted** dot
-product and divides by that pre-IDF norm. The probe side is weighted; the
-candidate side is not. The consequence is not random noise — it systematically
-mis-scores queries whose notes are rare (large IDF, unchanged norm → inflated
-score) relative to queries whose notes are common. Every downstream consumer —
-recall, and therefore themes, and therefore the observer letter — inherits it.
-Fix it before tuning anything above it. Part IV.1.
+*The bug (fixed 2026-07-28).* `record()` stored an `l2_norm` computed from
+**pre-IDF** strengths, and `similar()` accumulated an **IDF-weighted** dot
+product and divided by that norm. The probe side was weighted; the candidate
+side was not. The consequence was not random noise — it systematically inflated
+queries built from rare notes relative to queries built from common ones, and
+every downstream consumer (recall → themes → the observer letter) inherited it.
 
-The lever is that `STRENGTH_BY_SOURCE` is a hand-set salience table. It is the
-only place in the system that says "this evidence matters more than that
-evidence," and it is currently five constants chosen by judgement. Part IV.9
-proposes learning it.
+The fix required a structural change, not a coefficient. A candidate's magnitude
+cannot be computed from the notes it happens to share with the probe, so
+`similar()` now runs two passes: the first finds which queries share a note, the
+second reads those queries' **full** activation sets and weights them with the
+same `idf()` the probe was built from. The old single pass was fast *because* it
+was wrong — reusing the stored norm avoided ever reading the rest of the
+candidate. `queries.l2_norm` is still written, since a vector backend would want
+it, but is no longer used for scoring. Two invariants are now pinned by tests: a
+query whose fingerprint matches another's exactly scores 1.0, and score(A→B)
+equals score(B→A) even when the two are built from notes of very different
+document frequency.
+
+One consequence worth watching: scores are now true cosines and are generally
+*lower* than the old inflated ones for rare-note queries, so
+`memory.min_score = 0.15` may want revisiting against real usage.
+
+*The lever, still open.* `STRENGTH_BY_SOURCE` is a hand-set salience table. It
+is the only place in the system that says "this evidence matters more than that
+evidence," and it is five constants chosen by judgement. Part IV.9.
 
 ### II.6 — Fingerprint recall
 
@@ -432,6 +480,34 @@ but do not optimize. That is the gap Part IV.8 addresses.
 decomposition and are one step short of the published solution. Swapping greedy
 for Hungarian is a few lines against a BSD-licensed dependency you may already
 have; adopting the evolutionary-clustering objective is a real project.
+
+**What was done (2026-07-28).** Neither of those yet — but the prerequisite for
+choosing between them shipped. `DEFAULT_MATCH_THRESHOLD = 0.60` was the
+highest-leverage untuned constant in the system, and `analysis/theme_tuning.py`
+(`daemon themes tune`) now turns it into a measurement: it replays the user's
+own ledger in sequential cumulative windows, reconciles at each candidate
+threshold against a throwaway store, and reports mean churn, surviving themes,
+and the created/matched/dormant split per threshold. Two disciplines matter and
+are pinned by tests — it never touches the live theme store (it runs against the
+real ledger, and a tuning run that minted themes would change what it measures),
+and each threshold starts from an empty store (a shared one would let the first
+threshold's themes seed the second, making the sweep a measurement of evaluation
+order).
+
+Two implementation findings are worth recording because both were wrong first:
+
+- The window has to be bounded in **SQL**, not by filtering afterward. Clustering
+  the whole corpus and discarding clusters that reach past the cut gives a
+  different answer, because the partition itself was computed with knowledge of
+  queries that had not happened yet. `query_fingerprints` gained an `until`
+  parameter for this; consolidation never needs it, since "now" is always its
+  right edge.
+- The **first window's churn must be excluded** from the mean. `reconcile_themes`
+  reports 0.0 when there is no previous partition, which means "nothing to
+  compare against" and not "perfectly stable". Averaging it in flattered every
+  threshold, and by an amount that shrank as the window count grew — so the same
+  ledger would have scored differently at `--windows 2` and `--windows 8`, making
+  the sweep partly a measurement of its own parameter.
 
 ### II.9 — Structural analysis: communities, bridges, orphans
 
@@ -599,21 +675,28 @@ salience layer offers, is precisely the wrong affordance for the target user. A
 person with cognitive decline does not need help finding the note they wrote
 yesterday. They need help finding the one that mattered.
 
-### III.2 — Credit assignment is unsolved, and tuning will not solve it
+### III.2 — Credit assignment — *closed 2026-07-28*
 
-Recorded in PROJECT_MANAGEMENT.md as the deepest open question: seeds dominate
-the candidate pool, and a seed pick reinforces nothing because
-`apply_selection` no-ops when seed == selected (`weights.py:57-60`).
+~~Recorded in PROJECT_MANAGEMENT.md as the deepest open question: seeds dominate
+the candidate pool, and a seed pick reinforces nothing because `apply_selection`
+no-ops when seed == selected.~~
 
-Part II.4 named the reason this is not a parameter problem. A click is a joint
-observation of *examination* and *relevance*, and rank-1 items get examined far
-more than rank-8 items regardless of quality. Train on the raw signal and you
-converge toward reproducing your own presentation order. Joachims et al. (2017)
-give the propensity-weighted estimator; Radlinski et al. (2008) give the
-interleaving alternative and, importantly, the negative result that absolute
-click metrics do not reliably track quality at realistic sample sizes. That
-negative result is directly about your situation, since a single user generates
-very few events.
+Addressed by team-draft interleaving plus the policy ledger (§II.4, §IV.7). The
+diagnosis was that this was never a parameter problem: a click is a joint
+observation of *examination* and *relevance*, rank-1 gets examined far more than
+rank-8 regardless of quality, and training on the raw signal converges toward
+reproducing your own presentation order (Joachims et al., 2017). Interleaving
+makes the two rankings' positions symmetric by construction, so the pick's team
+is an unbiased policy comparison with no propensity model.
+
+**What remains genuinely open here**, and should not be forgotten now that the
+loop closes mechanically: interleaving removes *position bias*, not *sampling
+error*. At one user generating a handful of picks a week, the win rates in
+`daemon policy` will be noise for a long time — the command says so below twenty
+picks. And the decision about what to *do* with a measured imbalance is
+deliberately not made: nothing feeds the win rate back into the draft ratio or
+the expansion decay, because a policy tuned on its own win rate is a closed loop.
+Watch the numbers for a few months before wiring anything to them.
 
 ### III.3 — No episodic time-binding
 
@@ -668,15 +751,16 @@ one item below fails it.
 
 ### Tier 1 — Correctness and cheap wins
 
-**IV.1 — Symmetrize the fingerprint cosine.** *Fixes:* the IDF asymmetry in
-`similar()`, which currently mis-scores every recall and therefore every theme
-and every observer letter. *Method:* either store a post-IDF norm — which must be
-recomputed as `df` moves, so probably a derived column refreshed in
-consolidation — or IDF-weight the candidate side inside the scan and normalize by
-a norm computed there. The second is simpler and correct at the cost of one extra
-`note_df` lookup per scan. *Where:* `stores/activations.py:171`, `:290-375`.
-*Effort:* S. *Licence:* none. **Do this before anything else in this list** — every
-proposal below consumes fingerprint similarity.
+**IV.1 — Symmetrize the fingerprint cosine. ✅ Shipped 2026-07-28.** Implemented
+as a two-pass scan rather than the stored-post-IDF-norm alternative, because a
+stored norm goes stale as `df` moves and would need refreshing in consolidation.
+The candidate's magnitude genuinely cannot be derived from the shared notes, so
+the second pass reads the candidates' full activation sets. New public
+`ActivationLedger.idf()` exists so both sides are weighted by one code path —
+the asymmetry was possible precisely because the weighting lived in two places.
+*Where:* `stores/activations.py`. Pinned by three tests, including one that had
+to be rewritten because the first version used notes of equal document frequency
+and the IDF factors cancelled, letting a broken denominator still score 1.0.
 
 **IV.2 — MMR over the candidate pool.** *Fixes:* seed domination of the
 candidate pool, from the presentation side rather than the learning side. *Method:*
@@ -689,14 +773,28 @@ chunk embeddings you already have, or degrade to note-identity overlap if you
 want zero extra Qdrant traffic. *Licence:* none (numpy). *Note:* this also makes
 IV.7 possible, since interleaving needs a pool that isn't monoculture.
 
-**IV.3 — Better communities than Louvain. ⚠ Licence decision required.**
+**IV.3 — Better communities than Louvain. ⚠ Corrected — no licence change needed.**
 *Fixes:* the disconnected-community failure mode from Traag et al. (2019), which
-can put a false relational claim into a user-facing letter. *Method (preferred,
-blocked):* the Leiden algorithm. **Every Python implementation I am aware of is
-GPL** — `leidenalg` is GPL-3.0 and depends on `python-igraph`, which is GPL-2.0.
-Both are **incompatible with distributing this project under Apache-2.0**. Per
-CLAUDE.md rule 10 I am not adopting it and am raising it to you. Three
-Apache-compatible alternatives, in my order of preference:
+can put a false relational claim into a user-facing letter.
+
+*The correction.* The first draft of this section said every Python Leiden
+implementation is GPL. That is **wrong**, and the error mattered because it
+framed a licence change as the price of correctness. `leidenalg` is indeed
+GPL-3.0 and `python-igraph` GPL-2.0 — but **`graspologic-native` is MIT**
+(verified on PyPI: v1.3.1, June 2026), implements Leiden and hierarchical Leiden
+in Rust, and is the implementation Microsoft's own GraphRAG uses. There is a
+permissively-licensed Leiden and it is the one the reference graph-RAG system
+runs on.
+
+*The real constraint is Python versions, not licences.* `graspologic-native`
+publishes wheels for CPython 3.9–3.13. This project declares
+`requires-python = ">=3.11,<3.15"` and the librarian subtree pins `>=3.14`. On
+3.14 there would be no wheel today. That is a compatibility question with a
+straightforward answer (an optional extra, or waiting for the wheel) rather than
+a licensing one.
+
+*Recommended sequence anyway:* do the free fix first and measure whether Leiden
+is still worth a dependency. Alternatives, in order of preference:
   1. **Post-hoc connectivity repair (recommended).** Keep Louvain; after it
      returns, split any community whose induced subgraph is disconnected into its
      connected components via `nx.connected_components`. This eliminates the
@@ -709,8 +807,16 @@ Apache-compatible alternatives, in my order of preference:
      cross-check — different failure modes, already installed, and disagreement
      between the two is itself a signal the partition is unstable. *Effort:* S.
 
-  *Where:* `analysis/structural.py:133-182`. *Licence:* NetworkX is BSD-3 ✓;
-  scipy BSD-3 ✓; leidenalg/igraph GPL ✗.
+  4. **`graspologic-native` Leiden**, once the Python-version question is
+     settled. *Effort:* M. *Licence:* MIT ✓.
+
+  *Where:* `analysis/structural.py:133-182`. *Licence summary:* NetworkX BSD-3 ✓;
+  scipy BSD-3 ✓; graspologic-native MIT ✓; leidenalg GPL-3.0 ✗ / python-igraph
+  GPL-2.0 ✗ (neither needed).
+
+  *Unrelated but found here:* `python-louvain>=0.16` is a declared dependency in
+  `pyproject.toml` and is **never imported** — the code calls NetworkX's built-in
+  `nx.community.louvain_communities`. It can be dropped.
 
 **IV.4 — Optimal theme matching.** *Fixes:* greedy reconciliation producing
 spurious new-theme/dormant-theme pairs that are directly user-visible. *Method:*
@@ -752,24 +858,60 @@ happily assign mass to distant hubs, which is the rumination failure mode the
 current two-pass design was built to avoid. Run both and compare on your own
 vault before switching; this is exactly what `simulate_evolution` is for.
 
-**IV.7 — Debias the selection signal.** *Fixes:* Part III.2, the deepest open
-question in the project. *Method:* two options, and I recommend the second.
-  - *Propensity weighting* (Joachims, Swaminathan & Schnabel, WSDM 2017): estimate
-    the examination probability at each rank, weight each selection by its
-    inverse. Statistically principled; needs a propensity estimate, which needs
-    either randomization or a lot of data. At one user, you have neither.
-  - *Interleaving* (Radlinski, Kurup & Joachims, CIKM 2008) — **recommended.**
-    Build the candidate pool by team-draft: alternate picks between the
-    seed-ranked list and the expansion-ranked list, coin-flip for who goes first,
-    remembering which source contributed each item. Now a selection is directly
-    attributable to a *policy* rather than to a rank, position bias cancels by
-    construction, and — this is the part that closes your open question — a
-    seed-pick is no longer a no-op, because it is evidence for the seed policy
-    over the expansion policy even when there is no path to reinforce.
+**IV.7 — Debias the selection signal. ✅ Shipped 2026-07-28.** Interleaving
+(Radlinski, Kurup & Joachims, CIKM 2008) was chosen over propensity weighting
+(Joachims, Swaminathan & Schnabel, WSDM 2017) for the reason given in §III.2:
+the propensity estimator needs randomization or a large click corpus, and a
+single user supplies neither.
 
-  *Where:* `retrieval/orchestrator.py` (pool construction) and
-  `retrieval/weights.py` (what a selection updates — a policy prior, not only an
-  edge). *Effort:* M. *Licence:* none. This is the highest-value item in Tier 2.
+*Delivered as four pieces.* `retrieval/interleave.py` (`team_draft`);
+`RetrievedChunk.team` carried through `build_retrieval_summary` into the
+persisted feedback row, so `daemon select` can attribute a pick made days later;
+`stores/policy.py` + migration 6 (`retrieval_policy_stats`) recording impressions
+and wins; and `pipeline/policy.py`, a second listener on the existing retrieval
+seam — separate from `ActivationRecorder` because the two answer different
+questions and should fail independently. Surfaced by `daemon policy`.
+Config: `retrieval.interleave`, default true.
+
+*Three decisions worth recording.*
+  - **Zero-count impressions are not recorded.** A retrieval that surfaced no
+    expansion never put that policy in front of the user, and counting it would
+    dilute the win rate with queries where the policy had no chance.
+  - **A missing team is never guessed.** Historical rows and score-ordered pools
+    have `team = None`, and those picks are excluded rather than assigned to a
+    default — a pick from an unfair ordering is confounded, and counting it would
+    poison exactly the measurement interleaving exists to make honest.
+  - **The rng is unseeded in production.** A predictable toss would reintroduce
+    the position bias the draft exists to cancel; tests inject a scripted coin so
+    they can assert on draft order rather than on a distribution.
+
+*One bug worth remembering.* The first version dispatched a draft to a team that
+could already be exhausted, where drafting is a no-op — an infinite loop on the
+query hot path, which would freeze the daemon on every search. The test suite
+caught it by hanging. Termination is now structural: `_draft` returns whether it
+moved, and exhaustion is checked before fairness.
+
+**IV.15 — Measure the theme match threshold. ✅ Shipped 2026-07-28.**
+*Fixes:* the highest-leverage judgement call in the appendix table. Not a method
+from the literature so much as the empirical prerequisite for choosing one:
+without a way to see what a threshold does to churn on *this user's* history,
+both §IV.4 (Hungarian matching) and §IV.8 (evolutionary clustering) would be
+adopted on faith.
+
+*Method:* replay the ledger in sequential cumulative windows — cumulative
+because that is what consolidate actually does, re-clustering the whole lookback
+each night rather than only the new queries — reconciling at each candidate
+threshold against a throwaway store, and report mean churn, surviving themes,
+and the created/matched/dormant split. `recommend()` picks the lowest-churn
+threshold that still finds themes, ties broken toward the higher (more
+conservative) value; churn alone would recommend the degenerate low end where
+everything matches because nothing is ever distinguished. It returns `None`
+rather than a number when there is too little history, which is the honest
+answer on a young vault.
+
+*Where:* `analysis/theme_tuning.py`, `daemon themes tune`. *Licence:* none.
+See §II.8 for the two implementation subtleties (SQL-bounded windows; excluding
+the first window's churn) that were both wrong in the first attempt.
 
 **IV.8 — Themes as an evolutionary-clustering objective.** *Fixes:* churn being
 measured but not optimized (Part II.8). *Method:* Chakrabarti, Kumar & Tomkins
@@ -950,7 +1092,9 @@ tuned system and one that merely has numbers in it.
 | `max_df_ratio` | 0.25 | `config.py:257` | Judgement, with a good rationale in the docstring. |
 | `_MIN_CORPUS_FOR_DF_PRUNING` | 50 | `activations.py:72` | **Principled reasoning**, arbitrary threshold — and the reasoning (df ratios are meaningless on a tiny corpus) is correct and well documented. |
 | `min_cluster_size` | 3 | `config.py:297` | Minimum defensible value; HDBSCAN cannot do less. |
-| `DEFAULT_MATCH_THRESHOLD` | 0.60 | `themes.py:29` | Judgement. Directly controls user-visible theme churn — the highest-leverage untuned constant in the system. |
+| `DEFAULT_MATCH_THRESHOLD` | 0.60 | `themes.py:29` | **Now measurable** — `daemon themes tune` (§IV.15) replays your ledger and reports churn per threshold. Still 0.60 until real history says otherwise. |
+| `retrieval.interleave` | true | `config.py` | **Principled.** Interleaved evaluation is the published answer to position-biased implicit feedback (§IV.7). |
+| Draft ratio | 1:1 | `interleave.py` | Judgement, but the *fair* default. Deliberately not tuned from its own win rate — see §III.2. |
 | `DEFAULT_MIN_MEMBER_SIMILARITY` | 0.10 | `themes.py:37` | Judgement, with an excellent rationale (leave-one-out, against HDBSCAN small-corpus degeneracy). |
 | `DEFAULT_WARM_THRESHOLD` | 1.5 | `structural.py:53` | **Derived** — sits meaningfully between the 1.0 baseline and the 5.0 ceiling. |
 | `betweenness_sample_k` | 200 | `config.py:324` | Standard approximation practice. |
@@ -958,7 +1102,11 @@ tuned system and one that merely has numbers in it.
 | `max_tokens` / `overlap` | 512 / 50 | `config.py:72-73` | Conventional RAG defaults. |
 
 The pattern worth noticing: everything derived from information retrieval (rank
-discount, IDF, warm threshold) has a principled basis, and everything describing
-*memory dynamics* (decay rate, reinforcement magnitude, source strengths, match
-threshold) is judgement. That is exactly the boundary where the field has
-literature and this system does not yet use it — which is what Part IV is for.
+discount, IDF, warm threshold, and now the draft) has a principled basis, and
+everything describing *memory dynamics* (decay rate, reinforcement magnitude,
+source strengths) is judgement. That is exactly the boundary where the field has
+literature this system does not yet use — which is what the remaining Part IV
+items are for. The two biggest are §IV.5 (learned per-edge forgetting rates, to
+replace the one global half-life) and §IV.9 (a salience layer, to replace
+`STRENGTH_BY_SOURCE`'s five hand-set constants with something that knows what
+mattered to the user rather than which code path found it).

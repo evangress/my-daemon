@@ -82,3 +82,37 @@ class _FakeEmbedder:
 
     def encode_one(self, text):  # noqa: ANN001
         return [0.0] * 4
+
+
+# ---------------------------------------------------------------------------
+# The policy recorder rides the same seam as the activation recorder
+# ---------------------------------------------------------------------------
+
+
+def test_the_orchestrator_records_policy_impressions_too(settings: Settings):
+    from my_daemon.pipeline.policy import PolicyRecorder
+
+    stores = build_stores(settings, load_graph=False, embedder=_FakeEmbedder())
+
+    orchestrator = build_orchestrator(stores)
+
+    assert any(isinstance(listener, PolicyRecorder) for listener in orchestrator.listeners)
+
+
+def test_opting_out_of_recording_drops_the_policy_recorder_as_well(settings: Settings):
+    """`daemon search` is a debug probe, not a question — it must not count as
+    an impression for either policy."""
+
+    from my_daemon.pipeline.policy import PolicyRecorder
+
+    stores = build_stores(settings, load_graph=False, embedder=_FakeEmbedder())
+
+    orchestrator = build_orchestrator(stores, record_activations=False)
+
+    assert not any(isinstance(listener, PolicyRecorder) for listener in orchestrator.listeners)
+
+
+def test_the_policy_store_shares_the_one_state_database(settings: Settings):
+    stores = build_stores(settings, load_graph=False, embedder=_FakeEmbedder())
+
+    assert stores.policy.db_path == stores.ledger.db_path

@@ -52,6 +52,13 @@ retrieval:
   seed_top_k: 8
   context_token_budget: 6000
   candidate_pool: 3   # always surface at least N candidates to the user
+  # Build the candidate pool by team draft between the seed ranking and the
+  # graph-expansion ranking, instead of by raw score. An expanded chunk scores
+  # its seed's score decayed by graph distance, so under a score sort expansion
+  # can never outrank its own seed and the expansion policy is never examined —
+  # which is why picks used to teach the graph nothing. `daemon policy` shows
+  # which ranking your picks actually favour. Set false for the old score order.
+  interleave: true
 
 llm:
   provider: anthropic
