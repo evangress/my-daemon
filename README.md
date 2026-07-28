@@ -41,24 +41,22 @@ A query embeds, finds seed chunks by hybrid dense+sparse fusion, BFS-expands tho
 
 Full instructions — including the prerequisites and what to do when something goes wrong — are in [Getting Started](docs-source/getting-started.md).
 
-**Windows 11.** Double-click `setup.bat`, then `launch-setup.bat` to pick your vault and enter your API key. Then:
+**Windows 11 — one file.** Download [`install-my-daemon.bat`](https://github.com/evangress/my-daemon/raw/master/install-my-daemon.bat) and double-click it. It finds Python (offering to install it if missing), fetches the app, adds **My Daemon** to your Start Menu, and opens the Setup window so you can pick your vault and enter your API key. Nothing else to download, no git, no folder to choose.
 
-```cmd
-.venv\Scripts\activate.bat
-daemon doctor
-daemon ingest -v
-daemon query "what was I thinking about last week"
-```
+SmartScreen will say "Windows protected your PC" — that means the file isn't code-signed, not that it's unsafe. **More info → Run anyway.**
 
-**Linux / macOS.**
+**Linux / macOS — from source.**
 
 ```bash
+git clone https://github.com/evangress/my-daemon.git && cd my-daemon
 python setup.py     # creates .venv, installs deps, copies config templates
 daemon setup        # pick the vault, store the API key
 daemon doctor
 daemon ingest -v
 daemon query "what was I thinking about last week"
 ```
+
+Developers on Windows want the same from-source path — see [Install from source](docs-source/getting-started.md#install-from-source).
 
 `daemon ingest` is incremental — re-running only re-embeds notes you've changed. `daemon doctor` is the thing to run whenever something looks wrong; it checks config, vault, vector store, API key, model cache, database schema, and graph, and tells you which one is unhappy.
 
@@ -114,10 +112,14 @@ src/my_daemon/
 ├── hermes/              # Hermes memory-provider plugin
 └── pipeline/            # ingest_vault, QueryEngine
 
+install-my-daemon.bat    # the one file a Windows user downloads
+scripts/bootstrap.py     # what it runs: fetch, unpack, install, shortcuts
+setup.py                 # from-source bootstrap (venv, deps, launchers)
+
 librarian/               # the Obsidian Librarian — a separate process that
                          # shapes the vault, built on my_daemon as a library
 docs-source/             # the documentation in this README's index above
-tests/                   # 663 tests, no external services required
+tests/                   # 677 tests, no external services required
 ```
 
 Design and planning documents live at the repo root: [`MY-DAEMON-VISION.md`](MY-DAEMON-VISION.md) (intent), [`MY-DAEMON-RESEARCH.md`](MY-DAEMON-RESEARCH.md) (prior art), [`MY-DAEMON-SCAFFOLD.md`](MY-DAEMON-SCAFFOLD.md) (full design and phasing), [`PROJECT_MANAGEMENT.md`](PROJECT_MANAGEMENT.md) (milestones, known bugs, running to-do), and [`THEME.md`](THEME.md) (the visual language).

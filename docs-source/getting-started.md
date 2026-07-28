@@ -1,6 +1,118 @@
 # Getting Started
 
+There are two ways in. **Install on Windows 11** is one downloaded file and a
+double-click, and is what you want unless you intend to read or change the
+code. **Install from source** is the developer path, and the only path on Linux
+and macOS today.
+
+## Install on Windows 11
+
+**1. Download the installer.** Save
+[`install-my-daemon.bat`](https://github.com/evangress/my-daemon/raw/master/install-my-daemon.bat)
+anywhere — your Downloads folder is fine. It is the only file you need; it
+fetches everything else.
+
+**2. Double-click it.**
+
+Windows will show **"Windows protected your PC"**. That is SmartScreen
+reporting that this file is not code-signed — a certificate costs money this
+project does not spend — not that anything is wrong with it. Click
+**More info → Run anyway**. If your browser blocked the download outright,
+right-click the file → **Properties** → tick **Unblock** → OK.
+
+The installer will:
+
+- find Python, and offer to install it via `winget` if it is missing;
+- print the exact URL it is downloading, before it downloads anything;
+- unpack the app, install its dependencies (a few minutes the first time),
+  add **My Daemon** to the Start Menu, and open the Setup window.
+
+**3. In the Setup window,** pick your Obsidian vault folder and paste your
+[Anthropic API key](https://console.anthropic.com/settings/keys). The key goes
+into Windows Credential Manager, encrypted — never into a file. See
+[Where your API key is stored](#where-your-api-key-is-stored).
+
+**4. Ingest your notes.** Start Menu → **My Daemon** opens the chat window. To
+run the first ingest, open **Command Prompt** and paste:
+
+```cmd
+"%LOCALAPPDATA%\my-daemon\app\.venv\Scripts\daemon.exe" ingest -v
+```
+
+### Where it puts things
+
+```
+%LOCALAPPDATA%\my-daemon\app\   the program itself, plus its virtualenv
+%APPDATA%\my-daemon\            your config.yaml and data\ (index, models)
+Start Menu\Programs\My Daemon\  the two shortcuts
+```
+
+Your notes are **never** copied or moved — the daemon reads the vault where it
+already lives.
+
+Two folders, split on purpose: updating replaces the program folder wholesale,
+so everything you own — config, vault index, feedback history — lives in the
+other one and survives. `%LOCALAPPDATA%` is the conventional home for a
+per-user Windows app that shouldn't roam between machines, which is why the
+program goes there rather than `C:\Program Files` (needs admin rights) or your
+Documents (which OneDrive will try to sync, model cache and all).
+
+### Updating and removing
+
+**Update:** run `install-my-daemon.bat` again. It replaces the program and
+leaves your config, index and vault untouched.
+
+**Remove:** delete the folders above. My Daemon writes nothing else — no
+registry keys, no services. Your vault is not one of them and is never touched.
+
+## Install from source
+
+For reading the code, changing it, or running on Linux or macOS.
+
+**1. Get the code.** With git:
+
+```bash
+git clone https://github.com/evangress/my-daemon.git
+cd my-daemon
+```
+
+Or without git: download the
+[ZIP](https://github.com/evangress/my-daemon/archive/refs/heads/master.zip),
+extract it, and `cd` into the extracted folder. On Windows, extract somewhere
+you can write to — your home folder is fine, `C:\Program Files` is not.
+
+**2. Bootstrap.**
+
+```bash
+python setup.py              # creates .venv, installs deps, copies templates
+# or step by step:
+uv sync                      # or: pip install -e .[dev]
+cp config.example.yaml config.yaml
+```
+
+On Windows you can double-click `setup.bat` instead, which runs the same thing.
+It also generates the launcher scripts (`launch-setup.bat`, `launch-gui.vbs`,
+`launch-gui.bat`) — those are not in a fresh clone, so run it before looking
+for them.
+
+**3. Configure.** Point `vault.path` in `config.yaml` at your Obsidian vault,
+then run `daemon setup` to store your API key in the OS credential store
+(Credential Manager on Windows, Keychain on macOS, Secret Service on Linux). On
+a headless box with no keyring, `export ANTHROPIC_API_KEY=...` in your shell
+profile instead.
+
+**4. Verify**, then ingest:
+
+```bash
+daemon doctor
+daemon ingest -v
+daemon query "what was I thinking about last week"
+```
+
 ## Prerequisites
+
+The Windows installer handles these for you; they matter for the from-source
+path.
 
 - **Python 3.11 – 3.14**. The project pins to this band in `pyproject.toml`
   (`>=3.11,<3.15`). 3.12 is what the project is developed against.
@@ -12,86 +124,6 @@
 - An **Anthropic API key** for LLM synthesis. Free-tier keys work for v0.1
   workloads; budget Sonnet 4.6 at the default settings. Get one at
   [console.anthropic.com](https://console.anthropic.com/settings/keys).
-
-## Install
-
-### Windows 11 — step by step
-
-Nothing here needs Docker, and you never paste your API key into a file.
-
-**1. Install Python.** Download [Python 3.12](https://www.python.org/downloads/)
-and, on the first installer screen, tick **Add python.exe to PATH** before
-clicking *Install Now*. Confirm it took, in a new **Command Prompt**:
-
-```cmd
-py --version
-```
-
-You should see `Python 3.12.x` (anything from 3.11 to 3.14 is fine). If you get
-"not recognized", re-run the installer and choose *Modify → Add to PATH*.
-
-**2. Get the project folder.** Either `git clone` it, or download the ZIP and
-**right-click → Extract All**. Extract somewhere you own, such as
-`C:\Users\<you>\my-daemon` — avoid `C:\Program Files`, which needs admin rights
-to write the `data\` folder. Windows blocks scripts inside a still-zipped
-folder, so extract before continuing.
-
-**3. Bootstrap.** Double-click **`setup.bat`** in the project root. It creates
-`.venv\`, installs every dependency, copies `config.example.yaml` →
-`config.yaml`, and generates the launcher scripts (`launch-setup.bat`,
-`launch-gui.vbs`, `launch-gui.bat`). Those launchers do **not** exist in a
-fresh clone — `setup.bat` writes them, so run it before looking for them.
-
-If SmartScreen shows "Windows protected your PC", click **More info → Run
-anyway**; that prompt is about the file being newly downloaded, not about its
-contents. Leave the window open until it prints `Setup complete`.
-
-**4. Configure the vault and key.** Double-click **`launch-setup.bat`** (or run
-`daemon setup`). In that window:
-
-- **Vault folder** — browse to your Obsidian vault.
-- **API key** — paste your Anthropic key. The field is masked; tick *Show* to
-  check it. On save it goes into **Windows Credential Manager**, encrypted at
-  rest by DPAPI. It is never written to `config.yaml` or `.env`.
-- **Daily reflection** — optionally register the 03:00 Task Scheduler job.
-
-Click **Save**. To confirm it landed, open *Control Panel → Credential Manager
-→ Windows Credentials* and look for **`my-daemon`**.
-
-**5. Verify.** In a new Command Prompt, from the project folder:
-
-```cmd
-.venv\Scripts\activate.bat
-daemon doctor
-```
-
-Every row should read `pass`. The `api key` row should say
-*present via the OS credential store*. If it instead warns *present, but read
-from a plaintext .env file*, see
-[Where your API key is stored](#where-your-api-key-is-stored).
-
-**6. Ingest and ask.**
-
-```cmd
-daemon ingest -v
-daemon query "what was I thinking about last week"
-```
-
-Then double-click `launch-gui.vbs` for the chat window.
-
-### Linux / macOS
-
-```bash
-python setup.py              # creates .venv, installs deps, copies templates
-# or step by step:
-uv sync                      # or: pip install -e .[dev]
-cp config.example.yaml config.yaml
-```
-
-Point `vault.path` in `config.yaml` at your Obsidian vault, then run
-`daemon setup` to store your API key in the Keychain (macOS) or Secret Service
-(Linux). On a headless box with no keyring, `export ANTHROPIC_API_KEY=...` in
-your shell profile instead.
 
 ## Where your API key is stored
 
@@ -224,6 +256,18 @@ the same output live.
 
 ## Troubleshooting
 
+- **"Windows protected your PC" when running the installer** — SmartScreen
+  flagging an unsigned file. **More info → Run anyway**. If the file seems
+  inert when double-clicked, right-click → **Properties** → tick **Unblock**.
+- **"Python is installed, but this window cannot see it yet"** — `winget`
+  updates `PATH` for new processes only. Close the window and double-click
+  `install-my-daemon.bat` again; it will pick Python up the second time.
+- **"Could not download the installer"** — the `.bat` could not reach
+  `raw.githubusercontent.com`. Check your connection, and any corporate proxy
+  or filter that blocks GitHub.
+- **"Downloaded archive does not match its published checksum"** — the
+  installer refused to unpack and changed nothing. Run it again; if it repeats,
+  stop and report it rather than working around it.
 - **"ANTHROPIC_API_KEY is not set"** — run `daemon setup` and save; it stores
   the key in the OS credential store. On a headless machine with no keyring,
   `export ANTHROPIC_API_KEY=...` in your shell profile instead.

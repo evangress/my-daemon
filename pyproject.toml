@@ -100,4 +100,6 @@ ignore_missing_imports = true
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
-pythonpath = ["src"]
+# "." so tests can import `scripts.bootstrap` — the Windows installer lives
+# outside the package on purpose (it runs before the package exists on disk).
+pythonpath = ["src", "."]
