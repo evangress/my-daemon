@@ -21,6 +21,7 @@ from __future__ import annotations
 from pathlib import Path
 
 import pytest
+from conftest import requires_tkinter
 from typer.testing import CliRunner
 
 from my_daemon.cli import app
@@ -447,6 +448,7 @@ def test_init_without_user_still_writes_to_the_cwd(tmp_path: Path):
 # ---------------------------------------------------------------------------
 
 
+@requires_tkinter
 def test_the_windows_reflect_task_names_its_config_absolutely(tmp_path: Path):
     """A scheduled task starts in system32; the command must not depend on CWD."""
     from my_daemon.gui.setup import reflect_task_command
@@ -457,6 +459,7 @@ def test_the_windows_reflect_task_names_its_config_absolutely(tmp_path: Path):
     assert reflect_task_command(exe, cfg) == f'"{exe}" --config "{cfg}" reflect'
 
 
+@requires_tkinter
 def test_the_setup_window_edits_the_config_the_daemon_reads(tmp_path: Path):
     from my_daemon.gui import setup as setup_gui
 
@@ -466,6 +469,7 @@ def test_the_setup_window_edits_the_config_the_daemon_reads(tmp_path: Path):
     assert setup_gui.project_root() == user_config_dir()
 
 
+@requires_tkinter
 def test_the_setup_window_falls_back_to_the_cwd_when_nothing_exists(tmp_path: Path):
     from my_daemon.gui import setup as setup_gui
 

@@ -16,6 +16,7 @@ import sysconfig
 from pathlib import Path
 
 import pytest
+from conftest import requires_tkinter
 from typer.testing import CliRunner
 
 from my_daemon.cli import app
@@ -112,6 +113,7 @@ def test_the_schtasks_command_is_exactly_this():
     )
 
 
+@requires_tkinter
 def test_the_task_command_shape_matches_the_setup_guis_helper():
     """One shape for Windows scheduled tasks, not two.
 
@@ -124,6 +126,7 @@ def test_the_task_command_shape_matches_the_setup_guis_helper():
     assert task_command(EXE, CFG, "reflect") == reflect_task_command(EXE, CFG)
 
 
+@requires_tkinter
 def test_the_windows_task_name_is_distinct_from_the_reflect_task():
     from my_daemon.gui.setup import REFLECT_TASK_NAME
 

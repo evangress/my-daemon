@@ -3,12 +3,31 @@
 
 from __future__ import annotations
 
+import importlib
 from pathlib import Path
 
 import keyring
 import keyring.backend
 import keyring.backends.fail
 import pytest
+
+
+def _has_tkinter() -> bool:
+    try:
+        importlib.import_module("tkinter")
+    except Exception:  # ModuleNotFoundError, or a broken/headless Tk install
+        return False
+    return True
+
+
+#: Skip anything that reaches into `my_daemon.gui.setup`, which imports Tkinter
+#: at module level. Tkinter is an *optional* toolkit: CI's 3.12 leg runs the
+#: runner's system Python, which ships no `python3-tk`, and bare servers and
+#: slim containers routinely lack it too. A suite that goes red because an
+#: optional GUI library is missing is testing the machine, not the code.
+requires_tkinter = pytest.mark.skipif(
+    not _has_tkinter(), reason="needs Tkinter (install python3-tk)"
+)
 
 
 @pytest.fixture

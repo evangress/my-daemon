@@ -19,8 +19,17 @@ from pathlib import Path
 
 import pytest
 
-from my_daemon.gui import setup as setup_window
-from my_daemon.secrets import KEYCHAIN_SERVICE, KEYCHAIN_USERNAME
+# The module under test is the Tkinter window, so it cannot even be imported
+# without Tkinter. CI's 3.12 leg runs the runner's system Python, which has no
+# `python3-tk`; skipping keeps the suite environment-independent rather than
+# red on a machine that is merely missing an optional GUI toolkit. The
+# security-critical half of this logic — keychain writes and .env purging —
+# lives in `my_daemon.secrets` and is covered unconditionally by
+# `tests/test_secrets.py`.
+pytest.importorskip("tkinter", reason="the setup window needs Tkinter (python3-tk)")
+
+from my_daemon.gui import setup as setup_window  # noqa: E402 — must follow the skip
+from my_daemon.secrets import KEYCHAIN_SERVICE, KEYCHAIN_USERNAME  # noqa: E402
 
 KEY = "sk-ant-api03-secret-value"
 
