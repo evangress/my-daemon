@@ -168,33 +168,34 @@ def reconcile_themes(
     snapshot_id: str | None = None,
     match_threshold: float = DEFAULT_MATCH_THRESHOLD,
 ) -> ReconcileResult:
-    """Match this run's clusters onto existing themes, greedily, best-first.
+    """Match this run's clusters onto existing themes by optimal assignment.
 
     A match reuses the theme's id, label, and summary — no LLM call and no
     churn in what the user sees. That is what makes the *labels* far more
     stable than the underlying partitions, which over a mutating vault are
     inherently unstable.
+
+    The pairing is a maximum-weight bipartite matching, solved exactly by the
+    Hungarian algorithm (Kuhn, 1955) via ``scipy.optimize.linear_sum_assignment``.
+    It used to be greedy best-first, which is not merely approximate but can be
+    arbitrarily worse: one high-scoring pair claiming a theme can strand a
+    cluster whose only viable partner it just took, and every stranding is
+    user-visible *twice* — as a theme that appears out of nowhere and another
+    that goes dormant for no reason the user can see. Optimising the total
+    rather than the first pick removes that failure mode entirely.
+
+    The threshold is applied *after* assignment, so a pairing the user would
+    not accept is never smuggled in just because it improved the sum.
     """
 
     result = ReconcileResult()
     existing = store.all()
     before = {t.id: set(t.centroid) for t in existing}
 
-    pairs = sorted(
-        (
-            (cosine(cluster.centroid, theme.centroid), ci, theme.id)
-            for ci, cluster in enumerate(clusters)
-            for theme in existing
-        ),
-        key=lambda x: -x[0],
-    )
-
     claimed_clusters: set[int] = set()
     claimed_themes: set[int] = set()
-    for score, ci, theme_id in pairs:
+    for score, ci, theme_id in _optimal_pairs(clusters, existing):
         if score < match_threshold:
-            break
-        if ci in claimed_clusters or theme_id in claimed_themes:
             continue
         claimed_clusters.add(ci)
         claimed_themes.add(theme_id)
@@ -231,6 +232,35 @@ def reconcile_themes(
 
     result.churn = _churn(before, result)
     return result
+
+
+def _optimal_pairs(
+    clusters: list[FingerprintCluster],
+    existing: list,  # noqa: ANN001 — list[Theme], avoiding a circular import
+) -> list[tuple[float, int, int]]:
+    """(similarity, cluster_index, theme_id) for the best overall pairing.
+
+    Returns at most ``min(len(clusters), len(existing))`` pairs, since each
+    cluster and each theme can be claimed once. Scores are returned unfiltered;
+    the caller applies the acceptance threshold.
+    """
+
+    if not clusters or not existing:
+        return []
+
+    import numpy as np
+    from scipy.optimize import linear_sum_assignment
+
+    similarity = np.array(
+        [[cosine(cluster.centroid, theme.centroid) for theme in existing] for cluster in clusters],
+        dtype=np.float64,
+    )
+    # linear_sum_assignment minimises, and we want the maximum-weight matching.
+    rows, cols = linear_sum_assignment(-similarity)
+    return [
+        (float(similarity[row, col]), int(row), existing[col].id)
+        for row, col in zip(rows, cols, strict=True)
+    ]
 
 
 def _churn(before: dict[int, set[str]], result: ReconcileResult) -> float:

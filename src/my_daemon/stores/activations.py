@@ -19,7 +19,6 @@ vector backend stays a drop-in.
 from __future__ import annotations
 
 import hashlib
-import json
 import math
 import sqlite3
 import uuid as uuidlib
@@ -488,29 +487,15 @@ class ActivationLedger:
             ).fetchall()
         return [dict(r) for r in rows]
 
-    def compact(self, *, older_than: datetime) -> int:
-        """Collapse old detail rows into a stored fingerprint.
-
-        Compaction, not deletion: the fingerprint stays comparable forever at
-        reduced fidelity, and only the per-source forensics are lost. Matters
-        because Hermes prefetch can generate 10-50x the intentional query rate.
-        """
-
-        with self._connect() as conn:
-            ids = [
-                int(r["id"])
-                for r in conn.execute(
-                    "SELECT id FROM queries WHERE ts < ? AND fingerprint_json IS NULL",
-                    (older_than.isoformat(),),
-                ).fetchall()
-            ]
-        for query_id in ids:
-            fingerprint = self.fingerprint(query_id)
-            top = dict(sorted(fingerprint.items(), key=lambda x: -x[1])[:20])
-            with self._connect() as conn:
-                conn.execute(
-                    "UPDATE queries SET fingerprint_json = ? WHERE id = ?",
-                    (json.dumps(top), query_id),
-                )
-                conn.execute("DELETE FROM query_activations WHERE query_id = ?", (query_id,))
-        return len(ids)
+    # `compact()` used to live here and was deleted on 2026-07-29. It wrote a
+    # truncated fingerprint into `queries.fingerprint_json` and then deleted the
+    # query's `query_activations` rows — but *nothing reads
+    # `fingerprint_json`*. `fingerprint()` and `similar()` both rebuild from the
+    # detail rows, so calling it would have silently destroyed the data recall
+    # and themes run on, in the name of saving space. It had zero callers, so
+    # deleting it costs nothing and removes a loaded gun.
+    #
+    # If Hermes prefetch volume ever does make compaction necessary, the
+    # rebuild has to come first: `fingerprint()` and `similar()` must fall back
+    # to the stored JSON before anything is allowed to delete a detail row.
+    # The column is left in place (migration 4) for exactly that.

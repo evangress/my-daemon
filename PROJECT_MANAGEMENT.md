@@ -183,13 +183,16 @@ found thirteen more. Status after the same-day fix waves:
   refuses live server storage; plus new `daemon backup`/`restore`.
 - [x] **`config.example.yaml` shipped `agent.enabled: true`** — now matches
   the code default (false) after the example rewrite for embedded Qdrant.
-- [ ] **`ActivationLedger.compact()` would destroy fingerprints** (nothing
-  reads `fingerprint_json`); still zero callers. Fix or delete before wiring.
-- [ ] **`apply_selection` can route through theme-tag hubs**
-  (`shortest_note_path` has no tag exclusion) — latent until theme tags are
-  accepted; part of finishing the loop severance (eval §6 item 25).
-- [ ] **`similar()` IDF asymmetry** (probe weighted, candidates not) —
-  eval §2 "3.6".
+- [x] **`ActivationLedger.compact()` would destroy fingerprints** (nothing
+  reads `fingerprint_json`). **Deleted 2026-07-29** — zero callers, so removal
+  cost nothing and took away a loaded gun. Column retained; see Done for what
+  must be built first if compaction ever becomes necessary.
+- [x] **`apply_selection` can route through theme-tag hubs**
+  (`shortest_note_path` has no tag exclusion). **Fixed 2026-07-29** — the same
+  `exclude_tag_prefixes` severance `neighbors_within` already applied. Loop
+  severance is now complete on both the retrieval and the learning side.
+- [x] **`similar()` IDF asymmetry** (probe weighted, candidates not) —
+  eval §2 "3.6". **Fixed 2026-07-28**; see Done.
 - [ ] **`agent_link_runs`/`agent_extract_runs` still path-keyed** after the
   UUID cutover — a rename re-runs the extractor/linker.
 
@@ -205,8 +208,9 @@ Separate from the Adaptive Memory Loop arc:
   `daemon run` (watchfiles debounced ingest + nightly consolidate) plus
   `daemon schedule` (systemd --user / schtasks units). An Obsidian *plugin*
   remains unplanned.
-- [ ] `daemon graph todos` — surface dangling wikilink targets as
-  "notes you keep meaning to write" (see AI Suggestions).
+- [x] ~~`daemon graph todos`~~ — **shipped 2026-07-29**. Dangling wikilink
+  targets as "notes you keep meaning to write", ranked by how many notes are
+  waiting on each.
 - [ ] **No payload index on Qdrant's `note_path`**, though
   `retrieval/expand.py:40-47` scrolls on it for every seed of every query.
   Free latency win; folded into M-mem-3.
@@ -255,6 +259,57 @@ questions in PLAN-HERMES §14 (identity-note seed, single-vs-many clients,
 NiceGUI's long-term fate) are not yet decided.
 
 ## Done
+
+- **Five cheap wins + one deletion (2026-07-29).** TDD throughout;
+  730 → 757 passing tests, ruff + mypy clean.
+  **`daemon graph todos`** — the dangling-wikilink idea from the 2026-05-16
+  suggestions, finally reachable. New `analysis/todos.py`: every `[[Name]]`
+  with no note behind it, ranked by how many notes are waiting on it, and
+  naming them so the entry is actionable rather than a bare noun. This is the
+  one place the daemon touches **prospective memory** — remembering to do a
+  thing you decided to do, a distinct system from the episodic and semantic
+  memory everything else here serves, and one that degrades early in ageing
+  and MCI.
+  **Reinforcement no longer routes through theme tags** — `shortest_note_path`
+  gained the `exclude_tag_prefixes` severance `neighbors_within` already had,
+  and `apply_selection` passes it. Was latent until a theme tag is accepted;
+  after that, any two notes sharing a daemon-authored tag looked adjacent and
+  every pick between them warmed edges the daemon minted from its own
+  conclusions. Closes the remaining half of the loop severance.
+  **Louvain's disconnected communities are repaired** — new
+  `structural.split_disconnected` splits any community whose induced subgraph
+  isn't connected. Traag et al. (2019) measured up to 16% disconnected; here
+  that meant the observer letter could assert a relationship between notes with
+  no path between them. Extracted as a pure function rather than a `_partition`
+  test hook, so no test-only parameter leaked into production.
+  **Theme matching is optimal, not greedy** — `scipy.optimize.linear_sum_assignment`
+  (Hungarian, Kuhn 1955) replaces greedy best-first in `reconcile_themes`.
+  Greedy can strand a cluster whose only viable partner a higher-scoring pair
+  just claimed, and every stranding is user-visible twice — as a theme
+  appearing from nowhere and another going dormant for no visible reason. The
+  threshold is applied *after* assignment so no rejected pairing is smuggled in.
+  **`compact()` deleted** — it wrote a truncated fingerprint to
+  `queries.fingerprint_json` then deleted the detail rows, but *nothing reads
+  that column*: `fingerprint()` and `similar()` both rebuild from the detail
+  rows, so calling it would have silently destroyed what recall and themes run
+  on. Zero callers, so deletion cost nothing. The column stays, with a note on
+  what has to be built first if compaction ever becomes necessary.
+  **`pip-licenses` in the dev extra — and the checker actually runs now.**
+  It resolved the tool with `shutil.which`, which searches only `PATH`, so
+  running it the way everything else here runs (`.venv/bin/python scripts/…`)
+  reported "not installed" with the tool sitting in that very venv. *That* is
+  why `debug/license-compliance.md` had not been regenerated since 2026-05-17 —
+  a false negative, which is worse than no checker, because it reads like a
+  clean bill of health. Fixed (`find_pip_licenses`, interpreter's bin first,
+  `PATH` still honoured) and the report regenerated: **147 compatible, 16
+  incompatible, 2 unknown**. The 16 are the documented NVIDIA/CUDA proprietary
+  binary exception.
+  **Found while doing it: `fastembed` was flagged incompatible** — a *direct*
+  dependency. Its PyPI Trove classifier says `Other/Proprietary License`, but
+  its `License` field says "Apache License" and the wheel ships the full
+  201-line Apache-2.0 text. The classifier is simply stale. Added a
+  `_VERIFIED_OVERRIDES` table that carries the *evidence* into the report,
+  precisely so an override can never be mistaken for suppressing a finding.
 
 - **Applied-research fix wave (2026-07-28).** The first three recommendations
   out of [MY-DAEMON-RESEARCH-APPLIED.md](MY-DAEMON-RESEARCH-APPLIED.md),

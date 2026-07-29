@@ -1,18 +1,17 @@
 # License Compliance Report
 
-- **Generated:** 2026-05-17T14:09:51+00:00
+- **Generated:** 2026-07-29T00:13:54+00:00
 - **Project license:** `Apache-2.0`
-- **Counts:** 135 compatible · 17 incompatible · 2 unknown · 154 total
+- **Counts:** 147 compatible · 16 incompatible · 2 unknown · 165 total
 - **Exit code:** `1`
 
-## Incompatible (17)
+## Incompatible (16)
 
 These dependencies declare a license that is **not compatible** with `Apache-2.0`. Each must be removed, replaced, or relied on under a documented exception (e.g. proprietary binary runtimes that ship separately and are not redistributed with this project's source).
 
 | Package | Version | Declared License | Matched Token |
 |---|---|---|---|
 | [`cuda-bindings`](https://pypi.org/project/cuda-bindings/) | 13.2.0 | LicenseRef-NVIDIA-SOFTWARE-LICENSE | `LICENSEREF-NVIDIA-SOFTWARE-LICENSE` |
-| [`fastembed`](https://pypi.org/project/fastembed/) | 0.8.0 | Other/Proprietary License | `OTHER/PROPRIETARY LICENSE` |
 | [`nvidia-cublas`](https://pypi.org/project/nvidia-cublas/) | 13.1.1.3 | LicenseRef-NVIDIA-Proprietary | `LICENSEREF-NVIDIA-PROPRIETARY` |
 | [`nvidia-cuda-cupti`](https://pypi.org/project/nvidia-cuda-cupti/) | 13.0.85 | Other/Proprietary License | `OTHER/PROPRIETARY LICENSE` |
 | [`nvidia-cuda-nvrtc`](https://pypi.org/project/nvidia-cuda-nvrtc/) | 13.0.88 | Other/Proprietary License | `OTHER/PROPRIETARY LICENSE` |

@@ -2330,3 +2330,43 @@ def policy() -> None:
             f"[dim]{total} pick(s) so far — too few to read much into. "
             "Interleaving removes position bias, not sampling error.[/dim]"
         )
+
+
+@graph_app.command("todos")
+def graph_todos_cmd(
+    limit: int = typer.Option(20, "--limit"),
+    min_links: int = typer.Option(
+        1, "--min-links", help="Only targets wanted by at least this many notes."
+    ),
+) -> None:
+    """Notes you keep meaning to write.
+
+    Every `[[Name]]` with nothing behind it is a decision you already made and
+    have not carried out yet. Ranked by how many of your notes are reaching for
+    it.
+    """
+
+    from my_daemon.analysis.todos import graph_todos
+
+    s = _load()
+    graph = GraphStore(path=s.graph.path)
+    graph.load()
+
+    todos = [t for t in graph_todos(graph, limit=limit) if t.incoming_links >= min_links]
+    if not todos:
+        console.print(
+            "[green]No unwritten wikilinks.[/green] Every `[[link]]` in your vault "
+            "has a note behind it."
+        )
+        return
+
+    table = Table(title="Notes you keep meaning to write")
+    table.add_column("target")
+    table.add_column("wanted by", justify="right")
+    table.add_column("linked from")
+    for todo in todos:
+        shown = ", ".join(todo.wanted_by[:3])
+        if len(todo.wanted_by) > 3:
+            shown += f", +{len(todo.wanted_by) - 3} more"
+        table.add_row(todo.target, str(todo.incoming_links), shown or "—")
+    console.print(table)

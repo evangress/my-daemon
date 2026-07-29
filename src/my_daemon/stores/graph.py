@@ -577,22 +577,46 @@ class GraphStore:
             notes_only[rel] = dist
         return notes_only
 
-    def shortest_note_path(self, uuid_from: str, uuid_to: str) -> list[str] | None:
+    def shortest_note_path(
+        self,
+        uuid_from: str,
+        uuid_to: str,
+        *,
+        exclude_tag_prefixes: tuple[str, ...] = (),
+    ) -> list[str] | None:
         """Return the shortest hop path between two notes as a list of node ids.
 
         Used by ``retrieval.weights.apply_selection`` to walk the edges it
         should reinforce. Returns ``None`` if either endpoint is missing or
         no path exists.
+
+        ``exclude_tag_prefixes`` is the same severance ``neighbors_within``
+        applies, and for the same reason — it is just as wrong to *learn* along
+        a daemon-authored tag as it is to retrieve along one. Without it,
+        accepting a `theme/` tag hands the graph a hub through which any two
+        notes in that theme look adjacent, and every pick between them warms
+        edges the daemon minted from its own conclusions.
         """
 
         a, b = _note_node(uuid_from), _note_node(uuid_to)
         if a not in self.graph or b not in self.graph:
             return None
         ug = self.graph.to_undirected(as_view=True)
+        if exclude_tag_prefixes:
+            ug = ug.subgraph(
+                [n for n in ug.nodes if n not in self._blocked_tags(exclude_tag_prefixes)]
+            )
         try:
             return nx.shortest_path(ug, a, b)
-        except nx.NetworkXNoPath:
+        except (nx.NetworkXNoPath, nx.NodeNotFound):
             return None
+
+    def _blocked_tags(self, prefixes: tuple[str, ...]) -> set[str]:
+        return {
+            n
+            for n, d in self.graph.nodes(data=True)
+            if d.get("type") == "tag" and str(d.get("title", "")).startswith(prefixes)
+        }
 
     def stats(self) -> GraphStats:
         notes = [

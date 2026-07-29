@@ -38,6 +38,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import platform
 import re
 import shutil
@@ -165,6 +166,28 @@ _LICENSE_TABLE: dict[str, Status] = {
 _UNKNOWN_TOKENS = {"UNKNOWN", "", "NONE", "NOASSERTION", "OTHER"}
 
 
+# Packages whose *declared* metadata is demonstrably wrong, verified by hand
+# against the licence text the package actually ships. Keyed by lower-cased
+# package name; the value is the corrected verdict plus the evidence for it.
+#
+# This table is a liability if it grows carelessly — an unexplained override is
+# indistinguishable from suppressing a real finding. Two rules: only add an
+# entry after reading the bundled LICENSE file yourself, and write down what you
+# read, because the reason travels into the generated report where a reviewer
+# can check it.
+_VERIFIED_OVERRIDES: dict[str, tuple[Status, str]] = {
+    # Trove classifier says "License :: Other/Proprietary License", but the
+    # `License` metadata field says "Apache License" and the wheel ships the
+    # full 201-line Apache-2.0 text at dist-info/licenses/LICENSE. The
+    # classifier is stale. Verified 2026-07-29 against fastembed 0.8.0.
+    # Upstream is Qdrant's, Apache-2.0: https://github.com/qdrant/fastembed
+    "fastembed": (
+        Status.COMPATIBLE,
+        "APACHE-2.0 (verified: ships full Apache-2.0 text; Trove classifier stale)",
+    ),
+}
+
+
 @dataclass
 class PkgResult:
     name: str
@@ -197,6 +220,10 @@ def _classify_token(tok: str) -> Status:
 
 def _classify_package(name: str, version: str, raw: str) -> PkgResult:
     tokens = _normalize(raw)
+    override = _VERIFIED_OVERRIDES.get(name.lower())
+    if override is not None:
+        status, evidence = override
+        return PkgResult(name, version, raw, tokens, status, evidence)
     decisions = [(t, _classify_token(t)) for t in tokens]
     # Dual-licensed packages: any compatible token lets us choose that license.
     for tok, status in decisions:
@@ -210,15 +237,37 @@ def _classify_package(name: str, version: str, raw: str) -> PkgResult:
     )
 
 
+def find_pip_licenses() -> str | None:
+    """Locate the `pip-licenses` executable, interpreter's own bin first.
+
+    `shutil.which` alone searches only ``PATH``, and this script is run as
+    ``.venv/bin/python scripts/license_check.py`` — no activated shell, so the
+    venv's ``bin/`` is not on ``PATH`` and a perfectly good install right next
+    to the running interpreter reported as missing. That false negative is why
+    ``debug/license-compliance.md`` went unregenerated from 2026-05-17 to
+    2026-07-29: the audit looked impossible rather than merely skipped.
+
+    ``PATH`` is still searched afterwards, so a global install keeps working.
+    """
+
+    beside_python = Path(sys.executable).parent / "pip-licenses"
+    if beside_python.is_file() and os.access(beside_python, os.X_OK):
+        return str(beside_python)
+    return shutil.which("pip-licenses")
+
+
 def _run_pip_licenses() -> list[dict]:
-    if shutil.which("pip-licenses") is None:
+    executable = find_pip_licenses()
+    if executable is None:
         print(
-            "error: 'pip-licenses' is not installed.\n  install it with:  pip install pip-licenses",
+            "error: 'pip-licenses' is not installed.\n"
+            "  it ships in the dev extra:  uv sync --extra dev\n"
+            "  or install it directly:     pip install pip-licenses",
             file=sys.stderr,
         )
         sys.exit(127)
     out = subprocess.check_output(
-        ["pip-licenses", "--format=json", "--with-urls"],
+        [executable, "--format=json", "--with-urls"],
         text=True,
     )
     return json.loads(out)
@@ -259,7 +308,10 @@ PROJECT_LICENSE = "Apache-2.0"
 
 def _pip_licenses_version() -> str:
     try:
-        out = subprocess.check_output(["pip-licenses", "--version"], text=True).strip()
+        executable = find_pip_licenses()
+        if executable is None:
+            return ""
+        out = subprocess.check_output([executable, "--version"], text=True).strip()
         return out.split()[-1] if out else ""
     except (subprocess.CalledProcessError, OSError):
         return ""

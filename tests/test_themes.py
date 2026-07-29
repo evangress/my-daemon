@@ -266,3 +266,77 @@ def test_clustering_can_be_switched_off(tmp_path: Path):
         progress=None,
         stats=agent_observe.ObserveStats(snapshot_id="s1"),
     ) == (None, [])
+
+
+# ---------------------------------------------------------------------------
+# Optimal (Hungarian) rather than greedy theme matching
+#
+# Greedy best-first can be arbitrarily worse than optimal: one high-scoring pair
+# claiming a theme can force two workable pairs to fail, and each failure is
+# user-visible twice — as a spurious "new theme" and a spurious "dormant" one.
+# ---------------------------------------------------------------------------
+
+
+def _theme_with_centroid(store, label: str, centroid: dict[str, float]) -> int:
+    return store.create(slug=label, label=label, centroid=centroid, query_count=3)
+
+
+def test_matching_maximises_total_similarity_not_the_single_best_pair(tmp_path: Path):
+    """The case greedy gets wrong.
+
+    X resembles P most of all (0.90), so greedy claims that pair first — which
+    strands Y, whose only viable partner was P (Y↔Q is 0.0). Greedy therefore
+    matches one and reports a spurious new theme *and* a spurious dormant one.
+    Optimal assignment pairs X↔Q (0.44) and Y↔P (0.80), matching both, because
+    it maximises the total rather than the first pick.
+    """
+
+    from my_daemon.analysis.themes import FingerprintCluster, reconcile_themes
+    from my_daemon.stores.themes import ThemeStore
+
+    store = ThemeStore(db_path=tmp_path / "state.db")
+    p = _theme_with_centroid(store, "P", {"a": 1.0})
+    q = _theme_with_centroid(store, "Q", {"b": 1.0})
+
+    x = FingerprintCluster(query_ids=[1, 2, 3], centroid={"a": 0.9, "b": 0.436})
+    y = FingerprintCluster(query_ids=[4, 5, 6], centroid={"a": 0.8, "c": 0.6})
+
+    result = reconcile_themes(store, [x, y], match_threshold=0.4)
+
+    assert len(result.matched) == 2, "both clusters should inherit a theme"
+    assert result.created == []
+    assert result.dormant == []
+    assert {theme_id for theme_id, _ in result.matched} == {p, q}
+
+
+def test_a_cluster_below_threshold_still_creates_rather_than_matches(tmp_path: Path):
+    """Optimal assignment must not smuggle in a pairing the threshold rejects."""
+
+    from my_daemon.analysis.themes import FingerprintCluster, reconcile_themes
+    from my_daemon.stores.themes import ThemeStore
+
+    store = ThemeStore(db_path=tmp_path / "state.db")
+    _theme_with_centroid(store, "P", {"n1": 1.0})
+
+    unrelated = FingerprintCluster(query_ids=[1, 2, 3], centroid={"zzz": 1.0})
+
+    result = reconcile_themes(store, [unrelated], match_threshold=0.6)
+
+    assert result.matched == []
+    assert len(result.created) == 1
+
+
+def test_more_clusters_than_themes_matches_what_it_can(tmp_path: Path):
+    from my_daemon.analysis.themes import FingerprintCluster, reconcile_themes
+    from my_daemon.stores.themes import ThemeStore
+
+    store = ThemeStore(db_path=tmp_path / "state.db")
+    _theme_with_centroid(store, "P", {"n1": 1.0})
+
+    a = FingerprintCluster(query_ids=[1, 2, 3], centroid={"n1": 1.0})
+    b = FingerprintCluster(query_ids=[4, 5, 6], centroid={"n9": 1.0})
+
+    result = reconcile_themes(store, [a, b], match_threshold=0.6)
+
+    assert len(result.matched) == 1
+    assert len(result.created) == 1

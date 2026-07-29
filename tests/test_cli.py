@@ -543,3 +543,23 @@ def test_themes_tune_declines_on_an_empty_ledger(settings: Settings):
 
     assert result.exit_code == 0
     assert "No queries recorded yet" in result.output
+
+
+def test_graph_todos_lists_unwritten_targets(settings: Settings, vault_graph: GraphStore):
+    result = runner.invoke(app, ["graph", "todos"])
+
+    assert result.exit_code == 0, result.output
+
+
+def test_graph_todos_says_so_when_the_vault_is_complete(settings: Settings, tmp_path: Path):
+    """An empty result is good news and should read like it."""
+    import networkx as nx
+
+    graph = GraphStore(path=settings.graph.path)
+    graph.graph = nx.MultiDiGraph()
+    graph.save()
+
+    result = runner.invoke(app, ["graph", "todos"])
+
+    assert result.exit_code == 0, result.output
+    assert "No unwritten wikilinks" in result.output

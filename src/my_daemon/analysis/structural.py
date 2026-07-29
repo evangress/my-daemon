@@ -130,6 +130,41 @@ def compute_report(
     )
 
 
+def split_disconnected(
+    partition: list[set[str]] | list[frozenset[str]],
+    undirected: nx.Graph,
+) -> list[set[str]]:
+    """Break any community that isn't actually connected into its components.
+
+    Louvain optimizes modularity by local moving and aggregation, and neither
+    step checks that the result is connected. Traag, Waltman & van Eck
+    (*Scientific Reports* 9:5233, 2019) measured up to 25% badly-connected and
+    up to 16% *disconnected* communities in real graphs — the finding that
+    motivated the Leiden algorithm.
+
+    Here the consequence is not abstract. A community is narrated to the user
+    as a group of notes that belong together, so a disconnected one puts a
+    claim in the observer letter about a relationship for which the graph holds
+    no path at all. This does not give Leiden's guarantee about *badly*
+    connected communities, but it eliminates the disconnected case outright,
+    for no dependency — which matters because the permissively-licensed Leiden
+    (`graspologic-native`, MIT) does not yet publish wheels for every Python
+    version this project supports.
+
+    Every member survives: this only ever splits, never drops.
+    """
+
+    repaired: list[set[str]] = []
+    for community in partition:
+        members = set(community)
+        induced = undirected.subgraph(members)
+        components = list(nx.connected_components(induced))
+        # Isolated members induce a component each, so `components` already
+        # covers everything the subgraph contains.
+        repaired.extend(set(component) for component in components)
+    return repaired
+
+
 def _louvain_communities(
     g: nx.MultiDiGraph,
     undirected: nx.Graph,
@@ -152,6 +187,10 @@ def _louvain_communities(
         raw = nx.community.louvain_communities(undirected, seed=0)
     except Exception:  # noqa: BLE001 — degenerate graphs can raise; degrade gracefully
         return []
+
+    # Louvain does not guarantee its communities are connected. Repair before
+    # anything downstream reads them as "these notes belong together".
+    raw = split_disconnected(list(raw), undirected)
 
     summaries: list[CommunitySummary] = []
     for idx, comm in enumerate(sorted(raw, key=len, reverse=True)):

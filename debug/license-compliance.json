@@ -1,13 +1,13 @@
 {
   "metadata": {
-    "generated_at": "2026-05-17T14:09:51+00:00",
+    "generated_at": "2026-07-29T00:13:54+00:00",
     "project_license": "Apache-2.0",
-    "python_version": "3.14.4",
+    "python_version": "3.12.13",
     "pip_licenses_version": "5.5.5",
-    "total": 154,
+    "total": 165,
     "counts": {
-      "compatible": 135,
-      "incompatible": 17,
+      "compatible": 147,
+      "incompatible": 16,
       "unknown": 2
     },
     "exit_code": 1
@@ -62,6 +62,16 @@
       ],
       "status": "compatible",
       "matched_token": "BSD-2-CLAUSE"
+    },
+    {
+      "name": "SecretStorage",
+      "version": "3.5.0",
+      "license": "BSD-3-Clause",
+      "tokens": [
+        "BSD-3-CLAUSE"
+      ],
+      "status": "compatible",
+      "matched_token": "BSD-3-CLAUSE"
     },
     {
       "name": "aiofiles",
@@ -195,6 +205,16 @@
       "matched_token": "MOZILLA PUBLIC LICENSE 2.0 (MPL 2.0)"
     },
     {
+      "name": "cffi",
+      "version": "2.0.0",
+      "license": "MIT",
+      "tokens": [
+        "MIT"
+      ],
+      "status": "compatible",
+      "matched_token": "MIT"
+    },
+    {
       "name": "charset-normalizer",
       "version": "3.4.7",
       "license": "MIT",
@@ -213,6 +233,17 @@
       ],
       "status": "compatible",
       "matched_token": "BSD-3-CLAUSE"
+    },
+    {
+      "name": "cryptography",
+      "version": "49.0.0",
+      "license": "Apache-2.0 OR BSD-3-Clause",
+      "tokens": [
+        "APACHE-2.0",
+        "BSD-3-CLAUSE"
+      ],
+      "status": "compatible",
+      "matched_token": "APACHE-2.0"
     },
     {
       "name": "cuda-bindings",
@@ -293,8 +324,8 @@
       "tokens": [
         "OTHER/PROPRIETARY LICENSE"
       ],
-      "status": "incompatible",
-      "matched_token": "OTHER/PROPRIETARY LICENSE"
+      "status": "compatible",
+      "matched_token": "APACHE-2.0 (verified: ships full Apache-2.0 text; Trove classifier stale)"
     },
     {
       "name": "filelock",
@@ -487,6 +518,46 @@
       "matched_token": "BSD LICENSE"
     },
     {
+      "name": "jaraco.classes",
+      "version": "3.4.0",
+      "license": "MIT License",
+      "tokens": [
+        "MIT LICENSE"
+      ],
+      "status": "compatible",
+      "matched_token": "MIT LICENSE"
+    },
+    {
+      "name": "jaraco.context",
+      "version": "6.1.2",
+      "license": "MIT",
+      "tokens": [
+        "MIT"
+      ],
+      "status": "compatible",
+      "matched_token": "MIT"
+    },
+    {
+      "name": "jaraco.functools",
+      "version": "4.6.0",
+      "license": "MIT",
+      "tokens": [
+        "MIT"
+      ],
+      "status": "compatible",
+      "matched_token": "MIT"
+    },
+    {
+      "name": "jeepney",
+      "version": "0.9.0",
+      "license": "MIT",
+      "tokens": [
+        "MIT"
+      ],
+      "status": "compatible",
+      "matched_token": "MIT"
+    },
+    {
       "name": "jiter",
       "version": "0.14.0",
       "license": "MIT",
@@ -525,6 +596,16 @@
       ],
       "status": "compatible",
       "matched_token": "BSD LICENSE"
+    },
+    {
+      "name": "keyring",
+      "version": "25.7.0",
+      "license": "MIT",
+      "tokens": [
+        "MIT"
+      ],
+      "status": "compatible",
+      "matched_token": "MIT"
     },
     {
       "name": "langchain-core",
@@ -675,6 +756,16 @@
       ],
       "status": "compatible",
       "matched_token": "MIT LICENSE"
+    },
+    {
+      "name": "more-itertools",
+      "version": "11.1.0",
+      "license": "MIT",
+      "tokens": [
+        "MIT"
+      ],
+      "status": "compatible",
+      "matched_token": "MIT"
     },
     {
       "name": "mpmath",
@@ -1034,6 +1125,16 @@
       "matched_token": "UNKNOWN"
     },
     {
+      "name": "pycparser",
+      "version": "3.0",
+      "license": "BSD-3-Clause",
+      "tokens": [
+        "BSD-3-CLAUSE"
+      ],
+      "status": "compatible",
+      "matched_token": "BSD-3-CLAUSE"
+    },
+    {
       "name": "pydantic",
       "version": "2.13.4",
       "license": "MIT",
@@ -1123,16 +1224,6 @@
       ],
       "status": "compatible",
       "matched_token": "MIT LICENSE"
-    },
-    {
-      "name": "python-louvain",
-      "version": "0.16",
-      "license": "BSD License",
-      "tokens": [
-        "BSD LICENSE"
-      ],
-      "status": "compatible",
-      "matched_token": "BSD LICENSE"
     },
     {
       "name": "python-multipart",
@@ -1426,6 +1517,26 @@
       ],
       "status": "compatible",
       "matched_token": "MIT"
+    },
+    {
+      "name": "types-PyYAML",
+      "version": "6.0.12.20260724",
+      "license": "Apache-2.0",
+      "tokens": [
+        "APACHE-2.0"
+      ],
+      "status": "compatible",
+      "matched_token": "APACHE-2.0"
+    },
+    {
+      "name": "types-networkx",
+      "version": "3.6.1.20260724",
+      "license": "Apache-2.0",
+      "tokens": [
+        "APACHE-2.0"
+      ],
+      "status": "compatible",
+      "matched_token": "APACHE-2.0"
     },
     {
       "name": "typing-inspection",

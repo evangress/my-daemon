@@ -332,3 +332,84 @@ def test_persist_reports_writes_json(tmp_path: Path, vault_root: Path) -> None:
     parsed = json.loads(written["structural"].read_text(encoding="utf-8"))
     assert parsed["snapshot_id"] == bundle.id
     assert parsed["note_count"] >= 5
+
+
+# ---------------------------------------------------------------------------
+# Louvain's disconnected-community defect
+#
+# Traag, Waltman & van Eck (Scientific Reports 9:5233, 2019) showed Louvain can
+# return communities that are badly connected or outright disconnected — up to
+# 16% disconnected in their experiments. A disconnected "community" reaching the
+# observer becomes a sentence in a letter to the user asserting a relationship
+# between notes that have no path between them.
+# ---------------------------------------------------------------------------
+
+
+def test_a_disconnected_community_is_split_into_its_components():
+    """The repair. Two note-pairs with no path between them are two
+    communities, whatever the modularity optimiser decided to call them."""
+
+    import networkx as nx
+
+    from my_daemon.analysis.structural import split_disconnected
+
+    g = nx.Graph()
+    g.add_edges_from([("A", "B"), ("C", "D")])
+
+    # One lump spanning both components — exactly the shape the 2019 paper
+    # reports Louvain can produce.
+    repaired = split_disconnected([{"A", "B", "C", "D"}], g)
+
+    assert sorted(sorted(c) for c in repaired) == [["A", "B"], ["C", "D"]]
+
+
+def test_a_genuinely_connected_community_is_left_alone():
+    """The repair must not fragment a community that really is one."""
+
+    import networkx as nx
+
+    from my_daemon.analysis.structural import split_disconnected
+
+    g = nx.Graph()
+    g.add_edges_from([("A", "B"), ("B", "C")])
+
+    repaired = split_disconnected([{"A", "B", "C"}], g)
+
+    assert [sorted(c) for c in repaired] == [["A", "B", "C"]]
+
+
+def test_the_repair_preserves_every_member():
+    """Splitting must never drop a node — the partition still has to cover."""
+
+    import networkx as nx
+
+    from my_daemon.analysis.structural import split_disconnected
+
+    g = nx.Graph()
+    g.add_edges_from([("A", "B"), ("C", "D")])
+    g.add_node("E")
+
+    repaired = split_disconnected([{"A", "B", "C", "D"}, {"E"}], g)
+
+    assert {n for c in repaired for n in c} == {"A", "B", "C", "D", "E"}
+
+
+def test_a_real_graph_with_two_islands_reports_two_communities():
+    """End to end through `compute_report`, since that is what the observer
+    letter actually consumes."""
+
+    import networkx as nx
+
+    from my_daemon.analysis.structural import compute_report
+    from my_daemon.stores.graph import GraphStore
+
+    graph = GraphStore(path=Path("/nonexistent/graph.gpickle"))
+    graph.graph = nx.MultiDiGraph()
+    for name in "ABCD":
+        graph.graph.add_node(f"note::{name}", type="note", title=f"{name}.md")
+    graph.graph.add_edge("note::A", "note::B")
+    graph.graph.add_edge("note::C", "note::D")
+
+    report = compute_report(graph)
+
+    assert report.community_count == 2

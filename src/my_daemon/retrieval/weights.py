@@ -20,6 +20,7 @@ import math
 from dataclasses import dataclass
 from datetime import UTC, datetime
 
+from my_daemon.models import THEME_TAG_PREFIX
 from my_daemon.stores.graph import GraphStore
 
 DEFAULT_ALPHA = 0.5
@@ -63,7 +64,15 @@ def apply_selection(
         now = datetime.now(UTC)
     iso_now = now.isoformat()
 
-    path = graph_store.shortest_note_path(seed_note_uuid, selected_note_uuid)
+    path = graph_store.shortest_note_path(
+        seed_note_uuid,
+        selected_note_uuid,
+        # The same severance graph expansion applies. A pick is evidence about
+        # the user's own vault, and a theme tag is not part of it — reinforcing
+        # through one would let the daemon's conclusions warm the edges that
+        # produced them.
+        exclude_tag_prefixes=(THEME_TAG_PREFIX,),
+    )
     if not path or len(path) < 2:
         return ReinforcementResult(path=path or [], edges_reinforced=0, total_delta=0.0)
 

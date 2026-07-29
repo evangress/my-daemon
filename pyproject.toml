@@ -52,6 +52,11 @@ dev = [
     # time only; never imported at runtime.
     "types-networkx>=3.3",
     "types-PyYAML>=6.0",
+    # Makes CLAUDE.md rule 10 self-enforcing rather than a habit:
+    # `python scripts/license_check.py` could not run without a manual install,
+    # so debug/license-compliance.md had drifted since 2026-05-17. MIT — Category
+    # A, Apache-2.0 compatible. Audit time only; never imported at runtime.
+    "pip-licenses>=5.0",
 ]
 
 [project.scripts]
@@ -94,6 +99,10 @@ strict_equality = true
 module = [
     "frontmatter",
     "sklearn.*",
+    # `scipy.optimize.linear_sum_assignment`, used for optimal theme matching.
+    # Stubs exist (`scipy-stubs`) but pulling a stubs package for one call
+    # signature is not worth the dependency; scoped here like sklearn.
+    "scipy.*",
 ]
 ignore_missing_imports = true
 

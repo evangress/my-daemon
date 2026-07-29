@@ -157,3 +157,76 @@ def test_the_linker_never_proposes_a_daemon_authored_tag(tmp_path: Path):
 
     assert "philosophy" in candidates, "an ordinary tag should still propagate"
     assert not any(is_daemon_authored_tag(t) for t in candidates)
+
+
+# ---------------------------------------------------------------------------
+# E — reinforcement must not route through the daemon's own tags
+#
+# `neighbors_within` already refuses to walk `theme/` edges. `shortest_note_path`
+# did not, so `apply_selection` could still reinforce a path whose only
+# connection between two notes was a theme tag the daemon minted — the graph
+# learning from its own conclusion. Latent until a theme tag is accepted, which
+# is exactly when it starts mattering.
+# ---------------------------------------------------------------------------
+
+
+def _graph_joined_only_by(tmp_path: Path, tag: str) -> GraphStore:
+    """A and B share nothing but `tag`. No wikilink, no other tag."""
+
+    graph = GraphStore(path=tmp_path / "graph.gpickle")
+    graph.add_note(_note("A", tags=[tag]), chunk_ids=["a1"])
+    graph.add_note(_note("B", tags=[tag]), chunk_ids=["b1"])
+    return graph
+
+
+def test_a_user_tag_still_joins_two_notes_for_reinforcement(tmp_path: Path):
+    """The control. A tag the *user* wrote is real evidence and must keep working."""
+
+    graph = _graph_joined_only_by(tmp_path, "philosophy")
+
+    path = graph.shortest_note_path(UUIDS["A"], UUIDS["B"])
+
+    assert path is not None
+    assert len(path) == 3  # note::A → tag::philosophy → note::B
+
+
+def test_a_theme_tag_does_not_join_two_notes_for_reinforcement(tmp_path: Path):
+    """The daemon's own label is not a route its learning may travel."""
+
+    graph = _graph_joined_only_by(tmp_path, f"{THEME_TAG_PREFIX}why-projects-stall")
+
+    path = graph.shortest_note_path(
+        UUIDS["A"], UUIDS["B"], exclude_tag_prefixes=(THEME_TAG_PREFIX,)
+    )
+
+    assert path is None
+
+
+def test_reinforcement_through_a_theme_tag_moves_no_weight(tmp_path: Path):
+    """The behaviour that actually matters: `apply_selection` must no-op rather
+    than warm the edges of a tag the daemon wrote itself."""
+
+    from my_daemon.retrieval.weights import apply_selection
+
+    graph = _graph_joined_only_by(tmp_path, f"{THEME_TAG_PREFIX}why-projects-stall")
+
+    result = apply_selection(graph, seed_note_uuid=UUIDS["A"], selected_note_uuid=UUIDS["B"])
+
+    assert result.edges_reinforced == 0
+    assert result.total_delta == 0.0
+
+
+def test_a_real_wikilink_is_still_reinforced_when_a_theme_tag_is_present(tmp_path: Path):
+    """Excluding the tag must not sever a genuine link that happens to run
+    alongside it."""
+
+    from my_daemon.retrieval.weights import apply_selection
+
+    graph = GraphStore(path=tmp_path / "graph.gpickle")
+    theme = f"{THEME_TAG_PREFIX}why-projects-stall"
+    graph.add_note(_note("A", tags=[theme], links=["B"]), chunk_ids=["a1"])
+    graph.add_note(_note("B", tags=[theme]), chunk_ids=["b1"])
+
+    result = apply_selection(graph, seed_note_uuid=UUIDS["A"], selected_note_uuid=UUIDS["B"])
+
+    assert result.edges_reinforced > 0
