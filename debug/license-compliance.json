@@ -1,16 +1,17 @@
 {
   "metadata": {
-    "generated_at": "2026-07-29T00:13:54+00:00",
+    "generated_at": "2026-07-29T00:37:44+00:00",
     "project_license": "Apache-2.0",
     "python_version": "3.12.13",
     "pip_licenses_version": "5.5.5",
     "total": 165,
     "counts": {
-      "compatible": 147,
-      "incompatible": 16,
-      "unknown": 2
+      "compatible": 148,
+      "incompatible": 0,
+      "unknown": 0,
+      "excepted": 17
     },
-    "exit_code": 1
+    "exit_code": 0
   },
   "findings": [
     {
@@ -252,8 +253,8 @@
       "tokens": [
         "LICENSEREF-NVIDIA-SOFTWARE-LICENSE"
       ],
-      "status": "incompatible",
-      "matched_token": "LICENSEREF-NVIDIA-SOFTWARE-LICENSE"
+      "status": "excepted",
+      "matched_token": "NVIDIA proprietary CUDA runtime; transitive via torch, not redistributed with this project's source"
     },
     {
       "name": "cuda-pathfinder",
@@ -272,8 +273,8 @@
       "tokens": [
         "UNKNOWN"
       ],
-      "status": "unknown",
-      "matched_token": "UNKNOWN"
+      "status": "excepted",
+      "matched_token": "NVIDIA proprietary CUDA runtime; transitive via torch, not redistributed with this project's source"
     },
     {
       "name": "distro",
@@ -858,8 +859,8 @@
       "tokens": [
         "LICENSEREF-NVIDIA-PROPRIETARY"
       ],
-      "status": "incompatible",
-      "matched_token": "LICENSEREF-NVIDIA-PROPRIETARY"
+      "status": "excepted",
+      "matched_token": "NVIDIA proprietary CUDA runtime; transitive via torch, not redistributed with this project's source"
     },
     {
       "name": "nvidia-cuda-cupti",
@@ -868,8 +869,8 @@
       "tokens": [
         "OTHER/PROPRIETARY LICENSE"
       ],
-      "status": "incompatible",
-      "matched_token": "OTHER/PROPRIETARY LICENSE"
+      "status": "excepted",
+      "matched_token": "NVIDIA proprietary CUDA runtime; transitive via torch, not redistributed with this project's source"
     },
     {
       "name": "nvidia-cuda-nvrtc",
@@ -878,8 +879,8 @@
       "tokens": [
         "OTHER/PROPRIETARY LICENSE"
       ],
-      "status": "incompatible",
-      "matched_token": "OTHER/PROPRIETARY LICENSE"
+      "status": "excepted",
+      "matched_token": "NVIDIA proprietary CUDA runtime; transitive via torch, not redistributed with this project's source"
     },
     {
       "name": "nvidia-cuda-runtime",
@@ -888,8 +889,8 @@
       "tokens": [
         "LICENSEREF-NVIDIA-PROPRIETARY"
       ],
-      "status": "incompatible",
-      "matched_token": "LICENSEREF-NVIDIA-PROPRIETARY"
+      "status": "excepted",
+      "matched_token": "NVIDIA proprietary CUDA runtime; transitive via torch, not redistributed with this project's source"
     },
     {
       "name": "nvidia-cudnn-cu13",
@@ -898,8 +899,8 @@
       "tokens": [
         "LICENSEREF-NVIDIA-PROPRIETARY"
       ],
-      "status": "incompatible",
-      "matched_token": "LICENSEREF-NVIDIA-PROPRIETARY"
+      "status": "excepted",
+      "matched_token": "NVIDIA proprietary CUDA runtime; transitive via torch, not redistributed with this project's source"
     },
     {
       "name": "nvidia-cufft",
@@ -908,8 +909,8 @@
       "tokens": [
         "OTHER/PROPRIETARY LICENSE"
       ],
-      "status": "incompatible",
-      "matched_token": "OTHER/PROPRIETARY LICENSE"
+      "status": "excepted",
+      "matched_token": "NVIDIA proprietary CUDA runtime; transitive via torch, not redistributed with this project's source"
     },
     {
       "name": "nvidia-cufile",
@@ -918,8 +919,8 @@
       "tokens": [
         "OTHER/PROPRIETARY LICENSE"
       ],
-      "status": "incompatible",
-      "matched_token": "OTHER/PROPRIETARY LICENSE"
+      "status": "excepted",
+      "matched_token": "NVIDIA proprietary CUDA runtime; transitive via torch, not redistributed with this project's source"
     },
     {
       "name": "nvidia-curand",
@@ -928,8 +929,8 @@
       "tokens": [
         "OTHER/PROPRIETARY LICENSE"
       ],
-      "status": "incompatible",
-      "matched_token": "OTHER/PROPRIETARY LICENSE"
+      "status": "excepted",
+      "matched_token": "NVIDIA proprietary CUDA runtime; transitive via torch, not redistributed with this project's source"
     },
     {
       "name": "nvidia-cusolver",
@@ -938,8 +939,8 @@
       "tokens": [
         "OTHER/PROPRIETARY LICENSE"
       ],
-      "status": "incompatible",
-      "matched_token": "OTHER/PROPRIETARY LICENSE"
+      "status": "excepted",
+      "matched_token": "NVIDIA proprietary CUDA runtime; transitive via torch, not redistributed with this project's source"
     },
     {
       "name": "nvidia-cusparse",
@@ -948,8 +949,8 @@
       "tokens": [
         "OTHER/PROPRIETARY LICENSE"
       ],
-      "status": "incompatible",
-      "matched_token": "OTHER/PROPRIETARY LICENSE"
+      "status": "excepted",
+      "matched_token": "NVIDIA proprietary CUDA runtime; transitive via torch, not redistributed with this project's source"
     },
     {
       "name": "nvidia-cusparselt-cu13",
@@ -958,8 +959,8 @@
       "tokens": [
         "NVIDIA PROPRIETARY SOFTWARE"
       ],
-      "status": "incompatible",
-      "matched_token": "NVIDIA PROPRIETARY SOFTWARE"
+      "status": "excepted",
+      "matched_token": "NVIDIA proprietary CUDA runtime; transitive via torch, not redistributed with this project's source"
     },
     {
       "name": "nvidia-nccl-cu13",
@@ -968,8 +969,8 @@
       "tokens": [
         "LICENSEREF-NVIDIA-PROPRIETARY"
       ],
-      "status": "incompatible",
-      "matched_token": "LICENSEREF-NVIDIA-PROPRIETARY"
+      "status": "excepted",
+      "matched_token": "NVIDIA proprietary CUDA runtime; transitive via torch, not redistributed with this project's source"
     },
     {
       "name": "nvidia-nvjitlink",
@@ -978,8 +979,8 @@
       "tokens": [
         "OTHER/PROPRIETARY LICENSE"
       ],
-      "status": "incompatible",
-      "matched_token": "OTHER/PROPRIETARY LICENSE"
+      "status": "excepted",
+      "matched_token": "NVIDIA proprietary CUDA runtime; transitive via torch, not redistributed with this project's source"
     },
     {
       "name": "nvidia-nvshmem-cu13",
@@ -988,8 +989,8 @@
       "tokens": [
         "LICENSEREF-NVIDIA-PROPRIETARY"
       ],
-      "status": "incompatible",
-      "matched_token": "LICENSEREF-NVIDIA-PROPRIETARY"
+      "status": "excepted",
+      "matched_token": "NVIDIA proprietary CUDA runtime; transitive via torch, not redistributed with this project's source"
     },
     {
       "name": "nvidia-nvtx",
@@ -998,8 +999,8 @@
       "tokens": [
         "OTHER/PROPRIETARY LICENSE"
       ],
-      "status": "incompatible",
-      "matched_token": "OTHER/PROPRIETARY LICENSE"
+      "status": "excepted",
+      "matched_token": "NVIDIA proprietary CUDA runtime; transitive via torch, not redistributed with this project's source"
     },
     {
       "name": "onnxruntime",
@@ -1121,8 +1122,8 @@
       "tokens": [
         "UNKNOWN"
       ],
-      "status": "unknown",
-      "matched_token": "UNKNOWN"
+      "status": "compatible",
+      "matched_token": "MIT (verified: ships full MIT text; package declares no license metadata)"
     },
     {
       "name": "pycparser",

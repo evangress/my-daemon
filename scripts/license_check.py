@@ -26,12 +26,32 @@ Usage:
     python scripts/license_check.py --no-log        # skip writing the JSON log file
     python scripts/license_check.py --no-md         # skip writing the markdown summary
 
+Four verdicts, and the last two are the ones that keep this honest:
+  - COMPATIBLE   → fine
+  - INCOMPATIBLE → fails the build (exit 1)
+  - UNKNOWN      → nobody has classified it; fails only under ``--strict`` (exit 2)
+  - EXCEPTED     → genuinely incompatible, accepted for a written reason, never
+                   fails the build. Listed by name with its rationale in every
+                   report, because an exception nobody can see is one nobody
+                   can challenge.
+
+Two hand-maintained tables, and they make *different claims* — keep them apart:
+  - ``_VERIFIED_OVERRIDES``  — the declared metadata is wrong; verified by
+                               reading the licence text the wheel ships.
+  - ``_ACCEPTED_EXCEPTIONS`` — the metadata is right, it really is incompatible,
+                               and we accept it (proprietary binary runtimes we
+                               do not redistribute).
+
 The JSON log is a single document with `metadata` and `findings` keys, iterable via
-``jq '.findings[]' debug/license-compliance.json``. The markdown summary lists only
-the non-compliant findings (INCOMPATIBLE + UNKNOWN) for quick human review.
+``jq '.findings[]' debug/license-compliance.json``. The markdown summary lists the
+non-compliant findings (INCOMPATIBLE + UNKNOWN) and the accepted exceptions.
+
+Runs in CI (`.github/workflows/ci.yml`) with ``--strict``, so a new dependency
+with an unrecognised or incompatible licence turns the build red rather than
+waiting for someone to remember CLAUDE.md rule 10.
 
 Requires:
-    pip install pip-licenses
+    pip-licenses — ships in the dev extra (``uv sync --extra dev``)
 """
 
 from __future__ import annotations
@@ -54,6 +74,10 @@ class Status(StrEnum):
     COMPATIBLE = "compatible"
     INCOMPATIBLE = "incompatible"
     UNKNOWN = "unknown"
+    #: Genuinely incompatible, and accepted anyway for a written reason. Kept
+    #: separate from COMPATIBLE so the report never claims a proprietary
+    #: dependency is permissively licensed — it says "we know, and here is why".
+    EXCEPTED = "excepted"
 
 
 # Keys are upper-cased and whitespace-collapsed for lookup. Covers SPDX
@@ -185,7 +209,52 @@ _VERIFIED_OVERRIDES: dict[str, tuple[Status, str]] = {
         Status.COMPATIBLE,
         "APACHE-2.0 (verified: ships full Apache-2.0 text; Trove classifier stale)",
     ),
+    # Publishes no License field, no License-Expression and no Trove
+    # classifier, so it lands in UNKNOWN — but the wheel ships the full MIT
+    # text at dist-info/licenses/LICENSE, "Copyright (c) 2024 qdrant".
+    # Verified 2026-07-29 against py_rust_stemmers 0.1.5.
+    "py_rust_stemmers": (
+        Status.COMPATIBLE,
+        "MIT (verified: ships full MIT text; package declares no license metadata)",
+    ),
 }
+
+
+# Dependencies that really are incompatible and are accepted anyway, each with
+# the reason. This is a *different claim* from `_VERIFIED_OVERRIDES` and must
+# stay a different table: an override says the declared licence is wrong, an
+# exception says it is right and we are living with it. Collapsing the two
+# would let a genuine incompatibility hide behind a word meaning the opposite.
+#
+# Everything here is an NVIDIA CUDA runtime component. They arrive transitively
+# through torch, are proprietary binary runtimes, and are **not redistributed
+# with this project's source** — the exception the module docstring has always
+# contemplated. Nothing else belongs in this table without the same argument
+# written out, and adding an entry is a decision a reviewer should be able to
+# challenge from the diff.
+_ACCEPTED_EXCEPTIONS: dict[str, str] = dict.fromkeys(
+    (
+        "cuda-bindings",
+        "cuda-toolkit",
+        "nvidia-cublas",
+        "nvidia-cuda-cupti",
+        "nvidia-cuda-nvrtc",
+        "nvidia-cuda-runtime",
+        "nvidia-cudnn-cu13",
+        "nvidia-cufft",
+        "nvidia-cufile",
+        "nvidia-curand",
+        "nvidia-cusolver",
+        "nvidia-cusparse",
+        "nvidia-cusparselt-cu13",
+        "nvidia-nccl-cu13",
+        "nvidia-nvjitlink",
+        "nvidia-nvshmem-cu13",
+        "nvidia-nvtx",
+    ),
+    "NVIDIA proprietary CUDA runtime; transitive via torch, not redistributed "
+    "with this project's source",
+)
 
 
 @dataclass
@@ -224,6 +293,10 @@ def _classify_package(name: str, version: str, raw: str) -> PkgResult:
     if override is not None:
         status, evidence = override
         return PkgResult(name, version, raw, tokens, status, evidence)
+
+    exception = _ACCEPTED_EXCEPTIONS.get(name.lower())
+    if exception is not None:
+        return PkgResult(name, version, raw, tokens, Status.EXCEPTED, exception)
     decisions = [(t, _classify_token(t)) for t in tokens]
     # Dual-licensed packages: any compatible token lets us choose that license.
     for tok, status in decisions:
@@ -293,10 +366,19 @@ def _report(results: list[PkgResult]) -> None:
         for r in buckets[Status.UNKNOWN]:
             print(fmt(r))
         print()
+    if buckets[Status.EXCEPTED]:
+        # Listed, not merely counted. An exception nobody can see is an
+        # exception nobody can challenge, and "0 incompatible" printed over a
+        # hidden pile of proprietary packages is a false clean bill of health.
+        print(f"EXCEPTED (incompatible with {PROJECT_LICENSE}, accepted for a stated reason):")
+        for r in buckets[Status.EXCEPTED]:
+            print(fmt(r) + f"   [{r.matched}]")
+        print()
     print(
         f"Summary: {len(buckets[Status.COMPATIBLE])} compatible, "
         f"{len(buckets[Status.INCOMPATIBLE])} incompatible, "
-        f"{len(buckets[Status.UNKNOWN])} unknown "
+        f"{len(buckets[Status.UNKNOWN])} unknown, "
+        f"{len(buckets[Status.EXCEPTED])} excepted "
         f"({len(results)} total)."
     )
 
@@ -361,6 +443,7 @@ def _render_markdown(payload: dict) -> str:
     findings = payload["findings"]
     incompatible = [f for f in findings if f["status"] == Status.INCOMPATIBLE.value]
     unknown = [f for f in findings if f["status"] == Status.UNKNOWN.value]
+    excepted = [f for f in findings if f["status"] == Status.EXCEPTED.value]
 
     lines: list[str] = []
     lines.append("# License Compliance Report")
@@ -371,12 +454,13 @@ def _render_markdown(payload: dict) -> str:
         f"- **Counts:** {md['counts']['compatible']} compatible · "
         f"{md['counts']['incompatible']} incompatible · "
         f"{md['counts']['unknown']} unknown · "
+        f"{md['counts']['excepted']} excepted · "
         f"{md['total']} total"
     )
     lines.append(f"- **Exit code:** `{md['exit_code']}`")
     lines.append("")
 
-    if not incompatible and not unknown:
+    if not incompatible and not unknown and not excepted:
         lines.append(
             "All dependencies are compatible with the project license. No action required."
         )
@@ -426,12 +510,52 @@ def _render_markdown(payload: dict) -> str:
             )
         lines.append("")
 
+    if excepted:
+        lines.append(f"## Excepted ({len(excepted)})")
+        lines.append("")
+        lines.append(
+            f"These dependencies **are** incompatible with `{md['project_license']}` and are "
+            "accepted anyway, each for the reason given below. Listed rather than hidden: an "
+            "exception nobody can see is one nobody can challenge, and a report that said "
+            '"no action required" over them would be a clean bill of health that is not true. '
+            "Entries live in `_ACCEPTED_EXCEPTIONS` in `scripts/license_check.py`, so adding "
+            "one is visible in review."
+        )
+        lines.append("")
+        lines.append("| Package | Version | Declared License | Reason |")
+        lines.append("|---|---|---|---|")
+        for f in excepted:
+            url = f"https://pypi.org/project/{f['name']}/"
+            lines.append(
+                f"| [`{_md_escape(f['name'])}`]({url}) "
+                f"| {_md_escape(f['version'])} "
+                f"| {_md_escape(f['license']) or '_(none)_'} "
+                f"| {_md_escape(f['matched_token'])} |"
+            )
+        lines.append("")
+
     return "\n".join(lines)
 
 
 def _write_md(text: str, path: Path) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(text, encoding="utf-8")
+
+
+def exit_code_for(results: list[PkgResult], *, strict: bool) -> int:
+    """0 clean, 1 a real incompatibility, 2 an unclassified licence under --strict.
+
+    ``EXCEPTED`` never fails the build. That is the whole point of the table:
+    with the NVIDIA runtimes counted as failures, CI would be red on every
+    commit forever, and a permanently-red check is one nobody reads — which is
+    strictly worse than having no check, because it looks like coverage.
+    """
+
+    if any(r.status is Status.INCOMPATIBLE for r in results):
+        return 1
+    if strict and any(r.status is Status.UNKNOWN for r in results):
+        return 2
+    return 0
 
 
 def main() -> int:
@@ -468,9 +592,7 @@ def main() -> int:
         for pkg in raw
     ]
 
-    incompatible = sum(1 for r in results if r.status is Status.INCOMPATIBLE)
-    unknown = sum(1 for r in results if r.status is Status.UNKNOWN)
-    exit_code = 1 if incompatible else (2 if args.strict and unknown else 0)
+    exit_code = exit_code_for(results, strict=args.strict)
 
     payload = _build_payload(results, exit_code)
 

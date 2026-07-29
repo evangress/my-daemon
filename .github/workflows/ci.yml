@@ -45,3 +45,36 @@ jobs:
         run: uv run ruff format --check .
       - name: Mypy
         run: uv run mypy src/my_daemon
+
+  licenses:
+    name: license compliance
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v5
+        with:
+          python-version: "3.12"
+          enable-cache: true
+      # --all-extras so the check sees the same tree a user installs, CUDA
+      # wheels included. Checking a trimmed environment would mean the job
+      # passes on dependencies nobody actually ships with.
+      - name: Install (locked)
+        run: uv sync --locked --all-extras
+      # --strict: an unrecognised license is exactly what should stop a merge.
+      # Exit 1 = a real incompatibility, 2 = something unclassified. Accepted
+      # exceptions (the NVIDIA CUDA runtimes) never fail the build, so this is
+      # green today and turns red only on a genuinely new problem.
+      - name: License compliance
+        run: uv run python scripts/license_check.py --strict --no-log --no-md
+      # The generated report is committed, so it must not drift from the tree.
+      # Compares `findings` only, via jq: both reports embed a generation
+      # timestamp, so a plain `git diff` would fail on every single run and the
+      # step would be pure noise.
+      - name: Report is up to date
+        run: |
+          cp debug/license-compliance.json /tmp/license-before.json
+          uv run python scripts/license_check.py --strict >/dev/null
+          diff <(jq -S '.findings' /tmp/license-before.json) \
+               <(jq -S '.findings' debug/license-compliance.json) \
+            || { echo "::error::license report is stale — run 'python scripts/license_check.py' and commit debug/license-compliance.*"; exit 1; }
+        shell: bash

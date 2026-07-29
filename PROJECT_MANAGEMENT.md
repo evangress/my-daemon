@@ -260,6 +260,34 @@ NiceGUI's long-term fate) are not yet decided.
 
 ## Done
 
+- **License compliance is a CI gate (2026-07-29).** `scripts/license_check.py`
+  now runs in `.github/workflows/ci.yml` with `--strict`, so a dependency with
+  an incompatible *or unrecognised* licence turns the build red. CLAUDE.md
+  rule 10 is enforced by the build rather than by memory.
+  The blocker was that the tree has 17 genuinely-incompatible packages (the
+  NVIDIA CUDA runtimes, transitive via torch), so a naive wiring would have
+  been red on every commit forever — and a permanently-red check is worse than
+  no check, because it looks like coverage while nobody reads it. So the script
+  gained a fourth verdict, **`EXCEPTED`**: incompatible, accepted for a written
+  reason, never fails the build, and **listed by name with its rationale in
+  every report**. An exception nobody can see is one nobody can challenge.
+  `_ACCEPTED_EXCEPTIONS` is deliberately a *separate table* from
+  `_VERIFIED_OVERRIDES` because they make opposite claims — an override says
+  the declared licence is wrong, an exception says it is right and we are
+  living with it. Collapsing them would let a real incompatibility hide behind
+  a word meaning the opposite.
+  Two remaining UNKNOWNs resolved by reading the shipped licence text:
+  `py_rust_stemmers` declares no licence metadata at all but bundles the full
+  MIT text (Qdrant's), and `cuda-toolkit` is an NVIDIA meta-package with no
+  metadata. Tree is now **148 compatible, 0 incompatible, 0 unknown, 17
+  excepted** — clean under `--strict`.
+  Also fixed before it shipped: the report drift-check compared whole files,
+  which embed a generation timestamp, so it would have failed on every run. It
+  compares `findings` via `jq` instead. And a stray `scripts/debug/` copy of
+  the report (from someone running the script with `cwd=scripts/`, since the
+  default paths are relative) was tracked in git since May; deleted.
+  774 → 789 tests.
+
 - **`daemon key set | clear | status` (2026-07-29).** The credential store is
   now reachable without a desktop. `daemon setup` is a Tkinter window, so a
   server, an SSH session, or a container — the machines most likely to be
@@ -532,9 +560,9 @@ still uniform, this is why.
   `daemon key status` is how you confirm it took. No separate `rotate` verb —
   it would have been an alias.
 - **~~`pip-licenses` is not in the dev extra~~ — shipped 2026-07-29**, along
-  with the reason it had never run: `shutil.which` searches only `PATH`. Still
-  open: wiring `scripts/license_check.py` into CI, so the check runs without
-  anyone remembering to.
+  with the reason it had never run (`shutil.which` searches only `PATH`) and
+  the CI gate. CLAUDE.md rule 10 is now enforced by the build rather than by
+  memory.
 - **`config.yaml` is now genuinely secret-free**, which makes it a candidate
   for being committed as a real template — worth deciding before v0.2.
 
