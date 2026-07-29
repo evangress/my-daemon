@@ -415,7 +415,7 @@ def check_api_key(settings: Settings) -> CheckResult:
             hint=(
                 "needed by `query`/`ask` synthesis and by `extract`, `reflect`, `consolidate`; "
                 "retrieval (`search`, `ingest`, `query --no-llm`) works without it. "
-                "Run `daemon setup` to store it in the OS credential store."
+                "Run `daemon key set` (works over SSH) or `daemon setup` (GUI) to store it in the OS credential store."
             ),
         )
 
@@ -427,7 +427,7 @@ def check_api_key(settings: Settings) -> CheckResult:
             WARN,
             "present, but read from a plaintext .env file",
             hint=(
-                "anyone who can read that file has your key. Run `daemon setup` to move it "
+                "anyone who can read that file has your key. Run `daemon key set` to move it "
                 "into the OS credential store and strip the plaintext copy, then rotate the "
                 "key at https://console.anthropic.com/settings/keys since it has been on disk."
             ),

@@ -260,6 +260,34 @@ NiceGUI's long-term fate) are not yet decided.
 
 ## Done
 
+- **`daemon key set | clear | status` (2026-07-29).** The credential store is
+  now reachable without a desktop. `daemon setup` is a Tkinter window, so a
+  server, an SSH session, or a container — the machines most likely to be
+  running `daemon run` on a schedule — had no route to the encrypted store at
+  all, and the honest workaround was the environment variable this project
+  deliberately moved away from.
+  **The key never travels through argv.** No `--key` flag, and a positional
+  argument is rejected: arguments are visible in `ps`, in shell history, and on
+  Windows in Event 4688 process-creation logs, which is precisely the leak that
+  got `setx` removed in the 2026-07-27 rewrite. `set` prompts without echoing,
+  or takes `--stdin` for `pass show anthropic | daemon key set --stdin`.
+  **`status` prints a SHA-256 fingerprint, not the last four characters** —
+  those are part of the secret, and this output lands in scrollback and in
+  pasted support threads. The fingerprint is what makes "did my rotation take?"
+  answerable without exposing anything.
+  Three failure modes handled deliberately: a store failure exits non-zero
+  rather than reporting success (believing a key was saved when it was not is
+  how a scheduled job breaks silently); the legacy plaintext `.env` is stripped
+  **only after** the store succeeds, since purging the last surviving copy of a
+  key you failed to save would lose it outright; and an `ANTHROPIC_API_KEY` in
+  the environment is called out, because it takes precedence and would
+  otherwise shadow the key you just stored. An unexpected key prefix warns but
+  is accepted — the format is Anthropic's to change, and refusing a valid key
+  is worse than accepting one the API rejects in a second.
+  `doctor`'s two API-key hints and `getting-started.md` now point at
+  `daemon key set` rather than at a GUI a headless reader cannot open.
+  757 → 774 tests.
+
 - **Five cheap wins + one deletion (2026-07-29).** TDD throughout;
   730 → 757 passing tests, ruff + mypy clean.
   **`daemon graph todos`** — the dangling-wikilink idea from the 2026-05-16
@@ -486,24 +514,27 @@ still uniform, this is why.
 
 **Follow-ups this opened, none blocking:**
 
-- **`daemon setup` is now the only supported way to set the key, but it is a
-  Tkinter window.** A headless box has no way to store a key except the env
-  var. A `daemon key set` / `daemon key clear` CLI pair (reading from stdin or
-  a prompt, never argv) would close that gap and make the credential store
-  reachable over SSH.
+- **~~`daemon setup` is now the only supported way to set the key, but it is a
+  Tkinter window.~~ — shipped 2026-07-29.** `daemon key set` / `clear` /
+  `status`. Prompts hidden, `--stdin` for pipes, and the key is never accepted
+  as an argument (argv is visible in `ps`, in shell history, and in Windows
+  Event 4688 — the leak that got `setx` removed). `status` prints a SHA-256
+  fingerprint rather than the last four characters, since those are part of the
+  secret. `doctor` and the docs now point here instead of at the GUI, which
+  headless readers could not follow.
 - **Scheduled jobs are the weak spot.** Linux cron cannot reach the Secret
   Service; that is documented in `background-agents.md` now, but the honest
   fix is to point people at the systemd user unit (`daemon schedule` +
   `loginctl enable-linger`) as the default rather than crontab. Worth
   validating on a real machine before v0.2.
-- **Nothing rotates keys.** `doctor` tells the user to rotate after a
-  plaintext exposure and links the console, but a `daemon key rotate` that
-  re-prompts and overwrites would make the remediation a single step.
-- **`pip-licenses` is not in the dev extra**, so `scripts/license_check.py`
-  cannot run without a manual install and `debug/license-compliance.md` has
-  drifted since 2026-05-17. Adding it to `[project.optional-dependencies].dev`
-  and running it in CI would make CLAUDE.md rule 10 self-enforcing instead of
-  a habit.
+- **~~Nothing rotates keys.~~ — covered 2026-07-29.** `daemon key set`
+  overwrites whatever is stored, so rotation is one command; the fingerprint in
+  `daemon key status` is how you confirm it took. No separate `rotate` verb —
+  it would have been an alias.
+- **~~`pip-licenses` is not in the dev extra~~ — shipped 2026-07-29**, along
+  with the reason it had never run: `shutil.which` searches only `PATH`. Still
+  open: wiring `scripts/license_check.py` into CI, so the check runs without
+  anyone remembering to.
 - **`config.yaml` is now genuinely secret-free**, which makes it a candidate
   for being committed as a real template — worth deciding before v0.2.
 

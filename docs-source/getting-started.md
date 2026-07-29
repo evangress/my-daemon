@@ -132,10 +132,10 @@ The key is resolved from three places, **first hit wins**:
 | # | Source | Encrypted at rest | Set it with |
 |---|---|---|---|
 | 1 | `ANTHROPIC_API_KEY` environment variable | no | `export` / `$env:` — for CI, containers, headless servers |
-| 2 | **OS credential store** | **yes** | `daemon setup` — Windows Credential Manager, macOS Keychain, Linux Secret Service |
+| 2 | **OS credential store** | **yes** | `daemon key set` (any terminal) or `daemon setup` (GUI) — Windows Credential Manager, macOS Keychain, Linux Secret Service |
 | 3 | `.env` beside `config.yaml` | **no — plaintext** | legacy only; supported so old installs keep working |
 
-`daemon setup` writes to layer 2 **and nothing else**. If it finds a key in a
+`daemon key set` and `daemon setup` write to layer 2 **and nothing else**. If either finds a key in a
 `.env` left over from an older install, it moves it into the credential store
 and deletes the plaintext line, leaving your other `MY_DAEMON_*` variables
 untouched.
@@ -268,11 +268,12 @@ the same output live.
 - **"Downloaded archive does not match its published checksum"** — the
   installer refused to unpack and changed nothing. Run it again; if it repeats,
   stop and report it rather than working around it.
-- **"ANTHROPIC_API_KEY is not set"** — run `daemon setup` and save; it stores
-  the key in the OS credential store. On a headless machine with no keyring,
-  `export ANTHROPIC_API_KEY=...` in your shell profile instead.
+- **"ANTHROPIC_API_KEY is not set"** — run `daemon key set` (prompts without
+  echoing; works over SSH) or `daemon setup` if you have a desktop. Both store
+  the key in the OS credential store. On a headless machine with no keyring at
+  all, `export ANTHROPIC_API_KEY=...` in your shell profile instead.
 - **"present, but read from a plaintext .env file"** — a key left over from an
-  older install. Run `daemon setup` to migrate and strip it, then rotate the
+  older install. Run `daemon key set` to migrate and strip it, then rotate the
   key. See [Where your API key is stored](#where-your-api-key-is-stored).
 - **`daemon setup` says "No usable OS credential store"** — expected over SSH
   or in a bare container on Linux, where there is no Secret Service session.
@@ -287,3 +288,42 @@ the same output live.
   the first query, then stay warm.
 - **Opus 4.7 errors about `temperature`** — leave `llm.temperature: null` for
   reasoning models. Sonnet and Haiku accept a float.
+
+## Managing the API key from a terminal
+
+`daemon setup` is a desktop window. On a server, over SSH, or in a container
+there is no desktop — so the credential store is also reachable from the CLI:
+
+```bash
+daemon key set          # prompts, without echoing
+daemon key status       # which layer supplies the key, and its fingerprint
+daemon key clear        # remove it from the credential store
+```
+
+To pipe it in from a password manager:
+
+```bash
+pass show anthropic | daemon key set --stdin
+```
+
+**The key is never accepted as a command-line argument.** Arguments are visible
+in `ps`, in your shell history, and on Windows in Event 4688 process-creation
+logs — the same leak that got `setx` removed from the installer. There is no
+`--key` flag and there will not be one.
+
+`daemon key status` prints a **fingerprint** (a SHA-256 prefix), not the key or
+any part of it, so you can confirm a rotation took effect without putting the
+secret into your scrollback.
+
+!!! note "Rotating a key"
+
+    `daemon key set` overwrites whatever is stored, so rotation is one command.
+    If a key was ever in a plaintext `.env`, rotate it at
+    [console.anthropic.com](https://console.anthropic.com/settings/keys) as
+    well — moving a file does not un-expose what was in it.
+
+!!! warning "The environment wins"
+
+    A real `ANTHROPIC_API_KEY` environment variable takes precedence over the
+    credential store. If one is set, `daemon key set` will say so — otherwise
+    you would store a key and watch the daemon go on using a different one.

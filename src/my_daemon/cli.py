@@ -8,6 +8,7 @@ import contextlib
 import json
 import os
 import shutil
+import sys
 from collections.abc import Iterator
 from datetime import UTC, datetime
 from pathlib import Path
@@ -56,6 +57,14 @@ from my_daemon.pipeline.migrate_uuids import (
 )
 from my_daemon.pipeline.theme_tags import apply_decision, propose_theme_tags
 from my_daemon.retrieval.weights import apply_selection
+from my_daemon.secrets import (
+    ENV_VAR,
+    delete_from_keychain,
+    purge_dotenv_key,
+    read_keychain,
+    resolve_api_key,
+    store_in_keychain,
+)
 from my_daemon.stores import (
     AgentStateStore,
     FeedbackStore,
@@ -2370,3 +2379,183 @@ def graph_todos_cmd(
             shown += f", +{len(todo.wanted_by) - 3} more"
         table.add_row(todo.target, str(todo.incoming_links), shown or "—")
     console.print(table)
+
+
+# ---------------------------------------------------------------------------
+# `daemon key` — the credential store without a GUI
+#
+# `daemon setup` is a Tkinter window, which left a headless box — a server, an
+# SSH session, the machine most likely to be running `daemon run` on a
+# schedule — with no route to the encrypted store at all. The honest
+# workaround was an environment variable, which is the layer this project
+# deliberately moved away from.
+#
+# The key never travels through argv. A command-line argument is visible in
+# `ps`, in shell history, and on Windows in Event 4688 process-creation logs;
+# leaking it that way is exactly why `setx` was removed in the 2026-07-27
+# rewrite, and a `--key` flag would quietly undo that.
+# ---------------------------------------------------------------------------
+
+key_app = typer.Typer(name="key", help="Store the Anthropic API key in your OS credential store.")
+app.add_typer(key_app)
+
+_KEY_PREFIX = "sk-ant-"
+
+
+def _dotenv_candidates() -> list[Path]:
+    """Where a legacy plaintext key might still be sitting.
+
+    Config-optional on purpose: `daemon key set` has to work *before* there is
+    a config, since storing the key is one of the first things a new install
+    does.
+    """
+
+    paths: list[Path] = []
+    try:
+        settings = _load()
+    except Exception:  # noqa: BLE001 — no config yet is the normal bootstrap case
+        pass
+    else:
+        if settings.config_path is not None:
+            paths.append(settings.config_path.parent / ".env")
+    paths.append(Path.cwd() / ".env")
+    return list(dict.fromkeys(paths))
+
+
+def _key_fingerprint(value: str) -> str:
+    """A one-way digest, so "did the rotation take?" is answerable.
+
+    Deliberately not the last four characters, which is the usual shortcut:
+    those are *part of the secret*, and this output lands in terminal
+    scrollback and support-thread pastes.
+    """
+
+    import hashlib
+
+    return hashlib.sha256(value.encode("utf-8")).hexdigest()[:8]
+
+
+def _warn_if_environment_shadows() -> None:
+    if os.environ.get(ENV_VAR, "").strip():
+        console.print(
+            f"[yellow]Note:[/yellow] [bold]{ENV_VAR}[/bold] is set in this environment, "
+            "and a real environment variable takes precedence over the credential "
+            "store. The daemon will keep using that value and shadow what you just "
+            "stored — unset it to let the stored key take effect."
+        )
+
+
+@key_app.command("set")
+def key_set(
+    from_stdin: bool = typer.Option(
+        False, "--stdin", help="Read the key from stdin instead of prompting."
+    ),
+) -> None:
+    """Store the Anthropic API key in your OS credential store.
+
+    Prompts without echoing. Use `--stdin` to pipe it in — e.g.
+    `pass show anthropic | daemon key set --stdin`. The key is never accepted
+    as an argument, because argv is not private.
+    """
+
+    if from_stdin:
+        value = sys.stdin.read().strip()
+    else:
+        value = typer.prompt("Anthropic API key", hide_input=True).strip()
+
+    if not value:
+        console.print("[red]No key given.[/red] Nothing was stored.")
+        raise typer.Exit(1)
+
+    if not value.startswith(_KEY_PREFIX):
+        console.print(
+            f"[yellow]Warning:[/yellow] that doesn't look like an Anthropic key "
+            f"(they normally start with `{_KEY_PREFIX}`). Storing it anyway — the "
+            "format is Anthropic's to change, and refusing a valid key would be "
+            "worse than accepting one the API rejects."
+        )
+
+    ok, message = store_in_keychain(value)
+    if not ok:
+        console.print(f"[red]Could not reach an OS credential store.[/red] {message}")
+        console.print(
+            "On a headless Linux box this usually means no Secret Service is "
+            f"running. See `daemon doctor`, or export [bold]{ENV_VAR}[/bold] "
+            "as a fallback."
+        )
+        raise typer.Exit(1)
+
+    console.print(f"[green]Stored.[/green] {message}")
+    console.print(f"Key fingerprint: [bold]{_key_fingerprint(value)}[/bold] (sha256 prefix)")
+
+    # Only after the store succeeded. Purging the last surviving copy of a key
+    # we failed to save anywhere else would lose it outright.
+    for path in _dotenv_candidates():
+        if purge_dotenv_key(path):
+            console.print(
+                f"[green]Removed[/green] the plaintext key from [bold]{path}[/bold] "
+                "(every other line left untouched)."
+            )
+
+    _warn_if_environment_shadows()
+
+
+@key_app.command("clear")
+def key_clear(
+    yes: bool = typer.Option(False, "--yes", "-y", help="Skip the confirmation."),
+) -> None:
+    """Remove the stored API key from your OS credential store."""
+
+    if read_keychain() is None:
+        console.print("[yellow]Nothing to remove[/yellow] — no key in the credential store.")
+        return
+
+    if not yes and not typer.confirm("Delete the stored Anthropic API key?"):
+        console.print("Left alone.")
+        return
+
+    if delete_from_keychain():
+        console.print("[green]Deleted[/green] from the OS credential store.")
+    else:
+        console.print("[red]Could not delete[/red] — the credential store was unreachable.")
+        raise typer.Exit(1)
+
+    for path in _dotenv_candidates():
+        if path.is_file() and ENV_VAR in path.read_text(encoding="utf-8"):
+            console.print(
+                f"[yellow]Note:[/yellow] a plaintext key is still in [bold]{path}[/bold]. "
+                "Remove it by hand if you meant to revoke access here."
+            )
+
+
+@key_app.command("status")
+def key_status() -> None:
+    """Which layer supplies the API key — without printing it."""
+
+    resolved = resolve_api_key(
+        env_value=os.environ.get(ENV_VAR),
+        dotenv_paths=_dotenv_candidates(),
+    )
+    described = {
+        "environment": f"the [bold]{ENV_VAR}[/bold] environment variable",
+        "keychain": "the OS credential store (encrypted at rest)",
+        "dotenv": f"a plaintext `.env` file — [red]{resolved.dotenv_path}[/red]",
+        "missing": "",
+    }[resolved.source]
+
+    if resolved.value is None:
+        console.print(
+            "[yellow]No key found[/yellow] in the environment, the OS credential "
+            "store, or any `.env`. Run [bold]daemon key set[/bold]."
+        )
+        return
+
+    console.print(f"Key resolves from: {described}")
+    console.print(f"Key fingerprint:   [bold]{_key_fingerprint(resolved.value)}[/bold]")
+    if resolved.is_plaintext:
+        console.print(
+            "\n[red]That file is readable by anyone with access to this machine.[/red] "
+            "Run [bold]daemon key set[/bold] to move it into the credential store — "
+            "it will strip the plaintext copy for you. Rotate the key afterwards: "
+            "https://console.anthropic.com/settings/keys"
+        )

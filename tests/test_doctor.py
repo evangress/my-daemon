@@ -398,7 +398,10 @@ def test_a_key_read_from_a_plaintext_dotenv_warns_even_though_it_works(settings:
 
     assert result.status == doctor.WARN
     assert "plaintext" in result.detail.lower()
-    assert "daemon setup" in result.hint
+    # `daemon key set`, not `daemon setup`: this warning fires on servers and
+    # over SSH, where the Tkinter setup window cannot be opened at all, so
+    # pointing at it was advice the reader could not follow.
+    assert "daemon key set" in result.hint
     assert "secret-value" not in result.detail
     assert "secret-value" not in result.hint
 
