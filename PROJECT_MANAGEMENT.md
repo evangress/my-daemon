@@ -38,6 +38,14 @@ honest gaps, and lists costed candidate methods in three tiers. It also carries 
 parameter-provenance appendix separating the principled constants from the
 judgement calls. Read it before adding any new learning machinery.
 
+**Every proposal in it carries a checkbox**, with a status index at the top —
+`- [x]` is running in the repo today, `- [ ]` is available to build, each with
+effort and licence. Currently **4 shipped · 1 partial · 11 open of 16**. Item
+IDs (`§IV.7`) are permanent and are never renumbered, so they mean the same
+thing here, in that document, and in commit messages. If you want to know what
+to build next, that index is the answer; the largest open item is **§IV.9**, the
+salience layer.
+
 ## Milestone Plan — Adaptive Memory Loop
 
 Four connected milestones that take the daemon from "answers questions" to

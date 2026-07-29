@@ -1,16 +1,23 @@
 # My Daemon — Applied Research
 
 **Companion to [MY-DAEMON-RESEARCH.md](MY-DAEMON-RESEARCH.md).**
-Written 2026-07-28 against the code as it stands at commit `f0ebb3d`, and
-revised the same day after the first three recommendations were implemented.
+Written 2026-07-28 against commit `f0ebb3d`; kept current as its
+recommendations ship. **Jump to [status at a glance](#how-to-read-this--status-at-a-glance)
+for what is built and what is available to build.**
 
-> **Revision note (2026-07-28, later).** Three items from Part IV shipped
-> immediately: the fingerprint cosine fix (§IV.1), team-draft interleaving plus
-> the policy ledger (§IV.7), and the threshold sweep that turns the theme match
-> constant into a measurement (new §IV.15). Those sections have been rewritten
-> to describe what the code now does rather than what it might do, and the
+> **Revision 1 (2026-07-28).** Three items from Part IV shipped immediately:
+> the fingerprint cosine fix (§IV.1), team-draft interleaving plus the policy
+> ledger (§IV.7), and the threshold sweep that turns the theme match constant
+> into a measurement (new §IV.15). Those sections were rewritten to describe
+> what the code now does rather than what it might do, and the
 > parameter-provenance appendix updated to match. §IV.3's licence problem also
 > turned out to have a clean answer — see that section.
+>
+> **Revision 2 (2026-07-29).** §IV.3 (connectivity repair) and §IV.4 (Hungarian
+> matching) shipped. **Every proposal now carries a checkbox**, with a status
+> index under *How to read this*, so what is built and what is available is
+> legible without reading the prose. The `O(n²)` distance matrix, previously a
+> footnote under §IV.4, was promoted to §IV.16 so it is findable.
 
 The earlier research document was written *before* the system existed. It maps
 human neural systems onto the technology landscape in general — a survey, and
@@ -33,10 +40,70 @@ Three ground rules I held myself to:
 
 ---
 
+## How to read this — status at a glance
+
+**Every proposal in Part IV carries a checkbox.** `- [x]` is running in the repo
+today with tests; `- [ ]` is available to build. Part III's gaps are marked the
+same way. If you are picking this up cold — a collaborator, or a future instance
+of me — this table is the whole map.
+
+> **Item IDs are permanent.** `§IV.7` means the same thing in this document, in
+> PROJECT_MANAGEMENT.md, and in commit messages, so IDs are never renumbered
+> when items ship or move tier. That is why the numbering below is not in
+> sequence: order is by tier and dependency, identity is by number.
+
+| | ID | Method | Tier | Effort | Shipped |
+|---|---|---|---|---|---|
+| ✅ | **IV.1** | Symmetrize the fingerprint cosine | 1 | S | 2026-07-28 |
+| ⬜ | **IV.2** | MMR over the candidate pool | 1 | S | — |
+| ◐ | **IV.3** | Better communities than Louvain | 1 | S–M | *partly* 2026-07-29 |
+| ✅ | **IV.4** | Optimal (Hungarian) theme matching | 1 | S | 2026-07-29 |
+| ✅ | **IV.15** | Measure the theme match threshold | 1 | S | 2026-07-28 |
+| ⬜ | **IV.16** | Sparse fingerprint distance matrix | 1 | S | — |
+| ⬜ | **IV.5** | Learned per-edge forgetting rates | 2 | M | — |
+| ⬜ | **IV.6** | Personalized PageRank for expansion | 2 | M | — |
+| ✅ | **IV.7** | Debias the selection signal (interleaving) | 2 | M | 2026-07-28 |
+| ⬜ | **IV.8** | Themes as an evolutionary-clustering objective | 2 | M–L | — |
+| ⬜ | **IV.9** | A salience layer (*the amygdala gap*) | 2 | L | — |
+| ⬜ | **IV.10** | Episodic time-binding | 2 | M | — |
+| ⬜ | **IV.11** | Conformal prediction over observer claims | 3 | — | — |
+| ⬜ | **IV.12** | Discrete curvature for bridge detection | 3 | — | — |
+| ⬜ | **IV.13** | A REM analogue: generative recombination | 3 | — | — |
+| ⬜ | **IV.14** | Two-timescale consolidation | 3 | L | — |
+
+**4 shipped · 1 partial · 11 open**, of 16. Effort: S = a sitting, M = a focused
+session or two, L = a milestone.
+
+`◐` is used once, for **IV.3**: its correctness fix shipped, but three optional
+enhancements behind it did not. Its body entry is `- [x]` because the *defect*
+is closed, and its four sub-options carry their own checkboxes — that is the
+only place in this document where the table marker and the body checkbox differ,
+and it is deliberate.
+
+### If you are choosing what to build next
+
+- **Highest value, hardest:** **IV.9**, the salience layer. Nothing in the system
+  asks whether a note *mattered* — only which code path found it. Part III.1
+  argues this is the single most important gap for the assistive use case, and it
+  is the one item here that would change what the daemon is *for* rather than how
+  well it works.
+- **Best value-per-hour:** **IV.2** (MMR) and **IV.16** (sparse distance matrix).
+  Both are S, both need no new dependency.
+- **Most interesting experiment:** **IV.6**, Personalized PageRank. Zero new
+  dependencies, and `simulate_evolution` exists precisely to A/B it against the
+  current decayed-Dijkstra expansion on your own vault.
+- **Do not build yet:** everything in Tier 3, and **IV.8** until IV.15's sweep
+  has been run against real history — it may show the stability problem is
+  already solved.
+
+---
+
 ## Part I — What is actually implemented
 
 A one-screen inventory, so the pairings in Part II have something concrete to
-attach to.
+attach to. **Everything in this table is shipped and under test** — that is the
+entry criterion for the table, and the reason Part II can cite `file:line`
+throughout. For what is *not* built, see the checkbox index above and Part IV.
 
 | # | Mechanism | Where | Key parameters |
 |---|-----------|-------|----------------|
@@ -659,10 +726,16 @@ encephalitis."*
 
 ## Part III — Where the pairing is honest about a gap
 
-Four places where the analogy does not currently hold in this code. Each is a
-premise for Part IV.
+Four places where the analogy does not hold in this code. Each is the premise
+for a Part IV proposal, so each carries the same checkbox: `- [x]` closed,
+`- [ ]` still open.
 
-### III.1 — No salience layer (the amygdala gap)
+- [ ] **III.1 — No salience layer** → remedy §IV.9 *(open — the big one)*
+- [x] **III.2 — Credit assignment** → closed 2026-07-28 by §IV.7
+- [ ] **III.3 — No episodic time-binding** → remedy §IV.10 *(open)*
+- [ ] **III.4 — Forgetting is edge-only, and one scalar** → remedy §IV.5 *(open)*
+
+### III.1 — No salience layer (the amygdala gap) — *open*
 
 The earlier research document named this as "probably the single most important
 design opportunity," and it remains unimplemented. The system's only notion of
@@ -705,7 +778,7 @@ deliberately not made: nothing feeds the win rate back into the draft ratio or
 the expansion decay, because a policy tuned on its own win rate is a closed loop.
 Watch the numbers for a few months before wiring anything to them.
 
-### III.3 — No episodic time-binding
+### III.3 — No episodic time-binding — *open*
 
 The earlier document flagged that "episodic memory has no clean analog because
 event-time-place binding is harder than embedding similarity," and the
@@ -721,7 +794,7 @@ property: episodic memory is memory *for events located in subjective time*.
 Without a temporal index the system is a semantic memory with an episodic
 interface.
 
-### III.4 — Forgetting exists, but only for edges, and only as one scalar
+### III.4 — Forgetting exists, but only for edges, and only as one scalar — *open*
 
 `decay_unused_edges` is real forgetting and rarer than it should be in this class
 of system. But its scope is narrow in two ways.
@@ -749,273 +822,327 @@ the environmental statistics of need, which differ per item.
 
 ## Part IV — Costed candidate methods
 
-Prioritized. Each entry: **what it fixes** in this codebase → **the method** →
+**`- [x]` is running in the repo today. `- [ ]` is available to build.**
+Each open entry carries: **what it fixes** in this codebase → **the method** →
 **where it lands** → **effort** → **licence**. Effort is S (a sitting), M (a
-focused session or two), L (a milestone).
+focused session or two), L (a milestone). Shipped entries instead record *what
+was actually done and why*, including the decisions and the mistakes, because
+that is the part a future reader cannot reconstruct from the diff.
 
-Licence column matters: CLAUDE.md rule 10 requires Apache-2.0 compatibility, and
-one item below fails it.
+Licence is called out on every entry: CLAUDE.md rule 10 requires Apache-2.0
+compatibility, and `scripts/license_check.py` now enforces it in CI.
 
 ### Tier 1 — Correctness and cheap wins
 
-**IV.1 — Symmetrize the fingerprint cosine. ✅ Shipped 2026-07-28.** Implemented
-as a two-pass scan rather than the stored-post-IDF-norm alternative, because a
-stored norm goes stale as `df` moves and would need refreshing in consolidation.
-The candidate's magnitude genuinely cannot be derived from the shared notes, so
-the second pass reads the candidates' full activation sets. New public
-`ActivationLedger.idf()` exists so both sides are weighted by one code path —
-the asymmetry was possible precisely because the weighting lived in two places.
-*Where:* `stores/activations.py`. Pinned by three tests, including one that had
-to be rewritten because the first version used notes of equal document frequency
-and the IDF factors cancelled, letting a broken denominator still score 1.0.
+- [x] **IV.1 — Symmetrize the fingerprint cosine.** *Shipped 2026-07-28.*
 
-**IV.2 — MMR over the candidate pool.** *Fixes:* seed domination of the
-candidate pool, from the presentation side rather than the learning side. *Method:*
-Maximal Marginal Relevance (Carbonell & Goldstein, SIGIR 1998): iteratively select
-the item maximizing `λ·relevance − (1−λ)·max similarity to already-selected`.
-Applied to your ranked list before the token-budget trim, it guarantees the
-three-candidate floor is not three chunks of the same note. *Where:*
-`retrieval/orchestrator.py:76-88`. *Effort:* S — the similarity term can reuse
-chunk embeddings you already have, or degrade to note-identity overlap if you
-want zero extra Qdrant traffic. *Licence:* none (numpy). *Note:* this also makes
-IV.7 possible, since interleaving needs a pool that isn't monoculture.
+    Implemented as a two-pass scan rather than the stored-post-IDF-norm
+    alternative, because a stored norm goes stale as `df` moves and would need
+    refreshing in consolidation. The candidate's magnitude genuinely cannot be
+    derived from the shared notes, so the second pass reads the candidates' full
+    activation sets. New public `ActivationLedger.idf()` exists so both sides are
+    weighted by one code path — the asymmetry was possible precisely because the
+    weighting lived in two places.
 
-**IV.3 — Better communities than Louvain. ⚠ Corrected — no licence change needed.**
-*Fixes:* the disconnected-community failure mode from Traag et al. (2019), which
-can put a false relational claim into a user-facing letter.
+    *Where:* `stores/activations.py`. Pinned by three tests, including one that
+    had to be rewritten because the first version used notes of equal document
+    frequency, so the IDF factors cancelled and a broken denominator still scored
+    1.0. A fourth was deleted outright: it asserted `score <= 1.0`, which
+    Cauchy-Schwarz guarantees under both the old and new formula, so no
+    production change could ever have made it fail.
 
-*The correction.* The first draft of this section said every Python Leiden
-implementation is GPL. That is **wrong**, and the error mattered because it
-framed a licence change as the price of correctness. `leidenalg` is indeed
-GPL-3.0 and `python-igraph` GPL-2.0 — but **`graspologic-native` is MIT**
-(verified on PyPI: v1.3.1, June 2026), implements Leiden and hierarchical Leiden
-in Rust, and is the implementation Microsoft's own GraphRAG uses. There is a
-permissively-licensed Leiden and it is the one the reference graph-RAG system
-runs on.
+- [ ] **IV.2 — MMR over the candidate pool.**
 
-*The real constraint is Python versions, not licences.* `graspologic-native`
-publishes wheels for CPython 3.9–3.13. This project declares
-`requires-python = ">=3.11,<3.15"` and the librarian subtree pins `>=3.14`. On
-3.14 there would be no wheel today. That is a compatibility question with a
-straightforward answer (an optional extra, or waiting for the wheel) rather than
-a licensing one.
+    *Fixes:* seed domination of the candidate pool, from the presentation side
+    rather than the learning side. Note that IV.7's interleaving has already
+    changed pool composition, so this is worth less than when first proposed —
+    what remains is preventing three chunks of the *same note* filling the floor.
 
-**✅ Option 1 shipped 2026-07-29** — `structural.split_disconnected` splits any
-Louvain community whose induced subgraph is not connected, before anything
-downstream reads it as "these notes belong together". Ten lines, no dependency,
-and it eliminates the disconnected case outright rather than reducing it. It
-does **not** give Leiden's guarantee about merely *badly* connected communities;
-whether that residue is worth a dependency is now a question real data can
-answer instead of a bet.
+    *Method:* Maximal Marginal Relevance (Carbonell & Goldstein, SIGIR 1998):
+    iteratively select the item maximizing
+    `λ·relevance − (1−λ)·max similarity to already-selected`, applied to the
+    ranked list before the token-budget trim.
 
-*Remaining alternatives, in order of preference:*
-  1. ~~**Post-hoc connectivity repair.**~~ **Shipped.** Keep Louvain; after it
-     returns, split any community whose induced subgraph is disconnected into its
-     connected components via `nx.connected_components`. This eliminates the
-     *disconnected* case entirely — the more damaging half of the Traag finding —
-     for about ten lines and no dependency. *Effort:* S.
-  2. **Consensus clustering.** Run Louvain with `k` different seeds, build a
-     co-association matrix, cluster that. More robust partitions, `k×` the cost,
-     nightly so who cares. *Effort:* M.
-  3. **`nx.community.greedy_modularity_communities`** (Clauset–Newman–Moore) as a
-     cross-check — different failure modes, already installed, and disagreement
-     between the two is itself a signal the partition is unstable. *Effort:* S.
+    *Where:* `retrieval/orchestrator.py` (`_pool`). *Effort:* S — the similarity
+    term can reuse chunk embeddings you already have, or degrade to
+    note-identity overlap for zero extra Qdrant traffic. *Licence:* none (numpy).
 
-  4. **`graspologic-native` Leiden**, once the Python-version question is
-     settled. *Effort:* M. *Licence:* MIT ✓.
+- [x] **IV.3 — Better communities than Louvain.** *Partly shipped 2026-07-29 —
+  the free half is done, the dependency half is a live decision.*
 
-  *Where:* `analysis/structural.py:133-182`. *Licence summary:* NetworkX BSD-3 ✓;
-  scipy BSD-3 ✓; graspologic-native MIT ✓; leidenalg GPL-3.0 ✗ / python-igraph
-  GPL-2.0 ✗ (neither needed).
+    *Fixes:* the disconnected-community failure mode from Traag et al. (2019),
+    which can put a false relational claim into a user-facing letter.
 
-  *Unrelated but found here:* `python-louvain>=0.16` is a declared dependency in
-  `pyproject.toml` and is **never imported** — the code calls NetworkX's built-in
-  `nx.community.louvain_communities`. It can be dropped.
+    **A correction worth preserving.** The first draft of this section said every
+    Python Leiden implementation is GPL. That is **wrong**, and the error
+    mattered because it framed a licence change as the price of correctness.
+    `leidenalg` is indeed GPL-3.0 and `python-igraph` GPL-2.0 — but
+    **`graspologic-native` is MIT** (verified on PyPI: v1.3.1, June 2026),
+    implements Leiden and hierarchical Leiden in Rust, and is the implementation
+    Microsoft's own GraphRAG uses. There is a permissively-licensed Leiden and it
+    is the one the reference graph-RAG system runs on. *The real constraint is
+    Python versions:* `graspologic-native` publishes wheels for CPython 3.9–3.13,
+    while this project declares `>=3.11,<3.15` and the librarian pins `>=3.14`.
 
-**IV.4 — Optimal theme matching. ✅ Shipped 2026-07-29.** Hungarian algorithm
-(Kuhn, 1955) via `scipy.optimize.linear_sum_assignment` over the cluster×theme
-cosine matrix, in `themes._optimal_pairs`. The threshold is applied *after*
-assignment, so maximising the total can never smuggle in a pairing the
-threshold rejects.
+    - [x] **1. Post-hoc connectivity repair.** *Shipped.*
+      `structural.split_disconnected` splits any Louvain community whose induced
+      subgraph is not connected, before anything downstream reads it as "these
+      notes belong together". Ten lines, no dependency, and it eliminates the
+      disconnected case outright rather than reducing it. It does **not** give
+      Leiden's guarantee about merely *badly* connected communities — whether
+      that residue is worth a dependency is now a question real data can answer
+      instead of a bet. *Effort:* S.
+    - [ ] **2. Consensus clustering.** Run Louvain with `k` different seeds,
+      build a co-association matrix, cluster that. More robust partitions, `k×`
+      the cost, and it runs nightly so the cost is irrelevant. *Effort:* M.
+    - [ ] **3. `nx.community.greedy_modularity_communities`** (Clauset–Newman–Moore)
+      as a cross-check — different failure modes, already installed, and
+      disagreement between the two is itself a signal the partition is unstable.
+      *Effort:* S.
+    - [ ] **4. `graspologic-native` Leiden**, once the Python-version question is
+      settled. *Effort:* M. *Licence:* MIT ✓.
 
-Worth recording how the test went, because it is the same trap as §IV.1: the
-first version passed against the greedy implementation, since the case I
-constructed happened to be one greedy solves optimally. The discriminating case
-needs the *highest-scoring* pair to be the one that blocks a better total —
-X↔P at 0.90 strands Y, whose only viable partner was P, where optimal pairs
-X↔Q (0.44) and Y↔P (0.80) and matches both.
+    *Where:* `analysis/structural.py:_louvain_communities`. *Licence summary:*
+    NetworkX BSD-3 ✓; scipy BSD-3 ✓; graspologic-native MIT ✓; leidenalg GPL-3.0
+    ✗ / python-igraph GPL-2.0 ✗ (neither needed).
 
-*Still open in this file:* the `O(n²)` Python double loop at
-`themes.py:97-101` can be built from an inverted index — most fingerprint pairs
-share zero notes and score exactly 0, and skipping them is close to free.
+- [x] **IV.4 — Optimal theme matching.** *Shipped 2026-07-29.*
+
+    Hungarian algorithm (Kuhn, 1955) via `scipy.optimize.linear_sum_assignment`
+    over the cluster×theme cosine matrix, in `themes._optimal_pairs`. The
+    threshold is applied *after* assignment, so maximising the total can never
+    smuggle in a pairing the threshold rejects.
+
+    Worth recording how the test went, because it is the same trap as §IV.1: the
+    first version passed against the greedy implementation, since the case
+    constructed happened to be one greedy solves optimally. The discriminating
+    case needs the *highest-scoring* pair to be the one that blocks a better
+    total — X↔P at 0.90 strands Y, whose only viable partner was P, where optimal
+    pairs X↔Q (0.44) and Y↔P (0.80) and matches both.
+
+- [x] **IV.15 — Measure the theme match threshold.** *Shipped 2026-07-28.*
+
+    *Fixes:* the highest-leverage judgement call in the appendix table. Not a
+    method from the literature so much as the empirical prerequisite for choosing
+    one: without a way to see what a threshold does to churn on *this user's*
+    history, both §IV.4 and §IV.8 would be adopted on faith.
+
+    *Method:* replay the ledger in sequential cumulative windows — cumulative
+    because that is what consolidate actually does, re-clustering the whole
+    lookback each night rather than only the new queries — reconciling at each
+    candidate threshold against a throwaway store, and report mean churn,
+    surviving themes, and the created/matched/dormant split. `recommend()` picks
+    the lowest-churn threshold that still finds themes, ties broken toward the
+    higher (more conservative) value; churn alone would recommend the degenerate
+    low end where everything matches because nothing is ever distinguished. It
+    returns `None` rather than a number when there is too little history, which
+    is the honest answer on a young vault.
+
+    *Where:* `analysis/theme_tuning.py`, `daemon themes tune`. *Licence:* none.
+    See §II.8 for the two implementation subtleties (SQL-bounded windows;
+    excluding the first window's churn) that were both wrong in the first attempt.
+
+- [ ] **IV.16 — Build the fingerprint distance matrix from an inverted index.**
+
+    *Fixes:* `analysis/themes.py` builds an `O(n²)` dense distance matrix in a
+    Python double loop over up to 4000 fingerprints — roughly 8M sparse-dict
+    cosine calls, nightly. Survivable at single-user scale, and the first thing
+    that will hurt as the ledger grows.
+
+    *Method:* most fingerprint pairs share *zero* notes and score exactly 0.0.
+    An inverted index over note-UUID → query-ids visits only the pairs that can
+    be non-zero, which on a real vault is a small fraction of `n²`.
+
+    *Where:* `analysis/themes.py:cluster_fingerprints`. *Effort:* S.
+    *Licence:* none. Purely a constant-factor win — no behaviour change, so it
+    should be provable by asserting the new matrix equals the old one.
 
 ### Tier 2 — Mechanisms with real behavioural payoff
 
-**IV.5 — Learned per-edge forgetting rates.** *Fixes:* the global 30-day
-half-life applying one forgetting curve to every association (Part III.4).
-*Method:* half-life regression (Settles & Meeder, ACL 2016) — model the half-life
-as a function of features you already log (times reinforced, time since last
-reinforcement, edge type, the notes' `note_activation_stats`) and fit it to
-whether the edge was subsequently traversed-and-selected. The mature descendant
-is FSRS's DSR model (difficulty / stability / retrievability), whose reference
-implementation `py-fsrs` is **MIT** — verified — and therefore Apache-compatible.
-*Where:* `retrieval/weights.py:99-139`, plus a features table. *Effort:* M.
-*Caveat:* single-user data is thin. Start with the two-parameter version (a
-per-edge-type half-life, plus a stability term that grows with reinforcement
-count) before fitting anything learned; that alone captures most of the
-behavioural difference.
+- [ ] **IV.5 — Learned per-edge forgetting rates.**
 
-**IV.6 — Personalized PageRank for expansion.** *Fixes:* the fragility of
-single-shortest-path scoring under noisy learned weights (Part II.3). *Method:*
-replace `seed_score × decay^distance` with a Personalized PageRank / random-walk-
-with-restart score, personalization vector seeded on the seed notes weighted by
-their retrieval scores, restart probability standing in for your decay. This is
-HippoRAG's (NeurIPS 2024) core operator and the theory is Tong, Faloutsos & Pan
-(ICDM 2006). `nx.pagerank(G, personalization=..., weight="weight")` does it with
-**zero new dependencies** — you already call `nx.pagerank` in `GraphStore.stats`.
-*Where:* `retrieval/expand.py`, `stores/graph.py:493`. *Effort:* M. *Licence:*
-none. *Design note:* keep the integer hop budget as a pre-filter — PPR alone will
-happily assign mass to distant hubs, which is the rumination failure mode the
-current two-pass design was built to avoid. Run both and compare on your own
-vault before switching; this is exactly what `simulate_evolution` is for.
+    *Fixes:* the global 30-day half-life applying one forgetting curve to every
+    association (Part III.4). Anderson & Schooler's point was never that
+    forgetting follows *a* curve — it was that the curve tracks the environmental
+    statistics of need, which differ per item.
 
-**IV.7 — Debias the selection signal. ✅ Shipped 2026-07-28.** Interleaving
-(Radlinski, Kurup & Joachims, CIKM 2008) was chosen over propensity weighting
-(Joachims, Swaminathan & Schnabel, WSDM 2017) for the reason given in §III.2:
-the propensity estimator needs randomization or a large click corpus, and a
-single user supplies neither.
+    *Method:* half-life regression (Settles & Meeder, ACL 2016) — model the
+    half-life as a function of features already logged (times reinforced, time
+    since last reinforcement, edge type, the notes' `note_activation_stats`) and
+    fit it to whether the edge was subsequently traversed-and-selected. The
+    mature descendant is FSRS's DSR model (difficulty / stability /
+    retrievability); reference implementation `py-fsrs` is **MIT** — verified.
 
-*Delivered as four pieces.* `retrieval/interleave.py` (`team_draft`);
-`RetrievedChunk.team` carried through `build_retrieval_summary` into the
-persisted feedback row, so `daemon select` can attribute a pick made days later;
-`stores/policy.py` + migration 6 (`retrieval_policy_stats`) recording impressions
-and wins; and `pipeline/policy.py`, a second listener on the existing retrieval
-seam — separate from `ActivationRecorder` because the two answer different
-questions and should fail independently. Surfaced by `daemon policy`.
-Config: `retrieval.interleave`, default true.
+    *Where:* `retrieval/weights.py:decay_unused_edges`, plus a features table.
+    *Effort:* M. *Caveat:* single-user data is thin. Start with the
+    two-parameter version — a per-edge-type half-life plus a stability term that
+    grows with reinforcement count — before fitting anything learned; that alone
+    captures most of the behavioural difference.
 
-*Three decisions worth recording.*
-  - **Zero-count impressions are not recorded.** A retrieval that surfaced no
-    expansion never put that policy in front of the user, and counting it would
-    dilute the win rate with queries where the policy had no chance.
-  - **A missing team is never guessed.** Historical rows and score-ordered pools
-    have `team = None`, and those picks are excluded rather than assigned to a
-    default — a pick from an unfair ordering is confounded, and counting it would
-    poison exactly the measurement interleaving exists to make honest.
-  - **The rng is unseeded in production.** A predictable toss would reintroduce
-    the position bias the draft exists to cancel; tests inject a scripted coin so
-    they can assert on draft order rather than on a distribution.
+- [ ] **IV.6 — Personalized PageRank for expansion.**
 
-*One bug worth remembering.* The first version dispatched a draft to a team that
-could already be exhausted, where drafting is a no-op — an infinite loop on the
-query hot path, which would freeze the daemon on every search. The test suite
-caught it by hanging. Termination is now structural: `_draft` returns whether it
-moved, and exhaustion is checked before fairness.
+    *Fixes:* the fragility of single-shortest-path scoring under noisy learned
+    weights (Part II.3). Dijkstra asks "how cheap is the best single route?"; PPR
+    asks "how much of a random walker's time is spent here?", which aggregates
+    over *all* routes and is therefore robust to one lucky edge.
 
-**IV.15 — Measure the theme match threshold. ✅ Shipped 2026-07-28.**
-*Fixes:* the highest-leverage judgement call in the appendix table. Not a method
-from the literature so much as the empirical prerequisite for choosing one:
-without a way to see what a threshold does to churn on *this user's* history,
-both §IV.4 (Hungarian matching) and §IV.8 (evolutionary clustering) would be
-adopted on faith.
+    *Method:* replace `seed_score × decay^distance` with a Personalized
+    PageRank / random-walk-with-restart score — personalization vector seeded on
+    the seed notes weighted by their retrieval scores, restart probability
+    standing in for the decay. This is HippoRAG's (NeurIPS 2024) core operator;
+    theory in Tong, Faloutsos & Pan (ICDM 2006).
+    `nx.pagerank(G, personalization=..., weight="weight")` does it with **zero
+    new dependencies** — `nx.pagerank` is already called in `GraphStore.stats`.
 
-*Method:* replay the ledger in sequential cumulative windows — cumulative
-because that is what consolidate actually does, re-clustering the whole lookback
-each night rather than only the new queries — reconciling at each candidate
-threshold against a throwaway store, and report mean churn, surviving themes,
-and the created/matched/dormant split. `recommend()` picks the lowest-churn
-threshold that still finds themes, ties broken toward the higher (more
-conservative) value; churn alone would recommend the degenerate low end where
-everything matches because nothing is ever distinguished. It returns `None`
-rather than a number when there is too little history, which is the honest
-answer on a young vault.
+    *Where:* `retrieval/expand.py`, `stores/graph.py:neighbors_within`.
+    *Effort:* M. *Licence:* none. *Design note:* keep the integer hop budget as a
+    pre-filter — PPR alone will happily assign mass to distant hubs, which is the
+    rumination failure mode the current two-pass design was built to avoid. Run
+    both and compare on your own vault first; that is exactly what
+    `simulate_evolution` is for.
 
-*Where:* `analysis/theme_tuning.py`, `daemon themes tune`. *Licence:* none.
-See §II.8 for the two implementation subtleties (SQL-bounded windows; excluding
-the first window's churn) that were both wrong in the first attempt.
+- [x] **IV.7 — Debias the selection signal.** *Shipped 2026-07-28.*
 
-**IV.8 — Themes as an evolutionary-clustering objective.** *Fixes:* churn being
-measured but not optimized (Part II.8). *Method:* Chakrabarti, Kumar & Tomkins
-(KDD 2006): minimize `snapshot_cost + γ · history_cost` rather than clustering
-fresh and reconciling afterward. Concretely, add the previous run's centroids as
-soft anchors — e.g. seed the distance matrix with a bonus for pairs that were
-co-clustered last night, tuned by γ. *Where:* `analysis/themes.py`. *Effort:*
-M–L. *Licence:* none. *Sequencing:* do IV.4 first; optimal matching plus honest
-churn may get you enough stability that this is not worth the complexity. Measure
-before building.
+    Interleaving (Radlinski, Kurup & Joachims, CIKM 2008) chosen over propensity
+    weighting (Joachims, Swaminathan & Schnabel, WSDM 2017) for the reason given
+    in §III.2: the propensity estimator needs randomization or a large click
+    corpus, and a single user supplies neither.
 
-**IV.9 — A salience layer.** *Fixes:* Part III.1, the amygdala gap — the single
-most important gap for the assistive use case. *Method:* a per-note significance
-score, orthogonal to retrieval strength, combining signals you already have or
-can cheaply get:
-  - *behavioural* — revisit count and dwell from `note_activation_stats`, edit
-    frequency from the ingest manifest, whether the user ever endorsed a
-    candidate from it;
-  - *structural* — betweenness from the structural report (bridging notes are
-    load-bearing in the user's own thinking);
-  - *semantic* — a batch-model pass at consolidation scoring personal
-    significance, in the spirit of Generative Agents' importance term but written
-    to a store rather than into a prompt;
-  - *surprise* — Bayesian surprise as KL divergence between the fingerprint
-    distribution before and after a query, which flags notes that *changed what
-    the system expected* rather than merely appearing often.
+    *Delivered as four pieces.* `retrieval/interleave.py` (`team_draft`);
+    `RetrievedChunk.team` carried through `build_retrieval_summary` into the
+    persisted feedback row, so `daemon select` can attribute a pick made days
+    later; `stores/policy.py` + migration 6 (`retrieval_policy_stats`) recording
+    impressions and wins; and `pipeline/policy.py`, a second listener on the
+    existing retrieval seam — separate from `ActivationRecorder` because the two
+    answer different questions and should fail independently. Surfaced by
+    `daemon policy`. Config: `retrieval.interleave`, default true.
 
-  Then feed it into ranking, into what the observer letter foregrounds, and into
-  what decays slowly. *Where:* new `analysis/salience.py`, consumed by
-  `orchestrator.py` and `agent_observe.py`. *Effort:* L. *Licence:* none.
-  *Recommendation:* build the behavioural and structural components first — they
-  are free, they are honest, and they do not require the LLM to introspect about
-  the user's feelings. The semantic component should be opt-in.
+    *Three decisions worth recording.*
+    - **Zero-count impressions are not recorded.** A retrieval that surfaced no
+      expansion never put that policy in front of the user, and counting it would
+      dilute the win rate with queries where the policy had no chance.
+    - **A missing team is never guessed.** Historical rows and score-ordered
+      pools have `team = None`, and those picks are excluded rather than assigned
+      to a default — a pick from an unfair ordering is confounded, and counting
+      it would poison exactly the measurement interleaving exists to make honest.
+    - **The rng is unseeded in production.** A predictable toss would reintroduce
+      the position bias the draft exists to cancel; tests inject a scripted coin
+      so they can assert on draft order rather than on a distribution.
 
-**IV.10 — Episodic time-binding.** *Fixes:* Part III.3. *Method:* carry note
-mtime and any date parsed from frontmatter or filename into the `Chunk` payload
-and the Qdrant index (payload index on a timestamp field, cheap); add a temporal
-term to the fingerprint so two queries asked in the same period are slightly
-closer, per TCM's drifting context vector (Howard & Kahana, 2002); optionally
-support explicit temporal filtering at query time. *Where:* `vault/chunker.py`,
-`stores/vector.py`, `stores/activations.py`. *Effort:* M. *Licence:* none. This
-converts a semantic store with an episodic interface into something that can
-actually answer "what was I thinking about last spring."
+    *One bug worth remembering.* The first version dispatched a draft to a team
+    that could already be exhausted, where drafting is a no-op — an infinite loop
+    on the query hot path, which would freeze the daemon on every search. The
+    test suite caught it by hanging. Termination is now structural: `_draft`
+    returns whether it moved, and exhaustion is checked before fairness.
+
+- [ ] **IV.8 — Themes as an evolutionary-clustering objective.**
+
+    *Fixes:* churn being measured but not optimized (Part II.8).
+
+    *Method:* Chakrabarti, Kumar & Tomkins (KDD 2006): minimize
+    `snapshot_cost + γ · history_cost` rather than clustering fresh and
+    reconciling afterward. Concretely, add the previous run's centroids as soft
+    anchors — seed the distance matrix with a bonus for pairs co-clustered last
+    night, tuned by γ.
+
+    *Where:* `analysis/themes.py`. *Effort:* M–L. *Licence:* none.
+    *Sequencing:* **do not start this until §IV.15's sweep has been run against
+    real history.** Optimal matching (IV.4, shipped) plus honest churn may
+    already give enough stability that this is complexity for nothing. Measure
+    before building.
+
+- [ ] **IV.9 — A salience layer.** *The most important open item in this
+  document.*
+
+    *Fixes:* Part III.1, the amygdala gap. `STRENGTH_BY_SOURCE` is the system's
+    only notion of importance, and it describes *which retrieval route found a
+    note* — a fact about the machinery, not about the user. Retrieval by recency
+    and match is the wrong affordance for someone with cognitive decline: they do
+    not need help finding yesterday's note, they need help finding the one that
+    mattered.
+
+    *Method:* a per-note significance score, orthogonal to retrieval strength:
+    - *behavioural* — revisit count and dwell from `note_activation_stats`, edit
+      frequency from the ingest manifest, whether the user ever endorsed a
+      candidate from it;
+    - *structural* — betweenness from the structural report (bridging notes are
+      load-bearing in the user's own thinking);
+    - *semantic* — a batch-model pass at consolidation scoring personal
+      significance, in the spirit of Generative Agents' importance term but
+      written to a store rather than into a prompt;
+    - *surprise* — Bayesian surprise as KL divergence between the fingerprint
+      distribution before and after a query, flagging notes that *changed what
+      the system expected* rather than merely appearing often.
+
+    Then feed it into ranking, into what the observer letter foregrounds, and
+    into what decays slowly. *Where:* new `analysis/salience.py`, consumed by
+    `orchestrator.py` and `agent_observe.py`. *Effort:* L. *Licence:* none.
+    *Recommendation:* build the behavioural and structural components first —
+    they are free, they are honest, and they do not require the LLM to
+    introspect about the user's feelings. The semantic component should be
+    opt-in.
+
+- [ ] **IV.10 — Episodic time-binding.**
+
+    *Fixes:* Part III.3. `Chunk` carries no timestamp, so "what was I working on
+    last spring?" is not answerable by retrieval — only by luck, if a note
+    happens to say so in prose. Without a temporal index this is a semantic
+    memory with an episodic interface.
+
+    *Method:* carry note mtime and any date parsed from frontmatter or filename
+    into the `Chunk` payload and the Qdrant index (payload index on a timestamp
+    field, cheap); add a temporal term to the fingerprint so two queries asked in
+    the same period are slightly closer, per TCM's drifting context vector
+    (Howard & Kahana, 2002); optionally support explicit temporal filtering at
+    query time.
+
+    *Where:* `vault/chunker.py`, `stores/vector.py`, `stores/activations.py`.
+    *Effort:* M. *Licence:* none.
 
 ### Tier 3 — Worth knowing about, not worth building yet
 
-**IV.11 — Conformal prediction over observer claims.** The letter is instructed
-to express uncertainty in prose ("take it as a hunch"). Conformal prediction
-(Angelopoulos & Bates, arXiv 2107.07511, 2021) gives distribution-free coverage
-guarantees — you could, in principle, calibrate a threshold such that structural
-claims surfaced to the user are right 90% of the time. *Blocked on:* having
-labelled outcomes, which means asking the user whether a letter's claims landed.
-Cheap to start collecting; expensive to act on.
+- [ ] **IV.11 — Conformal prediction over observer claims.**
 
-**IV.12 — Discrete curvature for bridge detection.** `nx.bridges` finds edges
-whose removal disconnects the graph — a binary, brittle criterion. Ollivier-Ricci
-curvature gives a continuous measure of how "bridge-like" an edge is: negatively
-curved edges lie between communities, positively curved ones sit inside them (Ni,
-Lin, Luo & Gao, *Scientific Reports* 9:9984, 2019). A better bridging-notes
-report, and a plausible second opinion on community structure. `GraphRicciCurvature`
-on PyPI implements it — **licence unverified, check before adopting.**
+    The letter is instructed to express uncertainty in prose ("take it as a
+    hunch"). Conformal prediction (Angelopoulos & Bates, arXiv 2107.07511, 2021)
+    gives distribution-free coverage guarantees — you could calibrate a threshold
+    such that structural claims surfaced to the user are right 90% of the time.
+    *Blocked on:* labelled outcomes, which means asking the user whether a
+    letter's claims landed. Cheap to start collecting; expensive to act on.
 
-**IV.13 — A REM analogue: generative recombination.** Consolidation currently
-extracts regularities from what happened. It does not recombine distant material
-to *propose* an association that has not occurred. The biological warrant is
-strong — REM sleep preferentially benefits remote-associate performance — and the
-computational version is straightforward: sample pairs of notes that are
-semantically near but graph-far, ask the batch model whether a real connection
-exists, and write high-confidence proposals into the letter as questions rather
-than assertions. This is the natural next thing your dream phase could do, and
-it is deliberately last on this list because it is the item most likely to
-manufacture plausible falsehoods. It needs IV.11 or an equivalent calibration
-story first.
+- [ ] **IV.12 — Discrete curvature for bridge detection.**
 
-**IV.14 — Two-timescale consolidation.** Full CLS (McClelland et al., 1995) has
-two stores, not one: fast episodic and slow semantic. Your daemon has the fast
-store and a report. A slow store would be *distilled notes* — summaries written
-during consolidation that become first-class retrievable objects, so retrieval
-can hit a consolidated abstraction instead of re-deriving it from episodes every
-time. RAPTOR (Sarthi et al., ICLR 2024) is the RAG-side version of this idea
-(recursive clustering-and-summarization into a retrievable tree). *Blocked on:*
-this is architecturally large and interacts with write-back discipline, since
-those summaries land in the user's vault.
+    `nx.bridges` finds edges whose removal disconnects the graph — a binary,
+    brittle criterion. Ollivier-Ricci curvature gives a continuous measure of how
+    "bridge-like" an edge is: negatively curved edges lie between communities,
+    positively curved ones sit inside them (Ni, Lin, Luo & Gao, *Scientific
+    Reports* 9:9984, 2019). A better bridging-notes report, and a second opinion
+    on community structure. `GraphRicciCurvature` on PyPI implements it —
+    **licence unverified; CI will now block it if incompatible, but check first.**
+
+- [ ] **IV.13 — A REM analogue: generative recombination.**
+
+    Consolidation extracts regularities from what happened. It does not recombine
+    distant material to *propose* an association that has not occurred. The
+    biological warrant is strong — REM sleep preferentially benefits
+    remote-associate performance — and the computational version is
+    straightforward: sample pairs of notes that are semantically near but
+    graph-far, ask the batch model whether a real connection exists, and write
+    high-confidence proposals into the letter as questions rather than
+    assertions. Deliberately near-last: it is the item most likely to manufacture
+    plausible falsehoods, and it needs IV.11 or an equivalent calibration story
+    first.
+
+- [ ] **IV.14 — Two-timescale consolidation.**
+
+    Full CLS (McClelland et al., 1995) has two stores, not one: fast episodic and
+    slow semantic. This daemon has the fast store and a report. A slow store
+    would be *distilled notes* — summaries written during consolidation that
+    become first-class retrievable objects, so retrieval can hit a consolidated
+    abstraction instead of re-deriving it from episodes every time. RAPTOR
+    (Sarthi et al., ICLR 2024) is the RAG-side version. *Blocked on:* this is
+    architecturally large and interacts with write-back discipline, since those
+    summaries would land in the user's own vault.
 
 ---
 
