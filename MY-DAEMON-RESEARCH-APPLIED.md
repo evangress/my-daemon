@@ -54,7 +54,8 @@ attach to.
 | 10 | Emergent themes — HDBSCAN over fingerprint cosine | `analysis/themes.py:70` | min_cluster_size=3, leave-one-out filter 0.10 |
 | 11 | Theme stability — centroid matching, dormancy, churn | `analysis/themes.py:163`, `:235` | match threshold 0.60, churn = 1 − mean Jaccard |
 | 11b | Threshold sweep against replayed ledger history | `analysis/theme_tuning.py` | `daemon themes tune`, read-only |
-| 12 | Structural analysis — Louvain, betweenness, bridges | `analysis/structural.py:133`, `:185`, `:212` | 8 communities, BC sample k=200, warm > 1.5 |
+| 12 | Structural analysis — Louvain (connectivity-repaired), betweenness, bridges | `analysis/structural.py:133`, `:185`, `:212` | 8 communities, BC sample k=200, warm > 1.5 |
+| 12b | Dangling wikilinks as prospective memory | `analysis/todos.py` | `daemon graph todos` |
 | 13 | Counterfactual weight-evolution replay on a shadow graph | `analysis/structural.py:365` | 7-day lookback |
 | 14 | Snapshot isolation — writes raise, not warn | `stores/snapshot.py` | 14-day retention |
 | 15 | Observer LLM letter with prior-letter continuity | `pipeline/agent_observe.py`, `llm/agents.py:357` | Opus, 4 prior letters, ~400–700 words |
@@ -545,16 +546,22 @@ underneath NetworkX; the `k`-sampling you use is the standard approximation.
 Both are load-bearing in the modern graph-RAG stack: GraphRAG builds its
 hierarchy from community detection over an entity graph.
 
-**What it tells you.** One correctness caveat that matters. Traag, Waltman & van
-Eck (*Scientific Reports*, 2019) — *"From Louvain to Leiden: guaranteeing
+**What it tells you — and what was done (2026-07-29).** One correctness caveat
+that mattered, now fixed. Traag, Waltman & van Eck (*Scientific Reports*, 2019) — *"From Louvain to Leiden: guaranteeing
 well-connected communities"* — show that Louvain can produce **arbitrarily badly
 connected and even disconnected communities**, measuring up to 25% badly
 connected and up to 16% disconnected in their experiments. A disconnected
 "community" fed to the observer becomes a sentence in a letter to your user
-asserting a relationship between notes that has no path between them. This is a
-real, cited failure mode of a component you are shipping. The fix has a licence
-problem — see Part IV.3, which is the most important item in this document for
-CLAUDE.md rule 10.
+asserting a relationship between notes that has no path between them. That is a
+real, cited failure mode of a component you were shipping.
+`structural.split_disconnected` now repairs it (§IV.3).
+
+The dangling-wikilink half of this report also finally escaped it:
+`daemon graph todos` (`analysis/todos.py`) surfaces unwritten targets ranked by
+how many notes are waiting on them, and names the waiting notes so the entry is
+actionable. As §II.9 argues above, that makes the daemon a **prospective-memory**
+prosthesis — the one memory system it touches that nothing else in the pipeline
+serves, and one that degrades early in both normal ageing and MCI.
 
 ### II.10 — Snapshot isolation and the consolidation phase
 
@@ -793,9 +800,16 @@ publishes wheels for CPython 3.9–3.13. This project declares
 straightforward answer (an optional extra, or waiting for the wheel) rather than
 a licensing one.
 
-*Recommended sequence anyway:* do the free fix first and measure whether Leiden
-is still worth a dependency. Alternatives, in order of preference:
-  1. **Post-hoc connectivity repair (recommended).** Keep Louvain; after it
+**✅ Option 1 shipped 2026-07-29** — `structural.split_disconnected` splits any
+Louvain community whose induced subgraph is not connected, before anything
+downstream reads it as "these notes belong together". Ten lines, no dependency,
+and it eliminates the disconnected case outright rather than reducing it. It
+does **not** give Leiden's guarantee about merely *badly* connected communities;
+whether that residue is worth a dependency is now a question real data can
+answer instead of a bet.
+
+*Remaining alternatives, in order of preference:*
+  1. ~~**Post-hoc connectivity repair.**~~ **Shipped.** Keep Louvain; after it
      returns, split any community whose induced subgraph is disconnected into its
      connected components via `nx.connected_components`. This eliminates the
      *disconnected* case entirely — the more damaging half of the Traag finding —
@@ -818,13 +832,20 @@ is still worth a dependency. Alternatives, in order of preference:
   `pyproject.toml` and is **never imported** — the code calls NetworkX's built-in
   `nx.community.louvain_communities`. It can be dropped.
 
-**IV.4 — Optimal theme matching.** *Fixes:* greedy reconciliation producing
-spurious new-theme/dormant-theme pairs that are directly user-visible. *Method:*
-Hungarian algorithm (Kuhn, 1955) via `scipy.optimize.linear_sum_assignment` on the
-cluster×theme cosine matrix, thresholded at 0.60 after assignment rather than
-during. *Where:* `analysis/themes.py:182-208`. *Effort:* S. *Licence:* scipy is
-BSD-3 ✓ (already a transitive dependency via scikit-learn, which HDBSCAN needs).
-*Bonus while you are in this file:* the `O(n²)` Python double loop at
+**IV.4 — Optimal theme matching. ✅ Shipped 2026-07-29.** Hungarian algorithm
+(Kuhn, 1955) via `scipy.optimize.linear_sum_assignment` over the cluster×theme
+cosine matrix, in `themes._optimal_pairs`. The threshold is applied *after*
+assignment, so maximising the total can never smuggle in a pairing the
+threshold rejects.
+
+Worth recording how the test went, because it is the same trap as §IV.1: the
+first version passed against the greedy implementation, since the case I
+constructed happened to be one greedy solves optimally. The discriminating case
+needs the *highest-scoring* pair to be the one that blocks a better total —
+X↔P at 0.90 strands Y, whose only viable partner was P, where optimal pairs
+X↔Q (0.44) and Y↔P (0.80) and matches both.
+
+*Still open in this file:* the `O(n²)` Python double loop at
 `themes.py:97-101` can be built from an inverted index — most fingerprint pairs
 share zero notes and score exactly 0, and skipping them is close to free.
 
@@ -1098,6 +1119,8 @@ tuned system and one that merely has numbers in it.
 | `DEFAULT_MIN_MEMBER_SIMILARITY` | 0.10 | `themes.py:37` | Judgement, with an excellent rationale (leave-one-out, against HDBSCAN small-corpus degeneracy). |
 | `DEFAULT_WARM_THRESHOLD` | 1.5 | `structural.py:53` | **Derived** — sits meaningfully between the 1.0 baseline and the 5.0 ceiling. |
 | `betweenness_sample_k` | 200 | `config.py:324` | Standard approximation practice. |
+| Louvain connectivity repair | on | `structural.py` | **Principled.** Removes the disconnected-community case Traag et al. (2019) measured. |
+| Theme assignment | Hungarian | `themes.py` | **Principled.** Exact maximum-weight bipartite matching (Kuhn, 1955), replacing greedy. |
 | `churn` alarm | ~0.5 | `agents.py:370` | Judgement, and honest about being one. |
 | `max_tokens` / `overlap` | 512 / 50 | `config.py:72-73` | Conventional RAG defaults. |
 
