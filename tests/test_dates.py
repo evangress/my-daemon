@@ -1,4 +1,6 @@
 # SPDX-License-Identifier: Apache-2.0
+from __future__ import annotations
+
 from datetime import UTC, date, datetime
 
 import pytest
@@ -114,4 +116,22 @@ def test_mtime_never_overrides_a_parsed_date():
         trusted_before=date(2026, 6, 21),
     )
     assert got is not None and got.date() == date(2024, 9, 2)
+    assert source == "frontmatter"
+
+
+def test_mtime_fallback_is_normalised_to_utc_midnight():
+    """A real mtime carries a time-of-day; occurred_at must not."""
+    got, source = _derive(
+        path="Welcome.md",
+        mtime=datetime(2026, 2, 21, 13, 3, 47, tzinfo=UTC),
+        trusted_before=date(2026, 6, 21),
+    )
+    assert got == datetime(2026, 2, 21, 0, 0, tzinfo=UTC)
+    assert source == "mtime"
+
+
+def test_naive_datetime_gets_utc_attached():
+    """PyYAML yields a naive datetime for an unquoted local timestamp."""
+    got, source = _derive({"date": datetime(2024, 9, 2, 10, 30)})
+    assert got == datetime(2024, 9, 2, 10, 30, tzinfo=UTC)
     assert source == "frontmatter"

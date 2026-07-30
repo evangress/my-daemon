@@ -98,6 +98,9 @@ def derive_occurred_at(
             pass  # 2024-99-99 as a prefix — fall through to mtime/None
 
     if trusted_before is not None and mtime.date() < trusted_before:
-        return mtime, "mtime"
+        # Normalised like the other two branches: the docstring's
+        # day-precision invariant has to hold for every source, and a real
+        # mtime carries a time-of-day that would otherwise leak through.
+        return _to_utc_midnight(mtime.date()), "mtime"
 
     return None, None
