@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import contextlib
 import uuid
+from datetime import datetime
 from pathlib import Path
 from typing import TYPE_CHECKING
 
@@ -37,6 +38,33 @@ class LocalStoreLockedError(RuntimeError):
 
 def _stable_point_id(chunk_id: str) -> str:
     return str(uuid.uuid5(uuid.NAMESPACE_URL, f"my-daemon/chunk/{chunk_id}"))
+
+
+def chunk_from_payload(p: dict) -> Chunk:
+    """Rebuild a Chunk from a Qdrant payload. Shared by seed and expansion.
+
+    Both retrieval arms rebuild chunks from payloads, and they had drifted
+    before; one function is what keeps a new payload field from reaching only
+    half the pipeline.
+    """
+
+    def _dt(key: str) -> datetime | None:
+        raw = p.get(key)
+        return datetime.fromisoformat(raw) if isinstance(raw, str) else None
+
+    return Chunk(
+        id=p["chunk_id"],
+        note_uuid=p.get("note_uuid", ""),
+        note_path=p["note_path"],
+        heading_path=list(p.get("heading_path") or []),
+        text=p.get("text", ""),
+        chunk_index=int(p.get("chunk_index", 0)),
+        tags=list(p.get("tags") or []),
+        wikilinks=list(p.get("wikilinks") or []),
+        occurred_at=_dt("occurred_at"),
+        occurred_at_source=p.get("occurred_at_source"),
+        modified_at=_dt("modified_at"),
+    )
 
 
 class VectorStore:
@@ -251,6 +279,14 @@ class VectorStore:
                 "wikilinks": chunk.wikilinks,
                 "text": chunk.text[:_CHUNK_TEXT_PREVIEW_LIMIT],
             }
+            # Omitted rather than null when absent: `IsEmpty` then means exactly
+            # "undated", and range filters have no null case to reason about.
+            if chunk.occurred_at is not None:
+                payload["occurred_at"] = chunk.occurred_at.isoformat()
+            if chunk.occurred_at_source is not None:
+                payload["occurred_at_source"] = chunk.occurred_at_source
+            if chunk.modified_at is not None:
+                payload["modified_at"] = chunk.modified_at.isoformat()
             point_vector: dict | list[float]
             if sparse is not None:
                 idx, val = sparse[i]

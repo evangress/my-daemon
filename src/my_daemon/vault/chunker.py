@@ -86,6 +86,9 @@ def chunk_note(note: Note, max_tokens: int = 512, overlap_tokens: int = 50) -> l
                     chunk_index=index,
                     tags=list(note.tags),
                     wikilinks=wikilinks,
+                    occurred_at=note.occurred_at,
+                    occurred_at_source=note.occurred_at_source,
+                    modified_at=note.mtime,
                 )
             )
             index += 1

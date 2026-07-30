@@ -4,8 +4,9 @@
 from __future__ import annotations
 
 from my_daemon.embeddings import Embedder, SparseEmbedder
-from my_daemon.models import Chunk, RetrievedChunk
+from my_daemon.models import RetrievedChunk
 from my_daemon.stores import VectorStore
+from my_daemon.stores.vector import chunk_from_payload
 
 
 def seed_search(
@@ -29,16 +30,7 @@ def seed_search(
         hits = vector_store.search(vec, top_k=top_k)
     seeds: list[RetrievedChunk] = []
     for h in hits:
-        chunk = Chunk(
-            id=h["chunk_id"],
-            note_uuid=h.get("note_uuid", ""),
-            note_path=h["note_path"],
-            heading_path=list(h.get("heading_path") or []),
-            text=h.get("text", ""),
-            chunk_index=int(h.get("chunk_index", 0)),
-            tags=list(h.get("tags") or []),
-            wikilinks=list(h.get("wikilinks") or []),
-        )
+        chunk = chunk_from_payload(h)
         seeds.append(
             RetrievedChunk(
                 chunk=chunk,

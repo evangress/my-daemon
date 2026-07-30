@@ -3,8 +3,9 @@
 
 from __future__ import annotations
 
-from my_daemon.models import Chunk, RetrievedChunk
+from my_daemon.models import RetrievedChunk
 from my_daemon.stores import GraphStore, VectorStore
+from my_daemon.stores.vector import chunk_from_payload
 
 
 def expand_from_seeds(
@@ -54,16 +55,7 @@ def expand_from_seeds(
             seed_score = seed.vector_score or 0.0
             for point in scroll_hits:
                 p = point.payload or {}
-                chunk = Chunk(
-                    id=p["chunk_id"],
-                    note_uuid=p.get("note_uuid", ""),
-                    note_path=p["note_path"],
-                    heading_path=list(p.get("heading_path") or []),
-                    text=p.get("text", ""),
-                    chunk_index=int(p.get("chunk_index", 0)),
-                    tags=list(p.get("tags") or []),
-                    wikilinks=list(p.get("wikilinks") or []),
-                )
+                chunk = chunk_from_payload(p)
                 score = seed_score * (decay**distance)
                 existing = out.get(chunk.id)
                 if existing is None or score > existing.combined_score:

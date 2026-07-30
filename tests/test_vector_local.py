@@ -289,3 +289,85 @@ def test_lock_is_released_by_close(tmp_path) -> None:
         assert second.count() == 0
     finally:
         second.close()
+
+
+# --------------------------------------------------------------------------
+# Dates on the payload: `occurred_at` / `occurred_at_source` / `modified_at`
+# --------------------------------------------------------------------------
+
+
+def _all_payloads(store: VectorStore) -> list[dict]:
+    """Read every point's payload back via the real client's scroll.
+
+    No production ``all_payloads()`` method exists on ``VectorStore`` — this
+    is test-only plumbing over the same ``scroll`` call `expand.py` uses.
+    """
+    points, _ = store._client_().scroll(
+        collection_name=store.collection, with_payload=True, limit=1000
+    )
+    return [p.payload or {} for p in points]
+
+
+def test_payload_omits_date_keys_when_undated(tmp_path) -> None:
+    """An absent key gives cleaner range semantics than an explicit null."""
+    from datetime import UTC, datetime
+
+    store = VectorStore(url=None, collection="chunks", dim=4, hybrid=True, path=tmp_path / "q")
+    try:
+        store.ensure_collection()
+        dated = Chunk(
+            id="c1",
+            note_uuid="u1",
+            note_path="a.md",
+            text="x",
+            chunk_index=0,
+            occurred_at=datetime(2024, 9, 2, tzinfo=UTC),
+            occurred_at_source="frontmatter",
+        )
+        undated = Chunk(id="c2", note_uuid="u2", note_path="b.md", text="y", chunk_index=0)
+        store.upsert(
+            [dated, undated],
+            [[0.1] * store.dim, [0.2] * store.dim],
+            sparse_vectors=[([1], [0.4]), ([2], [0.4])],
+        )
+
+        payloads = {p["chunk_id"]: p for p in _all_payloads(store)}
+        assert payloads["c1"]["occurred_at"] == "2024-09-02T00:00:00+00:00"
+        assert payloads["c1"]["occurred_at_source"] == "frontmatter"
+        assert "occurred_at" not in payloads["c2"]
+        assert "occurred_at_source" not in payloads["c2"]
+        assert "modified_at" not in payloads["c2"]
+    finally:
+        store.close()
+
+
+def test_payload_round_trip_keeps_occurred_at_and_modified_at_distinct(tmp_path) -> None:
+    from datetime import UTC, datetime
+
+    from my_daemon.stores.vector import chunk_from_payload
+
+    payload = {
+        "chunk_id": "c1",
+        "note_uuid": "u1",
+        "note_path": "a.md",
+        "text": "x",
+        "chunk_index": 0,
+        "occurred_at": "2024-09-02T00:00:00+00:00",
+        "occurred_at_source": "frontmatter",
+        "modified_at": "2026-07-01T12:00:00+00:00",
+    }
+    chunk = chunk_from_payload(payload)
+    assert chunk.occurred_at == datetime(2024, 9, 2, tzinfo=UTC)
+    assert chunk.modified_at == datetime(2026, 7, 1, 12, 0, tzinfo=UTC)
+    assert chunk.occurred_at_source == "frontmatter"
+
+
+def test_chunk_from_payload_tolerates_a_legacy_payload_without_dates() -> None:
+    """Every point already in a user's collection predates these keys."""
+    from my_daemon.stores.vector import chunk_from_payload
+
+    chunk = chunk_from_payload(
+        {"chunk_id": "c", "note_uuid": "u", "note_path": "a.md", "text": "x", "chunk_index": 0}
+    )
+    assert chunk.occurred_at is None and chunk.modified_at is None
+    assert chunk.occurred_at_source is None

@@ -118,6 +118,16 @@ class Chunk(BaseModel):
     chunk_index: int
     tags: list[str] = Field(default_factory=list)
     wikilinks: list[str] = Field(default_factory=list)
+    # Carried from the Note (see `vault/dates.py`). Optional and defaulted so
+    # every existing construction site keeps working untouched.
+    occurred_at: datetime | None = None
+    occurred_at_source: str | None = None
+    #: File mtime. Stored because the payload write is happening anyway and it
+    #: answers "what changed recently?" — a real question `occurred_at`
+    #: deliberately cannot. **Never used as the episodic axis, and never OR'd
+    #: with `occurred_at` at query time**: conflating "happened then" with "was
+    #: written then" is what makes a competitor's date filter meaningless.
+    modified_at: datetime | None = None
 
 
 class RetrievedChunk(BaseModel):
