@@ -27,43 +27,59 @@ The payoff for this codebase specifically: a seed pick stops being a no-op. It
 may still have no graph path to reinforce, but it is evidence that the seed
 policy beat the expansion policy on that query — which is recorded by
 :mod:`my_daemon.stores.policy` and is the thing the loop was missing.
+
+Extended 2026-07-30 to n rankings — team-draft *multileaving* (Schuth, Sietsma,
+Whiteson, Lefortier & de Rijke, *Multileaved Comparisons for Fast Online
+Evaluation*, CIKM 2014), which generalises the two-team draft while preserving
+the per-team position symmetry that makes a pick attributable without a
+propensity model. The third team is a cross-encoder's ordering of the whole
+pool (§IV.18), so teams now *overlap* rather than partition the pool; the
+``seen`` set already handled that.
 """
 
 from __future__ import annotations
 
 import random
+from collections.abc import Mapping, Sequence
 
 from my_daemon.models import RetrievedChunk
 
-#: The two competing rankings. Stored on ``RetrievedChunk.team`` and persisted
-#: in the retrieval summary, so a much later ``daemon select`` can still tell
+#: The competing rankings. Stored on ``RetrievedChunk.team`` and persisted in
+#: the retrieval summary, so a much later ``daemon select`` can still tell
 #: which policy earned the pick.
 SEED_TEAM = "seed"
 EXPANSION_TEAM = "expansion"
+RERANK_TEAM = "rerank"
 
 
-def team_draft(
-    seeds: list[RetrievedChunk],
-    expanded: list[RetrievedChunk],
+def multileave(
+    rankings: Mapping[str, Sequence[RetrievedChunk]],
     *,
     rng: random.Random,
 ) -> list[RetrievedChunk]:
-    """Interleave two rankings by team draft, tagging each pick with its team.
+    """Interleave n rankings by team draft, tagging each pick with its team.
 
-    Both inputs are consumed in the order given — each team always drafts its
+    Every ranking is consumed in the order given — each team always drafts its
     own best remaining candidate — so the caller is responsible for having
-    sorted them. Whichever team has drafted fewer candidates picks next; ties
-    are broken by a coin toss, which is what keeps the teams' position
-    distributions symmetric.
+    sorted them. Whichever team(s) have drafted the fewest candidates so far
+    pick next; a tie among exactly two teams is broken the way the original
+    two-team draft always was, by a coin (``rng.random() < 0.5``), so that a
+    seeded ``rng`` reproduces the old ``team_draft`` output exactly. A tie
+    among three or more teams is broken by ``rng.choice`` over *all* of them —
+    not the first two, and not a deterministic pick — because "first tied team
+    wins" would systematically hand one policy the earlier position and
+    reintroduce exactly the position bias the draft exists to cancel.
 
-    A chunk id already drafted is skipped rather than drafted twice. Expansion
-    currently cannot surface a seed's own note, but the draft should not
-    silently depend on that staying true.
+    A chunk id already drafted is skipped rather than drafted twice. This is
+    what makes overlapping rankings safe: a reranker's ordering of the whole
+    pool will contain every id the other teams already hold, not a disjoint
+    slice, and the draft must not double-surface a candidate just because two
+    teams both wanted it.
     """
 
-    queues = {SEED_TEAM: list(seeds), EXPANSION_TEAM: list(expanded)}
-    cursors = {SEED_TEAM: 0, EXPANSION_TEAM: 0}
-    counts = {SEED_TEAM: 0, EXPANSION_TEAM: 0}
+    queues = {team: list(items) for team, items in rankings.items()}
+    cursors = dict.fromkeys(queues, 0)
+    counts = dict.fromkeys(queues, 0)
     drafted: list[RetrievedChunk] = []
     seen: set[str] = set()
 
@@ -86,31 +102,33 @@ def team_draft(
             if candidate.chunk.id in seen:
                 continue
             seen.add(candidate.chunk.id)
-            # A copy, so the caller's seed/expanded lists keep their own
-            # identity — `RetrievalResult` holds all three and the team tag
-            # belongs to the presented pool, not to the source ranking.
+            # A copy, so the caller's source lists keep their own identity —
+            # `RetrievalResult` holds seed/expanded separately from the
+            # presented pool, and the team tag belongs to the latter.
             drafted.append(candidate.model_copy(update={"team": team}))
             counts[team] += 1
             return True
         return moved
 
-    while not (_exhausted(SEED_TEAM) and _exhausted(EXPANSION_TEAM)):
-        # Exhaustion is checked before fairness, and in that order, because
-        # `_draft` on an exhausted team is a no-op — dispatching to one would
-        # leave every counter unchanged and spin this loop forever.
-        if _exhausted(SEED_TEAM):
-            progressed = _draft(EXPANSION_TEAM)
-        elif _exhausted(EXPANSION_TEAM) or counts[SEED_TEAM] < counts[EXPANSION_TEAM]:
-            progressed = _draft(SEED_TEAM)
-        elif counts[EXPANSION_TEAM] < counts[SEED_TEAM]:
-            progressed = _draft(EXPANSION_TEAM)
+    while True:
+        live = [t for t in queues if not _exhausted(t)]
+        if not live:
+            return drafted
+        fewest = min(counts[t] for t in live)
+        tied = [t for t in live if counts[t] == fewest]
+
+        if len(tied) == 1:
+            choice = tied[0]
+        elif len(tied) == 2:
+            # Bit-for-bit the original two-team coin: same rng method, same
+            # call site, so `multileave` with two teams reproduces the old
+            # `team_draft` output exactly for a seeded `rng`.
+            choice = tied[0] if rng.random() < 0.5 else tied[1]
         else:
-            # Level pegging: the coin decides, which is the whole mechanism.
-            # A deterministic tie-break here would give one policy the odd
-            # position every time and reintroduce the bias.
-            progressed = _draft(SEED_TEAM if rng.random() < 0.5 else EXPANSION_TEAM)
+            # Uniform over ALL tied teams, not the first of them — see the
+            # docstring. This is the case the n-team generalisation actually
+            # adds; two teams never reach this branch.
+            choice = rng.choice(tied)
 
-        if not progressed:  # pragma: no cover — unreachable, and cheap insurance
-            break
-
-    return drafted
+        if not _draft(choice):
+            return drafted  # pragma: no cover — structural insurance

@@ -13,7 +13,7 @@ from my_daemon.config import Settings
 from my_daemon.embeddings import Embedder, SparseEmbedder
 from my_daemon.models import THEME_TAG_PREFIX, DateRange, RetrievalResult, RetrievedChunk
 from my_daemon.retrieval.expand import expand_from_seeds
-from my_daemon.retrieval.interleave import team_draft
+from my_daemon.retrieval.interleave import EXPANSION_TEAM, SEED_TEAM, multileave
 from my_daemon.retrieval.seed import seed_search
 from my_daemon.retrieval.trace import RetrievalListener, RetrievalTrace, activations_from
 from my_daemon.stores import GraphStore, VectorStore
@@ -132,9 +132,11 @@ class RetrievalOrchestrator:
             return by_score
 
         seed_ids = {s.chunk.id for s in seeds}
-        return team_draft(
-            [rc for rc in by_score if rc.chunk.id in seed_ids],
-            [rc for rc in by_score if rc.chunk.id not in seed_ids],
+        return multileave(
+            {
+                SEED_TEAM: [rc for rc in by_score if rc.chunk.id in seed_ids],
+                EXPANSION_TEAM: [rc for rc in by_score if rc.chunk.id not in seed_ids],
+            },
             rng=self.rng,
         )
 
