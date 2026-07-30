@@ -60,19 +60,41 @@ of me — this table is the whole map.
 | ✅ | **IV.4** | Optimal (Hungarian) theme matching | 1 | S | 2026-07-29 |
 | ✅ | **IV.15** | Measure the theme match threshold | 1 | S | 2026-07-28 |
 | ⬜ | **IV.16** | Sparse fingerprint distance matrix | 1 | S | — |
+| ⬜ | **IV.17** | Conditional reconciliation in the synthesis prompt † | 1 | S | — |
+| ⬜ | **IV.20** | Activation stats into ranking † | 1 | S | — |
 | ⬜ | **IV.5** | Learned per-edge forgetting rates | 2 | M | — |
 | ⬜ | **IV.6** | Personalized PageRank for expansion | 2 | M | — |
 | ✅ | **IV.7** | Debias the selection signal (interleaving) | 2 | M | 2026-07-28 |
 | ⬜ | **IV.8** | Themes as an evolutionary-clustering objective | 2 | M–L | — |
 | ⬜ | **IV.9** | A salience layer (*the amygdala gap*) | 2 | L | — |
 | ⬜ | **IV.10** | Episodic time-binding | 2 | M | — |
+| ⬜ | **IV.18** | Cross-encoder reranking as a multileaved team † | 2 | M | — |
+| ⬜ | **IV.19** | Durable supersession: update vs contradiction † | 2 | M | — |
+| ⬜ | **IV.22** | Chunk-level delta re-ingestion † | 2 | M | — |
+| ⬜ | **IV.23** | A retrieval-quality evaluation harness † | 2 | M | — |
+| ⬜ | **IV.21** | Claim-level indexing over chunks † | 2 | L | — |
 | ⬜ | **IV.11** | Conformal prediction over observer claims | 3 | — | — |
 | ⬜ | **IV.12** | Discrete curvature for bridge detection | 3 | — | — |
 | ⬜ | **IV.13** | A REM analogue: generative recombination | 3 | — | — |
 | ⬜ | **IV.14** | Two-timescale consolidation | 3 | L | — |
 
-**4 shipped · 1 partial · 11 open**, of 16. Effort: S = a sitting, M = a focused
+**4 shipped · 1 partial · 18 open**, of 23. Effort: S = a sitting, M = a focused
 session or two, L = a milestone.
+
+**† added 2026-07-30 from the competitor review** — a feature-level comparison
+against [Hindsight](https://github.com/vectorize-io/hindsight) (Vectorize, MIT)
+and [Honcho](https://github.com/plastic-labs/honcho) (Plastic Labs, AGPL-3.0),
+recorded in PROJECT_MANAGEMENT.md's AI-suggestions section for 2026-07-30. Seven
+items, IV.17–IV.23. They are placed in the tier their effort and payoff earn
+rather than kept as a block, per this document's convention that order is by tier
+and identity is by number — the dagger is how you find them as a group.
+
+**Licence note on provenance.** Hindsight is **MIT**, so its code may be copied
+into this Apache-2.0 project with attribution and its original notice retained.
+Honcho's server is **AGPL-3.0** and therefore **ideas only** — no vendoring, no
+forking, no linking; §13 extends copyleft to network use. Its SDKs (Apache-2.0)
+and CLI (MIT) are safe, and talking to a Honcho server over HTTP is fine. Every
+Honcho-derived item below is a design idea independently implemented.
 
 `◐` is used once, for **IV.3**: its correctness fix shipped, but three optional
 enhancements behind it did not. Its body entry is `- [x]` because the *defect*
@@ -86,12 +108,22 @@ and it is deliberate.
   asks whether a note *mattered* — only which code path found it. Part III.1
   argues this is the single most important gap for the assistive use case, and it
   is the one item here that would change what the daemon is *for* rather than how
-  well it works.
-- **Best value-per-hour:** **IV.2** (MMR) and **IV.16** (sparse distance matrix).
-  Both are S, both need no new dependency.
+  well it works. **IV.20 is now the cheap down payment on it** — the behavioural
+  component is already logged and simply never reaches ranking.
+- **Best value-per-hour:** **IV.17** (conditional reconciliation) first — hours,
+  no dependency, and the highest assistive value of anything in this document.
+  Then **IV.2** (MMR) and **IV.16** (sparse distance matrix), both S and both
+  dependency-free.
+- **Largest capability gap:** **IV.18**, cross-encoder reranking. The one thing
+  both competitors have that this system has no counterpart for, and
+  `sentence-transformers` is already a declared dependency, so it needs no new
+  package.
 - **Most interesting experiment:** **IV.6**, Personalized PageRank. Zero new
   dependencies, and `simulate_evolution` exists precisely to A/B it against the
   current decayed-Dijkstra expansion on your own vault.
+- **Decide before building:** **IV.21**, claim-level indexing. It is the one
+  genuinely architectural call on this list and it touches what the project *is*
+  — read its entry before starting, not after.
 - **Do not build yet:** everything in Tier 3, and **IV.8** until IV.15's sweep
   has been run against real history — it may show the stability problem is
   already solved.
@@ -755,6 +787,15 @@ salience layer offers, is precisely the wrong affordance for the target user. A
 person with cognitive decline does not need help finding the note they wrote
 yesterday. They need help finding the one that mattered.
 
+*Narrowed 2026-07-30.* The full layer is still §IV.9, but the competitor review
+found that the **behavioural component is already logged and simply never reaches
+ranking** — `note_activation_stats` is populated and `daemon hot-notes` reads it.
+Both competitors use plain repetition as their salience signal and make it a
+first-class retrieval key (Honcho orders on `times_derived` directly; Hindsight's
+`proof_count` contributes a bounded ±5%). §IV.20 is that connection, at S effort.
+So the gap is narrower than this section implied when written — what is missing is
+the *semantic* component (did this matter?), not a measurement substrate.
+
 ### III.2 — Credit assignment — *closed 2026-07-28*
 
 ~~Recorded in PROJECT_MANAGEMENT.md as the deepest open question: seeds dominate
@@ -793,6 +834,16 @@ Tulving's (1972) original semantic/episodic distinction turns on exactly this
 property: episodic memory is memory *for events located in subjective time*.
 Without a temporal index the system is a semantic memory with an episodic
 interface.
+
+*Design settled 2026-07-30, implementation pending — §IV.10.* One finding from
+measuring the real vault belongs in this gap description rather than only in the
+spec: **50% of notes carry no derivable date at all**, and the two obvious
+filesystem fallbacks are both unusable — birth time is off by a 28-day median
+(copying resets it while preserving mtime) and raw mtime by 35 days. So closing
+this gap does not mean giving every chunk a date. It means giving *half* of them
+an honest one and reporting the other half as undated, which is a materially
+weaker form of episodic memory than the section above implies is achievable and
+is worth stating before the item is marked shipped.
 
 ### III.4 — Forgetting exists, but only for edges, and only as one scalar — *open*
 
@@ -957,6 +1008,73 @@ compatibility, and `scripts/license_check.py` now enforces it in CI.
     *Licence:* none. Purely a constant-factor win — no behaviour change, so it
     should be provable by asserting the new matrix equals the old one.
 
+- [ ] **IV.17 — Conditional reconciliation in the synthesis prompt.** †
+
+    *Fixes:* `llm/prompts.py` already states the right policies — "do not invent",
+    "say so plainly", "surface the conflict instead of papering over it" — and its
+    own docstring says *"Intentionally boring for v0.1 — tune later."* The gap is
+    that a policy the model may satisfy silently is one it can skip, with neither
+    the user nor the developer able to tell when it did.
+
+    *Method:* both competitors reached the same conclusion independently and made
+    the model do **visible** work. Hindsight forces a per-candidate
+    `<event> (<date>) vs authoritative (<date>) → BEFORE/AFTER → KEEP/DROP` audit
+    before answering, annotated *"the single most common mistake — do not skip
+    this step even if you feel confident."* Honcho mandates a verification pass
+    and a hard abstention contract, *"a confident 'I don't know' is ALWAYS
+    correct."* Adopted here in **conditional** form: no ceremony on
+    straightforward questions, a short visible reconciliation block when excerpts
+    genuinely compete or when recency decides the answer. Plus three rules the
+    current prompt lacks — Honcho's **update-vs-contradiction split** (recency
+    resolves an update; a genuine contradiction is presented to the user, not
+    resolved), Hindsight's **anti-arithmetic rule** (never derive a number across
+    excerpts — "2 dogs" + "a dog named Rex" must not become 3), and explicit
+    handling of `(undated)` material.
+
+    *Why it matters more here than for either competitor:* a general agent memory
+    that guesses wrong is annoying. A memory prosthetic aimed at cognitive decline
+    that reports a superseded decision as current has handed its user a false
+    autobiographical memory, in their own voice, with a citation attached.
+
+    *Where:* `llm/prompts.py` only. *Effort:* S. *Licence:* none — no dependency,
+    and the Honcho-derived ideas are design only (AGPL, see the provenance note).
+    *Depends on:* IV.10 amendment 2 — there is nothing to reconcile on until the
+    model is shown dates. *Spec:*
+    `docs/superpowers/specs/2026-07-30-conditional-reconciliation-design.md`.
+
+- [ ] **IV.20 — Activation stats into ranking.** †
+
+    *Fixes:* III.1's amygdala gap, cheaply and partially. `STRENGTH_BY_SOURCE`
+    describes which retrieval route found a chunk, which is a fact about the
+    machinery rather than about whether the note mattered.
+
+    *Method:* both competitors converged on **repetition** as their salience
+    signal, and both make it a first-class retrieval key — Honcho's
+    `times_derived` is ordered on directly (`ORDER BY times_derived DESC`),
+    Hindsight's `proof_count` contributes a bounded ±5% via
+    `clamp(0.5 + ln(n)/10)`. The relevant finding is that **this system is closer
+    than III.1 implies**: `note_activation_stats` is already populated and
+    `daemon hot-notes` already reads it. Nothing feeds it back into ranking. The
+    work is a bounded multiplicative term over data already logged, not a new
+    subsystem.
+
+    *Caution:* it must stay bounded and it must not become a closed loop — a note
+    that ranks higher because it was retrieved often will be retrieved more often.
+    Hindsight's ±5% ceiling is the right order of magnitude, and the honest
+    sequence is to measure the effect through IV.18's multileaved draft rather
+    than to assert it.
+
+    *Where:* `retrieval/orchestrator.py`, `stores/activations.py`. *Effort:* S.
+    *Licence:* none.
+
+    *Worth recording as negative evidence:* Hindsight ships
+    `memory_units.access_count` — `NOT NULL DEFAULT 0`, **indexed DESC on both
+    database backends** — read and written by no code in its repository; and an
+    `engine/reflect/observations.py` defining `Trend` (STRENGTHENING / WEAKENING /
+    STALE) with real density-ratio logic, imported by nothing. Two teams built the
+    schema for adaptive memory strength and did not build the mechanism. This
+    project has the mechanism (II.4) and is missing only this connection.
+
 ### Tier 2 — Mechanisms with real behavioural payoff
 
 - [ ] **IV.5 — Learned per-edge forgetting rates.**
@@ -1099,6 +1217,200 @@ compatibility, and `scripts/license_check.py` now enforces it in CI.
     *Where:* `vault/chunker.py`, `stores/vector.py`, `stores/activations.py`.
     *Effort:* M. *Licence:* none.
 
+    *Design settled 2026-07-30.* Scope narrowed to **foundation + query-time
+    filtering**; the TCM fingerprint term is deferred to its own measurement pass.
+    Spec: `docs/superpowers/specs/2026-07-29-episodic-time-binding-design.md`.
+    The competitor review shaped four decisions here — separate `occurred_at` from
+    `modified_at` and never `OR` them at query time (Hindsight's temporal `WHERE`
+    unions event time with assertion time, undoing the benefit of storing both);
+    filter **both** retrieval arms (only 1 of Hindsight's 4 arms receives the date
+    bounds, so their filter degrades into a ranking nudge while looking like a
+    filter); **reject partial dates** so precision is uniform by construction and
+    no granularity enum is needed (Hindsight stores "sometime in 2024" as a
+    year-long range and then scores it at the *midpoint*, so it behaves as though
+    it happened on 2 July); and normalise to UTC on **both** sides of the
+    comparison (Hindsight reinterprets naive server-local time as UTC, shifting
+    "yesterday" by the host offset on every internal call). A measurement against
+    134 real notes also killed the obvious fallback: **file birth time is the
+    worst available axis** — 28-day median error, because copying a file resets
+    birth time while preserving mtime — and mtime is trustworthy only where it
+    predates the import, which is 0-day median but rescues just 9 of 67 undated
+    notes.
+
+- [ ] **IV.18 — Cross-encoder reranking as a multileaved team.** †
+
+    *Fixes:* there is no relevance reranking anywhere.
+    `RetrievalOrchestrator._pool` sorts on `combined_score`, which is a hybrid RRF
+    score for seeds and a decayed graph distance for expanded candidates — two
+    quantities on different scales, compared directly. This is the largest
+    capability gap the competitor review found, and the only one of its findings
+    that was absent from this document entirely.
+
+    *Method:* a local cross-encoder scores `(query, context-prefixed chunk)` pairs
+    and produces an **alternative ordering of the same pool**, which competes
+    against the current score-merge ordering inside the draft. Generalise
+    `retrieval/interleave.py` from 2-team to n-team — **team-draft multileaving**,
+    Schuth, Sietsma, Whiteson, Lefortier & de Rijke, CIKM 2014 — so `daemon policy`
+    reports whether reranking actually earns picks on this vault. Comparing two
+    rankings of one candidate set is in fact the more canonical team-draft setup
+    than the existing seed-versus-expansion comparison, which partitions the pool.
+
+    *Two details worth copying from Hindsight verbatim:* pair the query against
+    `"{note_path} › {heading} [date]\n{text}"` rather than bare text, since heading
+    and date are real relevance signal; and **pass reranker scores through
+    unchanged when they are already in [0,1]**, sigmoiding only raw logits —
+    their in-code reasoning is that a calibrated model scoring a top candidate at
+    0.007 *means* it, and unconditional sigmoiding maps everything to ~0.5.
+
+    *Cost:* **no new package.** `sentence-transformers>=2.7` is already a declared
+    direct dependency and ships `CrossEncoder` (verified, 5.5.0 installed), and
+    `embeddings/embedder.py` already has the lazy-load + `download()` + offline
+    cache pattern to copy. A new *model artifact* is introduced, whose licence
+    `scripts/license_check.py` does **not** cover — it checks Python
+    distributions, not model weights. Verifying the weights' licence is a
+    pre-merge gate, not an afterthought.
+
+    *Note:* IV.2 (MMR) is a **diversity** operator, not a relevance one. These are
+    complements; shipping either does not remove the case for the other.
+
+    *Where:* new `retrieval/rerank.py`, plus `retrieval/interleave.py` and
+    `retrieval/orchestrator.py`. *Effort:* M. *Licence:* no new package; model
+    weights to verify. *Spec:*
+    `docs/superpowers/specs/2026-07-30-cross-encoder-multileaving-design.md`.
+
+- [ ] **IV.19 — Durable supersession: update versus contradiction.** †
+
+    *Fixes:* nothing in this system records that one statement supersedes another.
+    IV.17 handles it in the prompt, which means the conclusion is re-derived by an
+    LLM on **every read** — not durable, not cacheable, not auditable.
+
+    *Method:* two policies, not one, following Honcho — *an update resolves by
+    recency; a contradiction escalates to the human.* The durable form stores the
+    resolution rather than re-deriving it: a supersession marker between chunks or
+    notes, written during consolidation where a dated conflict is detected, and
+    read at retrieval time to demote the superseded side.
+
+    *Where nobody is good:* **neither competitor has this.** Hindsight has no
+    `valid_to`, no `supersedes` edge, no version chain on facts; its
+    `observation_history` is capped at 50 rows and read by nothing for retrieval.
+    Honcho overwrites observations destructively and hard-`DELETE`s contradicted
+    ones. Both resolve current truth in a read-time prompt. So this is an area
+    where the field is weak and the assistive framing makes it matter more here
+    than for either of them.
+
+    *Worth copying regardless — Hindsight's `invalidated_memory_units` archive:*
+    superseded rows are **moved to a sibling table rather than flagged**, so every
+    hot-path query is free of a state predicate ("if a row is in `memory_units` it
+    is live"). Two supporting details that make it work: snapshot the
+    non-recomputable derived data for lossless revert, and **deliberately omit the
+    embedding** so a model or dimension change cannot desync the archive. A better
+    shape than soft-delete, and MIT-licensed.
+
+    *Caution:* the escalation path is the valuable half. For a user whose own
+    recall is unreliable, silent resolution is the dangerous behaviour and "your
+    notes disagree — which is right?" is the useful one.
+
+    *Where:* `stores/`, `pipeline/agent_observe.py`, `retrieval/orchestrator.py`.
+    *Effort:* M. *Licence:* none. *Depends on:* IV.10 (a dated conflict is not
+    detectable without dates).
+
+- [ ] **IV.22 — Chunk-level delta re-ingestion.** †
+
+    *Fixes:* ingest skips at **whole-note** granularity on `body_sha256`. Editing
+    one paragraph of a long note re-chunks and re-embeds the entire note.
+
+    *Method:* Hindsight hashes **each chunk independently**, classifies every chunk
+    as `unchanged / changed / new / removed`, deletes only the changed and removed
+    ones, and re-runs extraction on the delta alone. Its `chunk_overlap = 0` plus a
+    structure-aware splitter is what makes the classification clean.
+
+    *Honest priority:* **low today, mandatory later.** This project has no LLM in
+    the ingest path, so the saving now is embedding cost only — real but modest at
+    134 notes. It becomes a hard prerequisite the moment IV.21 puts an LLM call in
+    the ingest path, at which point whole-note re-ingest means re-paying for
+    extraction over unchanged prose. Sequence it immediately before IV.21, not
+    before IV.18.
+
+    *Complication specific to this codebase:* the chunker uses a 50-token overlap,
+    so adjacent chunks are not independent and a single-paragraph edit dirties its
+    neighbours. Either accept a slightly wider dirty set or reconsider the overlap
+    — Hindsight chose zero overlap partly for this reason.
+
+    *Where:* `pipeline/ingest.py`, `vault/chunker.py`. *Effort:* M.
+    *Licence:* none.
+
+- [ ] **IV.23 — A retrieval-quality evaluation harness.** †
+
+    *Fixes:* there is no way to answer "did that retrieval change help?" except by
+    reading answers and forming an impression. 789 tests establish that the
+    pipeline *works*, not that it *retrieves well*.
+
+    *Method:* a small, honest, vault-local harness — a set of questions with
+    known-correct source notes, scored on whether retrieval surfaced them, run
+    against a snapshot so a change is comparable across commits. `simulate_evolution`
+    already exists to replay history against a shadow store; this is the
+    quality-side companion to it.
+
+    *Deliberately not LoCoMo or LongMemEval*, and the competitor review is the
+    reason. Both projects publish headline numbers with serious caveats:
+    Hindsight's are **not reproducible from its own repository** (results
+    gitignored, published from two other repos), its judge **defaults to the same
+    model as the system under test**, LongMemEval's *abstention* category — the one
+    that penalises hallucination — is **not implemented**, and CI runs a
+    hand-picked 3-of-10 LoCoMo subset that excludes the conversation which times
+    out. Honcho's published quality depends on a **proprietary fine-tune absent
+    from its repository**. Meanwhile `daemon policy`'s interleaved win rates and
+    `simulate_evolution`'s replay are *more* honest instruments than either. What
+    is missing is not a benchmark — it is any published number at all, which is a
+    credibility gap rather than a quality one.
+
+    *Where:* new `analysis/eval.py` plus fixtures. *Effort:* M. *Licence:* none.
+
+- [ ] **IV.21 — Claim-level indexing over chunks.** †
+
+    **The one genuinely architectural item on this list. Read this before starting
+    it, and expect to brainstorm rather than implement.**
+
+    *Fixes:* this system retrieves **prose**; both competitors retrieve
+    **propositions**. A chunk is a slab of text; a claim is something that can be
+    superseded, deduplicated, scored, and pointed at. Four consequences follow
+    from not having them: supersession is impossible (IV.19 has no object to mark),
+    nothing deduplicates a fact restated across eleven notes so all eleven compete
+    for the same token budget, there is no provenance graph over conclusions, and
+    **IV.9 feels hard partly because there is nothing to attach a salience score
+    to**.
+
+    *Method, and the cost split both competitors reached independently:* **one
+    cheap structured-output LLM call per chunk at ingest**, extracting only literal
+    atomic self-contained claims — Hindsight at 3000 chars and `temperature 0.1`,
+    Honcho at ~1k tokens, whose `CLAUDE.md` calls it the "minimal deriver" and says
+    it *"trades flexibility for cost and predictability."* All higher-order
+    reasoning is deferred to a background pass. **This project already has the
+    background pass** (II.10) and nothing propositional to run it over.
+
+    *The tension that must be resolved first, not during implementation.*
+    Extraction creates a second source of truth, which is precisely what this
+    project and Hindsight's own Obsidian plugin both refuse — its plugin contract
+    opens *"Hindsight is never a second source of truth."* Hindsight resolves it by
+    extracting facts while keeping the vault canonical for *content*: facts are a
+    derived, deletable, rebuildable index, never authoritative. The recommended
+    middle path here is narrower than full extraction — **claim-level indexing that
+    keeps `chunk_uuid` + `note_uuid` as its only identity, is never displayed as
+    truth, and always cites back to the chunk.** A retrieval index, not a fact
+    store.
+
+    *Two rules to carry over from Hindsight's consolidation prompt*, which is the
+    most reusable artifact in either repository: **"never compute"** — no
+    arithmetic or logical derivation across claims, since it invents facts present
+    in none of them — and **"preserve history"**: claims recording that something
+    *changed* (sold, moved, decided) must never be deleted as redundant.
+
+    *Prerequisite:* IV.22. Whole-note re-ingest with an LLM in the path is
+    expensive enough to matter.
+
+    *Where:* new `pipeline/claims.py`, `stores/`, and the ingest path.
+    *Effort:* L. *Licence:* none beyond the existing Anthropic client.
+
 ### Tier 3 — Worth knowing about, not worth building yet
 
 - [ ] **IV.11 — Conformal prediction over observer claims.**
@@ -1186,6 +1498,8 @@ them anywhere formal.
 - ✓ Carbonell, J., & Goldstein, J. (1998). The use of MMR, diversity-based reranking for reordering documents and producing summaries. *SIGIR '98*, 335–336.
 - ✓ Joachims, T., Swaminathan, A., & Schnabel, T. (2017). Unbiased learning-to-rank with biased feedback. *WSDM '17*, 781–789.
 - ✓ Radlinski, F., Kurup, M., & Joachims, T. (2008). How does clickthrough data reflect retrieval quality? *CIKM '08*, 43–52.
+- ✓ Schuth, A., Sietsma, F., Whiteson, S., Lefortier, D., & de Rijke, M. (2014). Multileaved comparisons for fast online evaluation. *CIKM '14*, 71–80. (Generalises team-draft interleaving to n rankers — the basis for §IV.18's third team.)
+- ○ Nogueira, R., & Cho, K. (2019). Passage re-ranking with BERT. *arXiv:1901.04085*. (The cross-encoder reranking pattern §IV.18 adopts; the `ms-marco-MiniLM` family descends from this line.)
 - ○ Joachims, T. (2002). Optimizing search engines using clickthrough data. *KDD '02*.
 - ○ Spärck Jones, K. (1972). A statistical interpretation of term specificity and its application in retrieval. *Journal of Documentation*, 28(1), 11–21.
 - ○ Robertson, S., & Zaragoza, H. (2009). The probabilistic relevance framework: BM25 and beyond. *FnTIR*, 3(4).

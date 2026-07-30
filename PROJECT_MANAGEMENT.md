@@ -40,11 +40,17 @@ judgement calls. Read it before adding any new learning machinery.
 
 **Every proposal in it carries a checkbox**, with a status index at the top —
 `- [x]` is running in the repo today, `- [ ]` is available to build, each with
-effort and licence. Currently **4 shipped · 1 partial · 11 open of 16**. Item
+effort and licence. Currently **4 shipped · 1 partial · 18 open of 23**. Item
 IDs (`§IV.7`) are permanent and are never renumbered, so they mean the same
 thing here, in that document, and in commit messages. If you want to know what
-to build next, that index is the answer; the largest open item is **§IV.9**, the
+to build next, that index is the answer; the largest open item is **§IV.21**,
+claim-level indexing, and the largest *conceptual* gap is still **§IV.9**, the
 salience layer.
+
+**Seven items (§IV.17–§IV.23) were added 2026-07-30 from a competitor review**
+against Hindsight and Honcho — they carry a `†` in the status index. See the
+AI-suggestions entry for 2026-07-30 below for what that review found and what it
+did not change.
 
 ## Milestone Plan — Adaptive Memory Loop
 
@@ -630,4 +636,100 @@ turned into concrete work, in priority order:
   retrieval-strength distinction (§III.4); and the 30-day half-life applies one
   forgetting curve to a passing curiosity and a decade-long preoccupation alike
   (§IV.5 — `py-fsrs` is MIT, verified, if you want a learned version).
+
+### 2026-07-30 — After comparing against Hindsight and Honcho
+
+A feature-level review of two adjacent open-source projects, each read by an Opus
+sub-agent against its source rather than its README:
+[Hindsight](https://github.com/vectorize-io/hindsight) (Vectorize, **MIT**, 18.9k
+stars, ~103k LOC engine) and [Honcho](https://github.com/plastic-labs/honcho)
+(Plastic Labs, **AGPL-3.0** server, 6.3k stars). It produced §IV.17–§IV.23.
+
+**Licences first, because they bound what is even possible.** Hindsight is MIT,
+so its code may be copied here with attribution and its notice retained. Honcho's
+server is AGPL-3.0 — **ideas only**; no vendoring, forking, or linking, and §13
+extends copyleft to network use. Its SDKs (Apache-2.0) and CLI (MIT) are safe,
+and calling a Honcho server over HTTP is fine. One trap: Hindsight's
+`hindsight-api/README.md` states "Apache 2.0", which is **wrong** — the repo is
+MIT. Do not cite that file.
+
+**Honcho is not really a competitor.** It has no notion of a note, link, tag,
+folder, or document; its docs tell you to model files as "messages from one peer",
+which turns a vault into one person's monologue and yields conclusions *about the
+author* rather than a queryable model of the subject matter. **Hindsight is** —
+and it ships a first-class Obsidian plugin (~2,492 LOC TS) whose contract is
+worth knowing because it is ours: one-way sync, vault canonical, mandatory
+citations, conversations not stored by default, implicit `vault:` / `folder:` /
+`created:` / `updated:` tagging.
+
+**Where this project is genuinely ahead** — worth recording, because it is easy to
+lose confidence reading two larger repos:
+
+1. **The graph is human-authored.** Both competitors *derive* their relational
+   structure from LLM extraction. This system reads the wikilinks and tags the
+   person drew by hand and only *weights* them from behaviour. In a vault that is
+   the highest-quality relational signal available, and nobody else uses it.
+2. **Nobody else has behavioural learning at all.** And the negative evidence is
+   striking: Hindsight ships `memory_units.access_count` — `NOT NULL DEFAULT 0`,
+   **indexed DESC on both DB backends** — that no code reads or writes, plus a
+   `Trend` (STRENGTHENING/WEAKENING/STALE) function imported by nothing. Two teams
+   built the schema for adaptive memory strength and did not build the mechanism.
+3. **Forgetting exists here and nowhere else.** Hindsight: no decay, no TTL, no
+   eviction — stated as intentional, but `max_observations_per_scope` defaults to
+   *unlimited*. Honcho: exhaustive grep confirms none. §III.4 is honest that ours
+   is one scalar on edges only — but "limited" beats "absent".
+4. **Snapshot-isolated consolidation.** `open_readonly()` handles that *raise* on
+   write mean overnight analysis cannot contaminate live state. Honcho dreams
+   against the live DB; Hindsight consolidates in place with destructive `UPDATE`
+   and hard `DELETE`. And `simulate_evolution` can replay history against a shadow
+   store — neither can A/B a retrieval change against its own past.
+5. **Team-draft interleaving and the policy ledger.** Unmatched. Neither has any
+   notion that its selection signal might be position-biased, and neither has the
+   discipline in `stores/policy.py` of refusing to feed win rates back into
+   ranking.
+6. **Themes cluster query behaviour, not content.** Both competitors cluster
+   facts. Clustering which sets of notes fire together when *this person* wonders
+   about things is a different and more personal signal.
+7. **Prospective memory.** `daemon graph todos` has no counterpart in either. For
+   the assistive framing that is not minor — prospective memory degrades early in
+   ageing and MCI, before the episodic recall everything else here serves.
+8. **Licence compliance as a CI gate.** Neither has anything comparable.
+
+**The one architectural gap: this system retrieves prose; both retrieve
+propositions.** That is §IV.21, and it is the only item here that touches what
+the project *is* rather than how well it works. Read its entry before starting —
+extraction creates a second source of truth, which both this project and
+Hindsight's own plugin contract refuse, and the recommended middle path is
+narrower than full extraction.
+
+**On their benchmark numbers — treat with care.** Hindsight's headline results are
+**not reproducible from its own repo** (results gitignored, published from two
+other repositories), its judge **defaults to the same model as the system under
+test**, LongMemEval's *abstention* category — the one penalising hallucination —
+is **not implemented**, CI runs a hand-picked 3-of-10 LoCoMo subset excluding the
+conversation that times out, and its "independently reproduced by Virginia Tech
+and The Washington Post" claim names institutions represented by the paper's own
+co-authors. Honcho's published quality depends on a **proprietary fine-tune absent
+from its repo**; the OSS default model is `gpt-5.4-mini` everywhere. Their own
+deep-dive posts are considerably more honest than their READMEs — Honcho's
+consolidation post lists three systems *above* it. The gap here is not quality, it
+is that no number is published at all (§IV.23).
+
+**Two documentation habits worth stealing.** Both repos carry unusually good
+in-code rationale — Hindsight's comments cite issue numbers and measured
+before/after latencies; Honcho's `CLAUDE.md` documents *invariants with reasons*
+("never hold a DB session across external calls"; "never write through a read-only
+AUTOCOMMIT session, because savepoints silently break"). This project already
+writes in that register; it is reassuring that the two most mature projects in the
+space do too.
+
+**Deliberately not adopted**, so it is on record: Honcho's peer/`(observer,
+observed)` domain model (no place for documents, links, or folders); Hindsight's
+"TEMPR" branding (**zero code footprint** — no class, function, module, or config
+key, and never expanded anywhere); Hindsight's `_infer_temporal_date`
+first-date-in-body heuristic (accurate but its failure mode is dating a reference
+note to a date discussed inside it); Honcho's enumeration and dedup prompt
+procedures (fitted to LongMemEval categories, not to anything a vault owner asks);
+and hosted reranker or embedding providers (13 in Hindsight — this project is
+local-first and one local model is the whole requirement).
 
