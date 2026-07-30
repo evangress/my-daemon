@@ -47,6 +47,9 @@ class FakeVectorStore:
     def set_note_path(self, note_uuid: str, rel_path: str) -> None:
         self.renamed.append((note_uuid, rel_path))
 
+    def set_occurred_at(self, note_uuid, occurred_at, source, modified_at) -> None:  # noqa: ANN001
+        pass
+
     def upsert(self, chunks, vectors, sparse_vectors=None) -> None:  # noqa: ANN001
         self.upserted.extend(c.id for c in chunks)
 

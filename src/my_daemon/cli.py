@@ -50,6 +50,7 @@ from my_daemon.pipeline.agent_link import run_link
 from my_daemon.pipeline.agent_observe import run_observe
 from my_daemon.pipeline.agent_reflect import run_reflect
 from my_daemon.pipeline.backfill import backfill_activations
+from my_daemon.pipeline.backfill_dates import backfill_dates
 from my_daemon.pipeline.migrate_uuids import (
     assign_uuids,
     list_migration_runs,
@@ -2111,6 +2112,46 @@ def migrate_backfill_activations(
         console.print(f"[yellow]{report.warning}[/yellow]")
     if report.dry_run:
         console.print("\n[cyan]Dry run.[/cyan] Re-run with --apply to write.")
+
+
+@migrate_app.command("backfill-dates")
+def migrate_backfill_dates(
+    dry_run: bool = typer.Option(False, "--dry-run", help="Report and write nothing."),
+) -> None:
+    """Populate `occurred_at` on existing chunks without re-embedding."""
+    s = _load()
+    report = backfill_dates(s, dry_run=dry_run)
+
+    table = Table(title="backfill-dates" + (" (DRY RUN)" if dry_run else ""))
+    table.add_column("source")
+    table.add_column("notes", justify="right")
+    table.add_row("frontmatter", str(report.frontmatter))
+    table.add_row("filename", str(report.filename))
+    table.add_row("mtime", str(report.mtime))
+    table.add_row("undated", str(report.undated))
+    console.print(table)
+    console.print(
+        f"scanned {report.scanned}  ·  "
+        + ("would update" if dry_run else "updated")
+        + f" {report.updated}"
+    )
+
+    if report.import_clusters:
+        earliest = min(report.import_clusters)
+        console.print(
+            f"\n[yellow]Detected {len(report.import_clusters)} likely import "
+            "cluster(s) (birth-time dates shared by multiple notes):[/yellow]"
+        )
+        for day, count in sorted(report.import_clusters.items()):
+            console.print(f"  {day}: {count} notes")
+        console.print(
+            f"[dim]If these are bulk-import artifacts, consider setting "
+            f"vault.mtime_trusted_before: '{earliest}' (the earliest cluster) "
+            "and re-running.[/dim]"
+        )
+
+    if dry_run:
+        console.print("\n[cyan]Dry run.[/cyan] Re-run without --dry-run to write.")
 
 
 @migrate_app.command("assign-uuids")

@@ -176,6 +176,14 @@ def ingest_vault(
         if prev.get("body_sha256") == body_hash:
             # The body is identical, so nothing needs embedding. Two cheaper
             # things may still have changed.
+            #
+            # NOTE: this manifest treats chunk payload as a pure function of
+            # chunk *content*, which stopped being true when `occurred_at`
+            # arrived (§IV.10). A payload field derived from frontmatter or
+            # filename is refreshed by the `fm_changed` / `renamed` branches
+            # below, but is invisible to a body-hash comparison — which is why
+            # a one-time `daemon migrate backfill-dates` exists. The next
+            # metadata-derived payload field will hit this same wall.
             chunk_ids = prev.get("chunk_ids", [])
             renamed = prev.get("path") != note.relative_path
             fm_changed = prev.get("frontmatter_sha256") != _frontmatter_hash(note)
@@ -186,6 +194,13 @@ def ingest_vault(
                 vector_store.set_note_path(note_uuid, note.relative_path)
                 manifest[note_uuid]["path"] = note.relative_path
             if renamed or fm_changed:
+                # A rename can change a filename-derived date, and a
+                # frontmatter edit can change a frontmatter-derived one —
+                # either way `occurred_at` needs the same refresh as
+                # `note_path` above, or it goes stale until a full rebuild.
+                vector_store.set_occurred_at(
+                    note_uuid, note.occurred_at, note.occurred_at_source, note.mtime
+                )
                 # `update_note` is differential, so tags and wikilinks refresh
                 # while learned edge weights survive.
                 graph_store.update_note(note, chunk_ids=chunk_ids)

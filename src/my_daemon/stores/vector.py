@@ -429,6 +429,56 @@ class VectorStore:
             wait=True,
         )
 
+    def set_occurred_at(
+        self,
+        note_uuid: str,
+        occurred_at: datetime | None,
+        source: str | None,
+        modified_at: datetime | None,
+    ) -> None:
+        """Refresh the date payload on every chunk of a note, without re-embedding.
+
+        Same shape as :meth:`set_note_path`: chunk ids don't hash these
+        fields, so a date correction (backfill, a frontmatter edit, a rename
+        that changes a filename-derived date) is a payload write, not a
+        re-embed.
+
+        A ``None`` value **deletes** the key rather than writing it as null —
+        ``date_conditions`` and ``count_undated`` both key off *absence*
+        (``IsEmptyCondition`` / no range clause), and a stored null would
+        satisfy neither, silently reviving a date a note has since lost.
+        """
+
+        from qdrant_client.http.models import FieldCondition, Filter, MatchValue
+
+        points_filter = Filter(
+            must=[FieldCondition(key="note_uuid", match=MatchValue(value=note_uuid))]
+        )
+        client = self._client_()
+
+        fields = {
+            "occurred_at": occurred_at.isoformat() if occurred_at is not None else None,
+            "occurred_at_source": source,
+            "modified_at": modified_at.isoformat() if modified_at is not None else None,
+        }
+        to_set = {k: v for k, v in fields.items() if v is not None}
+        to_delete = [k for k, v in fields.items() if v is None]
+
+        if to_set:
+            client.set_payload(
+                collection_name=self.collection,
+                payload=to_set,
+                points=points_filter,
+                wait=True,
+            )
+        if to_delete:
+            client.delete_payload(
+                collection_name=self.collection,
+                keys=to_delete,
+                points=points_filter,
+                wait=True,
+            )
+
     def delete_by_note_uuid(self, note_uuid: str) -> None:
         from qdrant_client.http.models import FieldCondition, Filter, FilterSelector, MatchValue
 
