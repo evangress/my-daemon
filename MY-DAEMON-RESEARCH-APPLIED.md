@@ -67,7 +67,7 @@ of me — this table is the whole map.
 | ✅ | **IV.7** | Debias the selection signal (interleaving) | 2 | M | 2026-07-28 |
 | ⬜ | **IV.8** | Themes as an evolutionary-clustering objective | 2 | M–L | — |
 | ⬜ | **IV.9** | A salience layer (*the amygdala gap*) | 2 | L | — |
-| ⬜ | **IV.10** | Episodic time-binding | 2 | M | — |
+| ✅ | **IV.10** | Episodic time-binding | 2 | M | 2026-07-30 |
 | ⬜ | **IV.18** | Cross-encoder reranking as a multileaved team † | 2 | M | — |
 | ⬜ | **IV.19** | Durable supersession: update vs contradiction † | 2 | M | — |
 | ⬜ | **IV.22** | Chunk-level delta re-ingestion † | 2 | M | — |
@@ -78,7 +78,7 @@ of me — this table is the whole map.
 | ⬜ | **IV.13** | A REM analogue: generative recombination | 3 | — | — |
 | ⬜ | **IV.14** | Two-timescale consolidation | 3 | L | — |
 
-**4 shipped · 1 partial · 18 open**, of 23. Effort: S = a sitting, M = a focused
+**5 shipped · 1 partial · 17 open**, of 23. Effort: S = a sitting, M = a focused
 session or two, L = a milestone.
 
 **† added 2026-07-30 from the competitor review** — a feature-level comparison
@@ -764,7 +764,7 @@ for a Part IV proposal, so each carries the same checkbox: `- [x]` closed,
 
 - [ ] **III.1 — No salience layer** → remedy §IV.9 *(open — the big one)*
 - [x] **III.2 — Credit assignment** → closed 2026-07-28 by §IV.7
-- [ ] **III.3 — No episodic time-binding** → remedy §IV.10 *(open)*
+- [x] **III.3 — No episodic time-binding** → closed 2026-07-30 by §IV.10
 - [ ] **III.4 — Forgetting is edge-only, and one scalar** → remedy §IV.5 *(open)*
 
 ### III.1 — No salience layer (the amygdala gap) — *open*
@@ -819,7 +819,7 @@ deliberately not made: nothing feeds the win rate back into the draft ratio or
 the expansion decay, because a policy tuned on its own win rate is a closed loop.
 Watch the numbers for a few months before wiring anything to them.
 
-### III.3 — No episodic time-binding — *open*
+### III.3 — No episodic time-binding — *closed 2026-07-30*
 
 The earlier document flagged that "episodic memory has no clean analog because
 event-time-place binding is harder than embedding similarity," and the
@@ -1200,7 +1200,7 @@ compatibility, and `scripts/license_check.py` now enforces it in CI.
     introspect about the user's feelings. The semantic component should be
     opt-in.
 
-- [ ] **IV.10 — Episodic time-binding.**
+- [x] **IV.10 — Episodic time-binding.**
 
     *Fixes:* Part III.3. `Chunk` carries no timestamp, so "what was I working on
     last spring?" is not answerable by retrieval — only by luck, if a note

@@ -274,6 +274,33 @@ NiceGUI's long-term fate) are not yet decided.
 
 ## Done
 
+- **Episodic time-binding, §IV.10 (2026-07-30).** Closes Part III.3: `Chunk`
+  now carries an honest `occurred_at` (parsed from frontmatter, else filename,
+  else file mtime as a last resort) plus `occurred_at_source`, and query-time
+  filtering can bound retrieval to a date range on it. The synthesis prompt's
+  `build_context_block` (`llm/prompts.py`) now shows the model that date
+  instead of our internal ranking machinery: `[YYYY-MM-DD]` for a stated date,
+  `[YYYY-MM-DD~]` for one inferred from mtime (the tilde is the model's cue
+  that it's a guess, not a fact from the note), and `(undated)` — explicitly,
+  not silence — when nothing is derivable. `score=`, `vector=`, and
+  `graph_distance=` are gone from the block entirely: they were facts about
+  retrieval, not the world, and no prompt instruction ever consumed them.
+  The hard part was upstream of this task — deciding what counts as a stated
+  date at all. `occurred_at` and `modified_at` are kept strictly separate and
+  never OR'd at query time (conflating "happened then" with "was written
+  then" is what makes a naive date filter meaningless), partial dates are
+  rejected rather than scored at some midpoint, and everything normalizes to
+  UTC before comparison.
+  **Honest limitation:** about half of a typical vault carries no derivable
+  date at all — file birth time was measured and rejected as a fallback (28-day
+  median error, since copying a file resets it while preserving mtime), and raw
+  mtime recovered only 9 of 67 undated notes on the author's own vault. The
+  natural-language → `DateRange` conversion ("last spring") is deliberately
+  left to the model rather than built here, so a query like "what was I
+  working on last spring?" still needs that one translation step before the
+  date filter can act on it.
+  859 → 865 tests.
+
 - **License compliance is a CI gate (2026-07-29).** `scripts/license_check.py`
   now runs in `.github/workflows/ci.yml` with `--strict`, so a dependency with
   an incompatible *or unrecognised* licence turns the build red. CLAUDE.md
