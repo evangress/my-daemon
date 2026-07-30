@@ -2424,13 +2424,19 @@ def policy() -> None:
     """
 
     s = _load()
-    teams = [SEED_TEAM, EXPANSION_TEAM] + ([RERANK_TEAM] if s.retrieval.rerank else [])
-    console.print(
-        f"[dim]{len(teams)} teams currently drafting ({', '.join(teams)}). Win rates "
-        "gathered under a different team count are not directly comparable — "
-        "history recorded before the count last changed is noise against "
-        "today's numbers, not signal.[/dim]\n"
-    )
+    if not s.retrieval.interleave:
+        console.print(
+            "[dim]0 teams drafting — interleaving disabled — no draft runs, so no "
+            "policy attribution is possible.[/dim]\n"
+        )
+    else:
+        teams = [SEED_TEAM, EXPANSION_TEAM] + ([RERANK_TEAM] if s.retrieval.rerank else [])
+        console.print(
+            f"[dim]{len(teams)} teams currently drafting ({', '.join(teams)}). Win rates "
+            "gathered under a different team count are not directly comparable — "
+            "history recorded before the count last changed is noise against "
+            "today's numbers, not signal.[/dim]\n"
+        )
 
     stats = RetrievalPolicyStore(db_path=s.feedback.db_path).stats()
     if not stats:

@@ -104,6 +104,16 @@ call's own cost, reported separately from `latency_ms` rather than folded
 into it, so a slow reranker stays attributable to itself. (Lower
 `retrieval.rerank_max_candidates` if it runs too high.)
 
+Each `daemon query` invocation is its own process, so its `rerank_ms`
+includes the one-time model load — this is the **cold** number (measured
+~4.1–4.2s on the author's vault at the default cap). A persistent session
+that builds the orchestrator once (`daemon chat`, Hermes) reuses the
+already-loaded model, so its steady-state (**warm**) `rerank_ms` is lower —
+measured ~2.5–3.4s at the same 100-candidate cap, and it scales down with
+fewer candidates (~1.7s at 37). Warm is meaningfully cheaper than cold, but
+**still multi-second at the default cap** — treat both numbers as real, not
+just the cold one as a startup tax that disappears.
+
 `--since` / `--until` restrict retrieval to notes with a derived `occurred_at`
 in that window — both take a bare ISO date (`2026-03-01`), and either may be
 given alone. `--until` is **inclusive** at this boundary: `--until 2026-05-31`

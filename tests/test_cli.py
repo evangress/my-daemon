@@ -622,6 +622,19 @@ def test_policy_says_so_when_nothing_has_been_picked(settings: Settings):
     assert "No picks recorded yet" in result.output
 
 
+def test_policy_reports_zero_teams_when_interleaving_is_off(settings: Settings):
+    """With `retrieval.interleave: false` no draft ever runs, so reporting 2
+    or 3 drafting teams (derived from `retrieval.rerank` alone) would be a
+    number describing a draft that never happens."""
+    settings.retrieval.interleave = False
+
+    result = runner.invoke(app, ["policy"])
+
+    assert result.exit_code == 0
+    assert "0 teams" in result.output
+    assert "interleaving disabled" in result.output
+
+
 def test_policy_reports_a_recorded_win(settings: Settings):
     from my_daemon.retrieval.interleave import SEED_TEAM
     from my_daemon.stores.policy import RetrievalPolicyStore

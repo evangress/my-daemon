@@ -317,12 +317,22 @@ NiceGUI's long-term fate) are not yet decided.
   `tests/test_doctor.py`) plus the two behavioural properties above; full
   suite 893 passed / 1 skipped / 5 deselected (was 883/1/5 before this task);
   ruff and mypy clean.
-  **Latency, measured for real** (not invented): on the author's 130-note
+  **Latency, measured for real** (not invented), on the author's 130-note
   vault, CPU-only, `cross-encoder/ms-marco-MiniLM-L-6-v2`, default
-  `rerank_max_candidates: 100` — **~4.1–4.2 seconds** per query
-  (`rerank_ms=4116` and `rerank_ms=4227` across two live `daemon query -v`
-  runs after `daemon models download`). Slow enough that "off by default" is
-  the right call for interactive use as shipped, and that
+  `rerank_max_candidates: 100` — **cold and warm separately, because they
+  differ:** **cold** (`daemon query`, a fresh process each time — includes
+  the one-time `sentence-transformers`/torch import and weight load) ran
+  **~4.1–4.2s** (`rerank_ms=4116`, `4227` across two live `daemon query -v`
+  runs after `daemon models download`). **Warm** (orchestrator built once,
+  `retrieve()` called repeatedly in-process — the shape a persistent session
+  like `daemon chat` or Hermes actually has) ran **~2.5–3.4s** at the same
+  100-candidate cap (`rerank_ms=3394`, `2518`), and ~1.7s for a query with
+  only 37 candidates to score — confirming the cost scales with candidate
+  count as expected. Warm is meaningfully cheaper than cold (load is a real
+  fraction of the cold number), but **still multi-second at the default
+  cap** — this is scoring cost, not import overhead, and it does not
+  disappear once the process is warm. Slow enough either way that "off by
+  default" is the right call for interactive use as shipped, and that
   `rerank_max_candidates` is the first knob to reach for, not a theoretical
   one.
   **Found along the way, not fixed here:** `QueryEngine` and

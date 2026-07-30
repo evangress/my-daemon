@@ -1311,14 +1311,25 @@ compatibility, and `scripts/license_check.py` now enforces it in CI.
 
     *Measured on the author's vault* (130 notes, CPU-only,
     `cross-encoder/ms-marco-MiniLM-L-6-v2`, default `rerank_max_candidates:
-    100`): **~4.1–4.2 seconds** per query for the rerank call alone
-    (`rerank_ms=4116` and `rerank_ms=4227` across two queries) — enough to
+    100`) — **cold and warm separately, because a first review round correctly
+    flagged that they differ.** **Cold** (`daemon query`, a fresh process
+    each time — includes the one-time `sentence-transformers`/torch import
+    and weight load): **~4.1–4.2 seconds** per query (`rerank_ms=4116`,
+    `4227`). **Warm** (orchestrator built once in-process, `retrieve()`
+    called repeatedly — the shape a persistent session like `daemon chat` or
+    Hermes actually has, isolating scoring from load): **~2.5–3.4 seconds**
+    at the same 100-candidate cap (`rerank_ms=3394`, `2518`), scaling down to
+    ~1.7s for a query with only 37 candidates — confirming the O(candidates)
+    cost. Warm is meaningfully cheaper than cold, but **still multi-second at
+    the default cap**: this is scoring cost, not import overhead, so it is
+    real and does not vanish once the process is warm. Either way, enough to
     make "off by default" the right call for interactive use as shipped, and
     to make `rerank_max_candidates` the first knob to reach for rather than a
     theoretical one. `daemon policy` now also prints how many teams are
-    currently drafting (2 or 3), since win rates gathered under a different
-    team count are not directly comparable — turning this on resets how much
-    the pre-existing §IV.7 history means.
+    currently drafting — 0 when `retrieval.interleave` is off (no draft runs
+    at all), else 2 or 3 — since win rates gathered under a different team
+    count are not directly comparable and turning reranking on resets how
+    much the pre-existing §IV.7 history means.
 
     *Found along the way, not part of this item's scope.* `QueryEngine` and
     `DaemonCore.build_core` each hand-roll their own `RetrievalOrchestrator`
