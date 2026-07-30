@@ -3,6 +3,12 @@ vault:
   # `Agent` is the folder the writeback jobs own; exclude it from ingest so
   # the daemon doesn't read its own memory files back in.
   exclude_dirs: [".obsidian", ".trash", "templates", "Agent"]
+  # Frontmatter keys consulted for a note's episodic date, in order.
+  date_frontmatter_keys: ["occurred_at", "date", "created", "created_at"]
+  # Optional. Set to your vault's earliest bulk-import date to let otherwise
+  # undated notes take their date from mtime. Run
+  # `daemon migrate backfill-dates --dry-run` to see the detected import dates.
+  # mtime_trusted_before: 2026-06-21
 
 chunking:
   max_tokens: 512

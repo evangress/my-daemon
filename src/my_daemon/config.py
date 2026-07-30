@@ -27,7 +27,7 @@ Two rules make the daemon safe to run from a scheduler:
 from __future__ import annotations
 
 import os
-from datetime import datetime, time
+from datetime import date, datetime, time
 from pathlib import Path
 from typing import Literal, get_args
 
@@ -66,6 +66,23 @@ class VaultConfig(BaseModel):
     exclude_dirs: list[str] = Field(
         default_factory=lambda: [".obsidian", ".trash", "templates", "Agent"]
     )
+    # Frontmatter keys consulted for a note's episodic date, in order, matched
+    # case-insensitively. Tunable because vaults differ; this list covers the
+    # four keys observed in the author's.
+    date_frontmatter_keys: list[str] = Field(
+        default_factory=lambda: ["occurred_at", "date", "created", "created_at"]
+    )
+    # When set, an otherwise-undated note whose mtime predates this date takes
+    # its date from mtime. Off by default, and deliberately a *cutoff* rather
+    # than a birth-time comparison: Python exposes no st_birthtime on Linux, and
+    # the assumption belongs somewhere the user can see and challenge it.
+    #
+    # The value is the earliest bulk-import event for this vault. Anything older
+    # than it survived a copy and reflects real authoring; anything at or after
+    # it is the copy. Measured on the author's vault: mtime before the import is
+    # 0 days from the true date at the median, after it 38 days.
+    # `daemon migrate backfill-dates` prints the detected import clusters.
+    mtime_trusted_before: date | None = None
 
 
 class ChunkingConfig(BaseModel):

@@ -10,8 +10,11 @@ Two rules carry most of the weight, and both are refusals:
 is an absent day. Accepting it would force a granularity flag through every
 downstream scorer, and the alternative that competitors ship is worse: store
 `2024-01-01 .. 2024-12-31` and a proximity scorer places it at the midpoint, so a
-year-granularity note behaves as though it happened on 2 July. Every date this
-module returns is day-precision by construction.
+year-granularity note behaves as though it happened on 2 July. No date this
+module returns is ever *coarser* than a day: a partial value like `2024-09` is
+rejected rather than widened into a range. A frontmatter timestamp may be finer
+than a day, which is harmless — it is the coarse case that would have forced a
+precision flag through every downstream scorer.
 
 *mtime is not episodic time* unless something vouches for it. Measured over 134
 real notes against the 67 with a parsed date, raw mtime is 35 days out at the
