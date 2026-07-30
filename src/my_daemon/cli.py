@@ -58,6 +58,8 @@ from my_daemon.pipeline.migrate_uuids import (
     rollback_uuids,
 )
 from my_daemon.pipeline.theme_tags import apply_decision, propose_theme_tags
+from my_daemon.retrieval.interleave import EXPANSION_TEAM, RERANK_TEAM, SEED_TEAM
+from my_daemon.retrieval.rerank import CrossEncoderReranker
 from my_daemon.retrieval.weights import apply_selection
 from my_daemon.secrets import (
     ENV_VAR,
@@ -460,6 +462,9 @@ def _run_query(
             stores.feedback_store,
             stores.llm,
             sparse_embedder=stores.sparse_embedder,
+            # `getattr`, not `.reranker`: `FakeStores` in the CLI test suite
+            # predates this field and stands in for `Stores` without it.
+            reranker=getattr(stores, "reranker", None),
         )
         response = engine.ask(text, synthesize=not no_synthesize, date_range=date_range)
 
@@ -506,9 +511,13 @@ def _run_query(
         )
 
     if verbose:
+        # Reported as its own field, not folded into `latency_ms`: a slow
+        # reranker has to stay attributable to itself, or the honest response
+        # (lower `retrieval.rerank_max_candidates`) has nothing to point at.
+        rerank_note = f" rerank_ms={result.rerank_ms}" if result.rerank_ms is not None else ""
         console.log(
             f"seeds={len(response.retrieval.seeds)} expanded={len(response.retrieval.expanded)} "
-            f"latency_ms={response.latency_ms} feedback_id={response.feedback_event_id} "
+            f"latency_ms={response.latency_ms}{rerank_note} feedback_id={response.feedback_event_id} "
             f"memories={len(response.memories)}"
         )
 
@@ -693,10 +702,10 @@ def doctor() -> None:
     """Preflight every moving part and say what to do about each failure.
 
     Runs in dependency order — config, vault, vector store, collection, API
-    key, model cache, state DB, graph — so the first failure is usually the
-    cause of the rest. Exits 1 if any hard check fails; warnings (no
-    collection yet, cold model cache, no API key) are reported and exit 0,
-    because none of them stop the daemon from working.
+    key, model cache, reranking, state DB, graph — so the first failure is
+    usually the cause of the rest. Exits 1 if any hard check fails; warnings
+    (no collection yet, cold model cache, no API key, reranking disabled) are
+    reported and exit 0, because none of them stop the daemon from working.
     """
 
     results = run_checks(_config_override)
@@ -1047,7 +1056,8 @@ def models_download() -> None:
     """Pre-download the embedding model(s) into the local cache folder.
 
     After this, queries and ingest run fully offline (no HF Hub calls).
-    Pulls the dense model always; pulls the sparse model too when hybrid is on.
+    Pulls the dense model always; pulls the sparse model too when hybrid is on;
+    pulls the cross-encoder reranker too when `retrieval.rerank` is on.
     """
     s = _load()
     embedder = _build_embedder(s)
@@ -1062,6 +1072,15 @@ def models_download() -> None:
         sparse_cache = sparse.download()
         console.print(
             f"[green]Sparse model '{s.embeddings.sparse_model}' ready in {sparse_cache}[/green]"
+        )
+
+    if s.retrieval.rerank:
+        reranker = CrossEncoderReranker(
+            s.retrieval.rerank_model, cache_folder=s.embeddings.cache_folder
+        )
+        rerank_cache = reranker.download()
+        console.print(
+            f"[green]Reranker model '{s.retrieval.rerank_model}' ready in {rerank_cache}[/green]"
         )
 
 
@@ -2399,12 +2418,20 @@ def themes_tune(
 def policy() -> None:
     """Which retrieval policy your picks actually favour.
 
-    Team-draft interleaving shows the seed ranking and the graph-expansion
-    ranking equally often, so the win rates below are a fair comparison rather
-    than a reflection of which one got the top slot.
+    Team-draft interleaving shows every drafting ranking equally often, so the
+    win rates below are a fair comparison rather than a reflection of which
+    one got the top slot.
     """
 
     s = _load()
+    teams = [SEED_TEAM, EXPANSION_TEAM] + ([RERANK_TEAM] if s.retrieval.rerank else [])
+    console.print(
+        f"[dim]{len(teams)} teams currently drafting ({', '.join(teams)}). Win rates "
+        "gathered under a different team count are not directly comparable — "
+        "history recorded before the count last changed is noise against "
+        "today's numbers, not signal.[/dim]\n"
+    )
+
     stats = RetrievalPolicyStore(db_path=s.feedback.db_path).stats()
     if not stats:
         console.print(

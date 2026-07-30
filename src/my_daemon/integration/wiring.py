@@ -19,6 +19,7 @@ from my_daemon.llm import LLMClient
 from my_daemon.pipeline.activation import ActivationRecorder
 from my_daemon.pipeline.policy import PolicyRecorder
 from my_daemon.retrieval import RetrievalOrchestrator
+from my_daemon.retrieval.rerank import CrossEncoderReranker
 from my_daemon.retrieval.trace import RetrievalListener
 from my_daemon.stores import FeedbackStore, GraphStore, NoteRegistry, VectorStore
 from my_daemon.stores.activations import ActivationLedger
@@ -37,6 +38,9 @@ class Stores:
     ledger: ActivationLedger
     policy: RetrievalPolicyStore
     llm: LLMClient
+    # None unless `retrieval.rerank` is on (§IV.18) — off by default, since
+    # enabling it without the weights cached would download on first query.
+    reranker: CrossEncoderReranker | None = None
 
 
 def build_stores(
@@ -76,6 +80,17 @@ def build_stores(
     if load_graph:
         graph_store.load()
 
+    # Same cache folder the dense/sparse embedders use — one place on disk to
+    # warm with `daemon models download`, one place `doctor` looks.
+    reranker = (
+        CrossEncoderReranker(
+            settings.retrieval.rerank_model,
+            cache_folder=settings.embeddings.cache_folder,
+        )
+        if settings.retrieval.rerank
+        else None
+    )
+
     # Feedback, registry and ledger deliberately share one file — one state
     # database to back up or wipe.
     db_path = settings.feedback.db_path
@@ -90,6 +105,7 @@ def build_stores(
         ledger=ActivationLedger(db_path=db_path),
         policy=RetrievalPolicyStore(db_path=db_path),
         llm=LLMClient(settings.llm, api_key=settings.anthropic_api_key),
+        reranker=reranker,
     )
 
 
@@ -117,4 +133,7 @@ def build_orchestrator(
         stores.graph_store,
         sparse_embedder=stores.sparse_embedder,
         listeners=listeners,
+        # `getattr` rather than `.reranker`: `FakeStores` in the CLI test
+        # suite predates this field and stands in for `Stores` without it.
+        reranker=getattr(stores, "reranker", None),
     )

@@ -98,7 +98,11 @@ daemon query <text> [--no-llm] [-v] [--since DATE] [--until DATE]
 Ask the daemon a question. Prints the synthesized answer, then a ranked
 candidates table (at least `retrieval.candidate_pool`, default 3). `--no-llm`
 skips synthesis and shows ranked context only — useful while tuning retrieval.
-`-v` adds seeds/expanded counts, latency, and the feedback row id.
+`-v` adds seeds/expanded counts, latency, and the feedback row id. When
+`retrieval.rerank` is on, it also prints `rerank_ms=<n>` — the cross-encoder
+call's own cost, reported separately from `latency_ms` rather than folded
+into it, so a slow reranker stays attributable to itself. (Lower
+`retrieval.rerank_max_candidates` if it runs too high.)
 
 `--since` / `--until` restrict retrieval to notes with a derived `occurred_at`
 in that window — both take a bare ISO date (`2026-03-01`), and either may be
@@ -162,8 +166,9 @@ of the ones below it:
 | 4 | **collection** | the collection's dense dimension does not match the embedder's | the collection does not exist yet (run `daemon ingest`), or the store was unreachable |
 | 5 | **api key** | — | `ANTHROPIC_API_KEY` is unset (retrieval still works; synthesis (`query`/`ask`) and `extract`/`reflect`/`consolidate` do not), **or** it was read from a plaintext `.env` — run `daemon setup` to migrate it into the OS credential store. On pass, the detail names which layer supplied it |
 | 6 | **model cache** | — | the configured embedding model is not in `embeddings.cache_folder` — the first ingest will download ~130MB |
-| 7 | **state db** | the file is at a schema *newer* than this build | it is behind (run `daemon migrate db`) |
-| 8 | **graph** | `graph.gpickle` exists but will not load (`GraphCorruptError`) | it does not exist yet |
+| 7 | **reranking** | — | `retrieval.rerank` is `false` (available but disabled — set it `true` and run `daemon models download` to A/B it via `daemon policy`), **or** it's `true` but `retrieval.rerank_model` isn't cached yet |
+| 8 | **state db** | the file is at a schema *newer* than this build | it is behind (run `daemon migrate db`) |
+| 9 | **graph** | `graph.gpickle` exists but will not load (`GraphCorruptError`) | it does not exist yet |
 
 Two things it deliberately does **not** do: it never loads the embedding model
 (the expected dimension is read from the model's own `1_Pooling/config.json`
@@ -481,7 +486,8 @@ daemon from converging on its own conclusions.
 
 Forces a download of the embedding model(s) into `embeddings.cache_folder`
 (default `./data/models/`). The dense model always; the sparse model too when
-`embeddings.hybrid: true`. After this, queries run fully offline (no HF Hub
+`embeddings.hybrid: true`; the cross-encoder reranker too when
+`retrieval.rerank: true`. After this, queries run fully offline (no HF Hub
 calls) until the cache is cleared.
 
 ## Background agents

@@ -354,6 +354,54 @@ def test_a_warm_cache_passes(settings: Settings):
 
 
 # ---------------------------------------------------------------------------
+# reranking (§IV.18) — off by default, so `doctor` is the counterweight that
+# keeps it from staying invisible forever.
+# ---------------------------------------------------------------------------
+
+
+@pytest.fixture
+def settings_for(settings: Settings):
+    """The healthy `settings` fixture, keyword-tweaked per test."""
+
+    def _make(*, rerank: bool = False) -> Settings:
+        settings.retrieval.rerank = rerank
+        return settings
+
+    return _make
+
+
+def test_doctor_flags_an_available_but_disabled_reranker(settings_for):
+    from my_daemon.doctor import run_checks
+
+    names = {c.name: c for c in run_checks(settings=settings_for(rerank=False))}
+    assert "reranking" in names
+    assert names["reranking"].status == doctor.WARN
+    assert "daemon policy" in names["reranking"].hint
+
+
+def test_an_enabled_but_cold_reranker_warns_naming_the_download(settings_for):
+    result = doctor.check_reranking(settings_for(rerank=True))
+
+    assert result.status == doctor.WARN
+    assert "daemon models download" in result.hint
+
+
+def test_an_enabled_and_cached_reranker_passes(settings_for):
+    s = settings_for(rerank=True)
+    snapshot = (
+        s.embeddings.cache_folder
+        / ("models--" + s.retrieval.rerank_model.replace("/", "--"))
+        / "snapshots"
+        / "abc123"
+    )
+    snapshot.mkdir(parents=True)
+
+    result = doctor.check_reranking(s)
+
+    assert result.status == doctor.PASS
+
+
+# ---------------------------------------------------------------------------
 # api key
 # ---------------------------------------------------------------------------
 
@@ -500,6 +548,7 @@ def test_run_checks_runs_every_check_in_order(settings: Settings):
         "collection",
         "api key",
         "model cache",
+        "reranking",
         "state db",
         "graph",
     ]

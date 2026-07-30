@@ -68,7 +68,7 @@ of me — this table is the whole map.
 | ⬜ | **IV.8** | Themes as an evolutionary-clustering objective | 2 | M–L | — |
 | ⬜ | **IV.9** | A salience layer (*the amygdala gap*) | 2 | L | — |
 | ✅ | **IV.10** | Episodic time-binding | 2 | M | 2026-07-30 |
-| ⬜ | **IV.18** | Cross-encoder reranking as a multileaved team † | 2 | M | — |
+| ✅ | **IV.18** | Cross-encoder reranking as a multileaved team † | 2 | M | 2026-07-30 |
 | ⬜ | **IV.19** | Durable supersession: update vs contradiction † | 2 | M | — |
 | ⬜ | **IV.22** | Chunk-level delta re-ingestion † | 2 | M | — |
 | ⬜ | **IV.23** | A retrieval-quality evaluation harness † | 2 | M | — |
@@ -78,7 +78,7 @@ of me — this table is the whole map.
 | ⬜ | **IV.13** | A REM analogue: generative recombination | 3 | — | — |
 | ⬜ | **IV.14** | Two-timescale consolidation | 3 | L | — |
 
-**5 shipped · 1 partial · 17 open**, of 23. Effort: S = a sitting, M = a focused
+**7 shipped · 1 partial · 15 open**, of 23. Effort: S = a sitting, M = a focused
 session or two, L = a milestone.
 
 **† added 2026-07-30 from the competitor review** — a feature-level comparison
@@ -1248,7 +1248,7 @@ compatibility, and `scripts/license_check.py` now enforces it in CI.
     predates the import, which is 0-day median but rescues just 9 of 67 undated
     notes.
 
-- [ ] **IV.18 — Cross-encoder reranking as a multileaved team.** †
+- [x] **IV.18 — Cross-encoder reranking as a multileaved team.** † *Shipped 2026-07-30.*
 
     *Fixes:* there is no relevance reranking anywhere.
     `RetrievalOrchestrator._pool` sorts on `combined_score`, which is a hybrid RRF
@@ -1288,6 +1288,55 @@ compatibility, and `scripts/license_check.py` now enforces it in CI.
     `retrieval/orchestrator.py`. *Effort:* M. *Licence:* no new package; model
     weights to verify. *Spec:*
     `docs/superpowers/specs/2026-07-30-cross-encoder-multileaving-design.md`.
+
+    *Delivered.* `retrieval/interleave.py`'s `multileave` generalises the
+    two-team draft to n rankings (`RERANK_TEAM = "rerank"`);
+    `retrieval/rerank.py`'s `CrossEncoderReranker` scores only — no sorting, no
+    config knowledge — so the orchestrator tests run against a stub with no
+    model download. `RetrievalOrchestrator(..., reranker=None)` is the last
+    constructor parameter, keyword-capable, so every existing call site kept
+    working untouched. `retrieval.rerank` defaults **false** (config:
+    `rerank`, `rerank_model`, `rerank_max_candidates`) — enabling it without
+    the weights cached would download on first query — and `daemon doctor`
+    reports it as *available but disabled*, naming `daemon models download`
+    and `daemon policy` as the counterweight, so off-by-default does not mean
+    invisible. `combined_score` is deliberately never overwritten by a rerank
+    score (pinned by a dedicated test): it is persisted in the retrieval
+    summary and feeds the activation ledger's rank-based strength, so
+    silently changing it would change what a fingerprint means. Latency is
+    measured around the `rank()` call alone and surfaced as its own field
+    (`RetrievalResult.rerank_ms`, printed by `daemon query -v` as
+    `rerank_ms=<n>`) rather than folded into the total latency, so a slow
+    reranker stays attributable to itself.
+
+    *Measured on the author's vault* (130 notes, CPU-only,
+    `cross-encoder/ms-marco-MiniLM-L-6-v2`, default `rerank_max_candidates:
+    100`): **~4.1–4.2 seconds** per query for the rerank call alone
+    (`rerank_ms=4116` and `rerank_ms=4227` across two queries) — enough to
+    make "off by default" the right call for interactive use as shipped, and
+    to make `rerank_max_candidates` the first knob to reach for rather than a
+    theoretical one. `daemon policy` now also prints how many teams are
+    currently drafting (2 or 3), since win rates gathered under a different
+    team count are not directly comparable — turning this on resets how much
+    the pre-existing §IV.7 history means.
+
+    *Found along the way, not part of this item's scope.* `QueryEngine` and
+    `DaemonCore.build_core` each hand-roll their own `RetrievalOrchestrator`
+    rather than going through `integration/wiring.py`'s `build_orchestrator` —
+    the exact drift that module's own docstring says it exists to prevent.
+    The practical effect: `PolicyRecorder` (§IV.7) is only ever attached by
+    `build_orchestrator`, which nothing in `src/` actually calls. **Confirmed
+    live:** two real `daemon query -v` calls each logged a feedback row, then
+    `daemon policy` still printed the empty-table message — which
+    `RetrievalPolicyStore.stats()` only returns for zero *rows*, not zero
+    wins — so `daemon query`'s real usage has not been recording policy
+    impressions at all, and §IV.7's win rates have been reading an empty
+    ledger since it shipped. This task threaded `reranker=` through both
+    hand-rolled construction sites so reranking would actually run on a real
+    query (verified live — see the measurement above), but left the
+    `PolicyRecorder` gap alone as out of scope for §IV.18. Recorded here and
+    in PROJECT_MANAGEMENT.md's AI Suggestions so it is not lost; worth its own
+    small task.
 
 - [ ] **IV.19 — Durable supersession: update versus contradiction.** †
 

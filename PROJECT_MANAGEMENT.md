@@ -274,6 +274,70 @@ NiceGUI's long-term fate) are not yet decided.
 
 ## Done
 
+- **Cross-encoder reranking as a third drafting team, §IV.18 (2026-07-30).**
+  Closes the largest capability gap the competitor review found:
+  `RetrievalOrchestrator._pool` used to sort candidates on `combined_score`
+  alone — a hybrid RRF score for seeds and a decayed graph distance for
+  expanded ones, two quantities on different scales compared directly.
+  `retrieval/interleave.py`'s `multileave` (already generalised to n rankings
+  by the prior task) now takes a third ranking: a local cross-encoder
+  (`retrieval/rerank.py`'s `CrossEncoderReranker`, also already built) scores
+  the pooled candidates and its ordering enters the draft as `RERANK_TEAM =
+  "rerank"`, competing against the seed and expansion rankings rather than
+  replacing either. `RetrievalOrchestrator(..., reranker=None)` is the last
+  constructor parameter, keyword-capable and defaulted, so every existing
+  construction site kept working untouched — except `pipeline/query.py`'s
+  `QueryEngine` and `integration/core.py`'s `DaemonCore`/`build_core`, which
+  needed a `reranker=` parameter threaded through since they each hand-build
+  their own orchestrator rather than going through
+  `integration/wiring.py`'s `build_orchestrator` (see the finding below).
+  New config: `retrieval.rerank` (default **false** — enabling it without the
+  weights cached would download on first query and break the offline
+  guarantee), `retrieval.rerank_model`
+  (`cross-encoder/ms-marco-MiniLM-L-6-v2`), `retrieval.rerank_max_candidates`
+  (100 — the cross-encoder is O(candidates), unlike the bi-encoder retrieval
+  it reorders). `daemon doctor` gained a `reranking` check so off-by-default
+  does not mean invisible: disabled reports *"available but disabled — set
+  `retrieval.rerank: true` and run `daemon models download` to A/B it via
+  `daemon policy`"*; enabled-but-cold names the download; enabled-and-cached
+  passes. `daemon models download` and `integration/wiring.py`'s
+  `build_stores` pull/construct the reranker the same way they already do for
+  the dense and sparse embedders, sharing `embeddings.cache_folder`.
+  `combined_score` is **never** overwritten by a rerank score — pinned by a
+  dedicated test that checks the stored value, not just the ordering — because
+  it is persisted in the retrieval summary and feeds the activation ledger's
+  rank-based strength. Rerank latency is measured around the `rank()` call
+  alone and surfaced as its own field (`RetrievalResult.rerank_ms`), printed
+  by `daemon query -v` as `rerank_ms=<n>` rather than folded into the total,
+  so a slow reranker stays attributable to itself. `daemon policy` now prints
+  how many teams are currently drafting (2 or 3) with a note that win rates
+  gathered under a different team count are not directly comparable — turning
+  reranking on resets how much the existing §IV.7 policy history means to
+  read. Ten new tests (`tests/test_orchestrator.py`,
+  `tests/test_doctor.py`) plus the two behavioural properties above; full
+  suite 893 passed / 1 skipped / 5 deselected (was 883/1/5 before this task);
+  ruff and mypy clean.
+  **Latency, measured for real** (not invented): on the author's 130-note
+  vault, CPU-only, `cross-encoder/ms-marco-MiniLM-L-6-v2`, default
+  `rerank_max_candidates: 100` — **~4.1–4.2 seconds** per query
+  (`rerank_ms=4116` and `rerank_ms=4227` across two live `daemon query -v`
+  runs after `daemon models download`). Slow enough that "off by default" is
+  the right call for interactive use as shipped, and that
+  `rerank_max_candidates` is the first knob to reach for, not a theoretical
+  one.
+  **Found along the way, not fixed here:** `QueryEngine` and
+  `DaemonCore.build_core` each hand-roll their own `RetrievalOrchestrator`
+  instead of going through `integration/wiring.py`'s `build_orchestrator` —
+  the exact drift that module's own docstring says it exists to prevent. The
+  practical effect: `PolicyRecorder` (§IV.7) is only ever attached by
+  `build_orchestrator`, which nothing under `src/` actually calls, so real
+  `daemon query` usage may never have been recording policy impressions at
+  all — `daemon policy`'s win rates may be reading an empty ledger regardless
+  of this task. This task threaded `reranker=` through both hand-rolled sites
+  so reranking would actually run on a live query (verified above), but left
+  the `PolicyRecorder` gap itself alone as out of scope. See the AI
+  Suggestions entry below.
+
 - **Opt-in live-LLM prompt-compliance fixtures, §IV.17 close-out (2026-07-30).**
   §IV.17's five `SYSTEM_PROMPT` rules (conditional reconciliation audit,
   update-vs-contradiction split, anti-arithmetic, abstention contract,
@@ -784,4 +848,39 @@ note to a date discussed inside it); Honcho's enumeration and dedup prompt
 procedures (fitted to LongMemEval categories, not to anything a vault owner asks);
 and hosted reranker or embedding providers (13 in Hindsight — this project is
 local-first and one local model is the whole requirement).
+
+### 2026-07-30 — After wiring §IV.18, a construction-path gap worth its own task
+
+While threading `reranker=` through every place a `RetrievalOrchestrator` gets
+built (§IV.18), it became clear that `integration/wiring.py`'s
+`build_orchestrator` — the function whose own docstring says "Everything that
+needs stores goes through here now" — is never actually called from `src/`.
+`pipeline/query.py`'s `QueryEngine` and `integration/core.py`'s
+`DaemonCore`/`build_core` each still hand-build their own
+`RetrievalOrchestrator`, exactly the drift `wiring.py` was written to end.
+
+The concrete cost: `build_orchestrator` is the only place that attaches
+`PolicyRecorder` (§IV.7) as a listener. `QueryEngine`'s orchestrator only gets
+`ActivationRecorder`. **Confirmed live, not just by reading the code:** two
+real `daemon query -v` calls on the author's vault (the ones used to measure
+§IV.18's rerank latency below) each logged a feedback row, then
+`daemon policy` still printed "No picks recorded yet" — the empty-table
+message, which `RetrievalPolicyStore.stats()` only returns when
+`retrieval_policy_stats` has *zero rows*, not merely zero wins. A recorded
+impression with zero wins would still show a table row at 0.0%. So `daemon
+query` / `daemon ask` — the actual command a person runs — has not been
+recording team-draft impressions at all, and `daemon policy`'s win rates have
+been reading an empty ledger since §IV.7 shipped, regardless of how many
+queries have run since. `tests/test_wiring.py` passes because it tests
+`build_orchestrator` directly; nothing exercises whether the CLI's query path
+uses it.
+
+I did not fix this as part of §IV.18 — it is a different item's bug, not this
+one's, and untangling it touches `QueryEngine`'s and `DaemonCore`'s
+construction surfaces (and needs someone to decide whether `QueryEngine`
+should just delegate to `build_orchestrator` internally, or whether
+`build_orchestrator` should absorb what `QueryEngine` does today). Suggest a
+small, focused task: converge the construction paths so `wiring.py`'s "goes
+through here now" claim is actually true, then re-verify with a real `daemon
+select` → `daemon policy` round trip that impressions and wins both land.
 

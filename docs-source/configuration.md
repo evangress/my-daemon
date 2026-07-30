@@ -195,6 +195,10 @@ retrieval:
   seed_top_k: 8
   context_token_budget: 6000
   candidate_pool: 3
+  interleave: true
+  rerank: false
+  rerank_model: cross-encoder/ms-marco-MiniLM-L-6-v2
+  rerank_max_candidates: 100
 ```
 
 | Key | Default | Notes |
@@ -202,6 +206,10 @@ retrieval:
 | `seed_top_k` | `8` | Vector hits used as seeds. |
 | `context_token_budget` | `6000` | Cap on combined chunk text shipped to Claude. |
 | `candidate_pool` | `3` | Minimum candidates surfaced regardless of token budget — project policy is to always show at least N so the user picks the winner. |
+| `interleave` | `true` | Build the candidate pool by team draft (seed vs. graph-expansion) instead of by raw score. `daemon policy` shows which ranking your picks favour. |
+| `rerank` | `false` | Score the candidate pool with a local cross-encoder (§IV.18) and enter that ordering as a third drafting team. **Off by default** — enabling it without the weights cached would download on first query, breaking the offline guarantee. Run `daemon models download` first; `daemon doctor` flags it as available-but-disabled while it's off. |
+| `rerank_model` | `cross-encoder/ms-marco-MiniLM-L-6-v2` | HF model id, pulled via `sentence-transformers`. |
+| `rerank_max_candidates` | `100` | Caps how many pooled candidates get scored — the cross-encoder is O(candidates), unlike the bi-encoder retrieval it reorders. Lower this if `daemon query -v`'s `rerank_ms` runs too high. |
 
 ### `llm`
 

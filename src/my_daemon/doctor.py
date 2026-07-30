@@ -453,6 +453,39 @@ def check_model_cache(settings: Settings) -> CheckResult:
     return CheckResult("model cache", PASS, f"{model} cached at {model_dir}{suffix}")
 
 
+def check_reranking(settings: Settings) -> CheckResult:
+    """Is the §IV.18 cross-encoder reranker on, and if so, cached?
+
+    `retrieval.rerank` defaults false precisely because enabling it without
+    the weights cached would download on first query — but off-by-default
+    must not mean invisible forever, so a *disabled* reranker is reported
+    (not silently skipped) with the command that measures whether turning it
+    on is worth it.
+    """
+
+    if not settings.retrieval.rerank:
+        return CheckResult(
+            "reranking",
+            WARN,
+            "off — retrieval.rerank is false",
+            hint=(
+                "available but disabled — set `retrieval.rerank: true` and run "
+                "`daemon models download` to A/B it via `daemon policy`."
+            ),
+        )
+    model = settings.retrieval.rerank_model
+    folder = settings.embeddings.cache_folder
+    model_dir = find_cached_model(folder, model)
+    if model_dir is None:
+        return CheckResult(
+            "reranking",
+            WARN,
+            f"enabled, but {model} is not cached under {folder}",
+            hint="cold cache — run `daemon models download` before the next query.",
+        )
+    return CheckResult("reranking", PASS, f"enabled — {model} cached at {model_dir}")
+
+
 def check_db_schema(settings: Settings) -> CheckResult:
     db_path = settings.feedback.db_path
     if not db_path.is_file():
@@ -549,6 +582,7 @@ def run_checks(
         [
             check_api_key(settings),
             check_model_cache(settings),
+            check_reranking(settings),
             check_db_schema(settings),
             check_graph(settings),
         ]

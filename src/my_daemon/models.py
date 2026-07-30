@@ -186,6 +186,12 @@ class RetrievalResult(BaseModel):
     #: chunks *would* have matched requires running the unfiltered query too —
     #: double the cost for substantially the same number.
     undated_excluded: int = 0
+    #: Wall-clock cost of the cross-encoder rerank call (§IV.18), or ``None``
+    #: when no rerank ran this query. Reported separately from ``latency_ms``
+    #: rather than folded into it — a slow reranker has to stay attributable to
+    #: itself, or the honest response (lower `rerank_max_candidates`) has
+    #: nothing to point at.
+    rerank_ms: int | None = None
 
 
 FeedbackSignal = Literal[

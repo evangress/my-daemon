@@ -170,6 +170,19 @@ class RetrievalConfig(BaseModel):
     # that produced it and the expansion policy is never examined — which is
     # why picks taught the graph nothing. Set false to restore score order.
     interleave: bool = True
+    # Rerank the candidate pool with a cross-encoder and enter that ordering as
+    # a third team in the draft (§IV.18), so `daemon policy` reports whether it
+    # actually earns picks on this vault.
+    #
+    # Off by default only because enabling it without the weights cached would
+    # download on first query and break the offline guarantee the embedder works
+    # to provide. `daemon doctor` surfaces the switch so off-by-default does not
+    # mean invisible; run `daemon models download` first.
+    rerank: bool = False
+    rerank_model: str = "cross-encoder/ms-marco-MiniLM-L-6-v2"
+    # Bounds per-query latency. The cross-encoder is O(candidates), unlike the
+    # bi-encoder retrieval it reorders.
+    rerank_max_candidates: int = 100
 
 
 class LLMConfig(BaseModel):

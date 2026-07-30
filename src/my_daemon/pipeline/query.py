@@ -15,6 +15,7 @@ from my_daemon.models import DateRange, FeedbackEvent, RetrievalResult, is_seed_
 from my_daemon.pipeline.activation import ActivationRecorder
 from my_daemon.pipeline.recall import RecalledMemory, recall_related
 from my_daemon.retrieval import RetrievalOrchestrator
+from my_daemon.retrieval.rerank import CrossEncoderReranker
 from my_daemon.stores import FeedbackStore, GraphStore, VectorStore
 from my_daemon.stores.activations import ActivationLedger
 from my_daemon.stores.registry import NoteRegistry
@@ -95,6 +96,7 @@ class QueryEngine:
         llm_client: LLMClient,
         sparse_embedder: SparseEmbedder | None = None,
         surface: str = "cli",
+        reranker: CrossEncoderReranker | None = None,
     ) -> None:
         self.s = settings
         self.surface = surface
@@ -107,6 +109,7 @@ class QueryEngine:
             graph_store,
             sparse_embedder=sparse_embedder,
             listeners=[ActivationRecorder(self.ledger)],
+            reranker=reranker,
         )
         self.feedback = feedback_store
         self.llm = llm_client

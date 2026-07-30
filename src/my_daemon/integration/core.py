@@ -33,6 +33,7 @@ from my_daemon.llm import LLMClient
 from my_daemon.models import THEME_TAG_PREFIX, FeedbackEvent, RetrievalResult, parse_date_bounds
 from my_daemon.pipeline.ingest import ingest_note
 from my_daemon.pipeline.query import QueryEngine, build_retrieval_summary
+from my_daemon.retrieval.rerank import CrossEncoderReranker
 from my_daemon.retrieval.weights import apply_selection
 from my_daemon.stores import FeedbackStore, GraphStore, VectorStore
 from my_daemon.stores.activations import HERMES_RECALL_SURFACE, ActivationLedger
@@ -89,6 +90,7 @@ class DaemonCore:
         feedback_store: FeedbackStore,
         llm_client: LLMClient,
         sparse_embedder: SparseEmbedder | None = None,
+        reranker: CrossEncoderReranker | None = None,
     ) -> None:
         self.s = settings
         self.embedder = embedder
@@ -109,6 +111,7 @@ class DaemonCore:
             llm_client,
             sparse_embedder=sparse_embedder,
             surface=HERMES_RECALL_SURFACE,
+            reranker=reranker,
         )
         self._write_lock = threading.Lock()
 
@@ -649,6 +652,16 @@ def build_core(settings: Settings, *, load_graph: bool = True) -> DaemonCore:
         graph_store.load()
     feedback_store = FeedbackStore(db_path=settings.feedback.db_path)
     llm_client = LLMClient(settings.llm, api_key=settings.anthropic_api_key)
+    # Same cache folder the embedders use — one place on disk to warm with
+    # `daemon models download`, one place `doctor` looks (§IV.18).
+    reranker = (
+        CrossEncoderReranker(
+            settings.retrieval.rerank_model,
+            cache_folder=settings.embeddings.cache_folder,
+        )
+        if settings.retrieval.rerank
+        else None
+    )
 
     return DaemonCore(
         settings,
@@ -658,4 +671,5 @@ def build_core(settings: Settings, *, load_graph: bool = True) -> DaemonCore:
         graph_store=graph_store,
         feedback_store=feedback_store,
         llm_client=llm_client,
+        reranker=reranker,
     )
