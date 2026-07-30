@@ -17,7 +17,17 @@
 - **Run the full suite before each commit:** `.venv/bin/pytest -q`. Baseline is **789 passing**. Never commit a red suite.
 - **No new construction site may break.** Every new model field is optional with a default; every new constructor parameter defaults to `None`, matching how `sparse_embedder` and `listeners` already work on `RetrievalOrchestrator`.
 - **All timestamps are timezone-aware UTC `datetime`.** A bare date becomes UTC midnight. Never construct a naive datetime.
-- **Config changes land in BOTH `config.yaml` and `config.example.yaml`**, which must stay in sync (there is a standing bug class here — `agent.enabled` once diverged).
+- **Config changes: edit both yamls, but commit only `config.example.yaml`.**
+  `config.yaml` is **gitignored** (`.gitignore:178`, under "My Daemon local
+  state", beside `data/` and `.env`) because it is the user's live local config.
+  Edit it so the running daemon picks the key up, and `git add` **only**
+  `config.example.yaml`. **Never `git add -f config.yaml`** — force-adding it
+  makes gitignore stop applying and puts a local config file into history
+  permanently, which is a latent credential-leak vector even when today's
+  content happens to be clean.
+  The two files must still agree in *content* — there is a standing bug class
+  here, `agent.enabled` once diverged — so diff them locally as a check, and
+  expect only the example file in `git status`.
 - **Docs:** update `docs-source/cli.md` and `docs-source/configuration.md` for any new command or config key (CLAUDE.md rule 8).
 - Tests live flat in `tests/test_*.py`.
 
@@ -292,9 +302,41 @@ def derive_occurred_at(
             pass  # 2024-99-99 as a prefix — fall through to mtime/None
 
     if trusted_before is not None and mtime.date() < trusted_before:
-        return mtime, "mtime"
+        # Normalised like the other two branches. A real mtime carries a
+        # time-of-day, and the docstring's day-precision invariant has to hold
+        # for every source or a downstream consumer that trusts it is wrong.
+        # (Corrected during execution — the first draft of this plan returned
+        # `mtime` bare, and Task 3's test would not have caught it because it
+        # uses an exactly-midnight mtime.)
+        return _to_utc_midnight(mtime.date()), "mtime"
 
     return None, None
+```
+
+Two tests belong with this, and are easy to omit because both branches *look*
+covered:
+
+```python
+def test_mtime_fallback_is_normalised_to_utc_midnight():
+    """A real mtime carries a time-of-day; occurred_at must not."""
+    got, source = _derive(
+        path="Welcome.md",
+        mtime=datetime(2026, 2, 21, 13, 3, 47, tzinfo=UTC),
+        trusted_before=date(2026, 6, 21),
+    )
+    assert got == datetime(2026, 2, 21, 0, 0, tzinfo=UTC)
+    assert source == "mtime"
+
+
+def test_naive_datetime_gets_utc_attached():
+    """PyYAML yields a naive datetime for an unquoted local timestamp.
+
+    This one keeps its time-of-day: an explicit frontmatter timestamp is data
+    the user supplied, unlike an mtime we are inferring from.
+    """
+    got, source = _derive({"date": datetime(2024, 9, 2, 10, 30)})
+    assert got == datetime(2024, 9, 2, 10, 30, tzinfo=UTC)
+    assert source == "frontmatter"
 ```
 
 - [ ] **Step 4: Run the tests to verify they pass**
