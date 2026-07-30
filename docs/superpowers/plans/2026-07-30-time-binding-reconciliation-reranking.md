@@ -553,18 +553,66 @@ and pass both into the `Note(...)` constructor.
 Run: `.venv/bin/pytest tests/test_parser.py -q`
 Expected: PASS, including all pre-existing parser tests (the new kwargs are keyword-only with defaults).
 
-- [ ] **Step 5: Thread the config through the reader**
-
-Find the `parse_note` call sites and pass the config values:
+- [ ] **Step 5: Thread the config through `VaultReader` — the ingest path reaches `parse_note` only indirectly**
 
 ```bash
-grep -rn "parse_note(" src/my_daemon/ | grep -v "def parse_note"
+grep -rn "parse_note(\|VaultReader(" src/my_daemon/ | grep -v "def parse_note\|class VaultReader"
 ```
 
-For each caller that has `Settings` in scope, pass
-`date_keys=settings.vault.date_frontmatter_keys, mtime_trusted_before=settings.vault.mtime_trusted_before`.
-Callers without settings in scope keep the defaults — which is the conservative
-behaviour (no mtime fallback).
+**The important one is not a direct `parse_note` caller.** `VaultReader.read_all`
+calls `parse_note(p, self.vault_root)`, and `ingest.py:134` — the primary ingest
+path — goes through it. Passing config only at direct call sites leaves
+`vault.mtime_trusted_before` **configurable and completely dead** where it
+matters, which is worse than not shipping it: a key that silently does nothing
+fails quietly instead of loudly.
+
+So `VaultReader` gains two keyword-only params, keeping its existing
+primitives-not-`Settings` boundary:
+
+```python
+    def __init__(
+        self,
+        vault_root: Path,
+        exclude_dirs: list[str] | None = None,
+        *,
+        date_keys: Sequence[str] = DEFAULT_DATE_KEYS,
+        mtime_trusted_before: date | None = None,
+    ) -> None:
+```
+
+`read_all` forwards both to `parse_note`. Then **all five** construction sites
+pass them — every one already has `settings` in scope:
+`pipeline/ingest.py:134`, `pipeline/agent_extract.py:49`,
+`pipeline/migrate_uuids.py:103`, `pipeline/agent_reflect.py:44`,
+`pipeline/agent_link.py:172`.
+
+Two tests belong here, because the gap is invisible to any test that calls
+`parse_note` directly:
+
+```python
+def test_reader_threads_the_mtime_cutoff_to_every_note(tmp_path):
+    """The primary ingest path reaches parse_note only through VaultReader."""
+    import os
+
+    from my_daemon.vault.reader import VaultReader
+
+    p = tmp_path / "Welcome.md"
+    p.write_text("# Welcome\nbody\n", encoding="utf-8")
+    old = datetime(2026, 2, 21, 13, 3, 47, tzinfo=UTC).timestamp()
+    os.utime(p, (old, old))
+
+    notes = list(VaultReader(tmp_path, mtime_trusted_before=date(2026, 6, 21)).read_all())
+    assert [n.occurred_at for n in notes] == [datetime(2026, 2, 21, 0, 0, tzinfo=UTC)]
+    assert [n.occurred_at_source for n in notes] == ["mtime"]
+
+
+def test_reader_defaults_leave_the_mtime_fallback_off(tmp_path):
+    from my_daemon.vault.reader import VaultReader
+
+    p = tmp_path / "Welcome.md"
+    p.write_text("# Welcome\nbody\n", encoding="utf-8")
+    assert list(VaultReader(tmp_path).read_all())[0].occurred_at is None
+```
 
 - [ ] **Step 6: Full suite, commit**
 

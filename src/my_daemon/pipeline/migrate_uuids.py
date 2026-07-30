@@ -100,7 +100,12 @@ def assign_uuids(
     """Assign a UUID to every note that lacks one. Dry-run unless ``apply``."""
 
     vault_root = settings.vault.path.expanduser().resolve()
-    reader = VaultReader(vault_root, exclude_dirs=settings.vault.exclude_dirs)
+    reader = VaultReader(
+        vault_root,
+        exclude_dirs=settings.vault.exclude_dirs,
+        date_keys=settings.vault.date_frontmatter_keys,
+        mtime_trusted_before=settings.vault.mtime_trusted_before,
+    )
 
     # Belt and braces. `exclude_dirs` normally keeps the whole Agent folder out
     # of discovery, but a user who removes it from the config must still never

@@ -3,10 +3,12 @@
 
 from __future__ import annotations
 
-from collections.abc import Iterator
+from collections.abc import Iterator, Sequence
+from datetime import date
 from pathlib import Path
 
 from my_daemon.models import Note
+from my_daemon.vault.dates import DEFAULT_DATE_KEYS
 from my_daemon.vault.identity import effective_uuid
 from my_daemon.vault.parser import parse_note
 
@@ -19,9 +21,20 @@ class VaultReader:
     the target is ``Foo.md`` or ``notes/foo.md``.
     """
 
-    def __init__(self, vault_root: Path, exclude_dirs: list[str] | None = None) -> None:
+    def __init__(
+        self,
+        vault_root: Path,
+        exclude_dirs: list[str] | None = None,
+        *,
+        date_keys: Sequence[str] = DEFAULT_DATE_KEYS,
+        mtime_trusted_before: date | None = None,
+    ) -> None:
         self.vault_root = vault_root.expanduser().resolve()
         self.exclude_dirs = {d.lower() for d in (exclude_dirs or [])}
+        # Passed to parse_note for every note. Kept as primitives rather than a
+        # Settings object to preserve this class's existing boundary.
+        self.date_keys = date_keys
+        self.mtime_trusted_before = mtime_trusted_before
 
     def discover(self) -> list[Path]:
         """Return all markdown files in the vault, excluding configured directories."""
@@ -81,7 +94,15 @@ class VaultReader:
     def read_all(self) -> Iterator[Note]:
         """Two-pass: parse every file, build the title index, yield resolved notes."""
 
-        raw_notes = [parse_note(p, self.vault_root) for p in self.discover()]
+        raw_notes = [
+            parse_note(
+                p,
+                self.vault_root,
+                date_keys=self.date_keys,
+                mtime_trusted_before=self.mtime_trusted_before,
+            )
+            for p in self.discover()
+        ]
         index = self._build_title_index(raw_notes)
         for n in raw_notes:
             yield self._resolve_wikilinks(n, index)

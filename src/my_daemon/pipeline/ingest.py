@@ -131,7 +131,12 @@ def ingest_vault(
 ) -> IngestStats:
     stats = IngestStats()
 
-    reader = VaultReader(settings.vault.path, exclude_dirs=settings.vault.exclude_dirs)
+    reader = VaultReader(
+        settings.vault.path,
+        exclude_dirs=settings.vault.exclude_dirs,
+        date_keys=settings.vault.date_frontmatter_keys,
+        mtime_trusted_before=settings.vault.mtime_trusted_before,
+    )
 
     if full_rebuild:
         manifest: dict = {}

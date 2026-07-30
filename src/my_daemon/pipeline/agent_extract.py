@@ -46,7 +46,12 @@ def _candidate_notes(
     only_note: str | None,
 ) -> Iterable[Note]:
     """Yield notes that should be considered for extraction this run."""
-    reader = VaultReader(settings.vault.path, exclude_dirs=settings.vault.exclude_dirs)
+    reader = VaultReader(
+        settings.vault.path,
+        exclude_dirs=settings.vault.exclude_dirs,
+        date_keys=settings.vault.date_frontmatter_keys,
+        mtime_trusted_before=settings.vault.mtime_trusted_before,
+    )
     for note in reader.read_all():
         if only_note and note.relative_path != only_note:
             continue

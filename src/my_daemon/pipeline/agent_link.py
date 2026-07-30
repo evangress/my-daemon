@@ -169,7 +169,12 @@ def run_link(
     vault_root = settings.vault.path
     agent_folder = settings.agent.folder_name
 
-    reader = VaultReader(vault_root, exclude_dirs=settings.vault.exclude_dirs)
+    reader = VaultReader(
+        vault_root,
+        exclude_dirs=settings.vault.exclude_dirs,
+        date_keys=settings.vault.date_frontmatter_keys,
+        mtime_trusted_before=settings.vault.mtime_trusted_before,
+    )
     all_notes = list(reader.read_all())
     path_to_note: dict[str, Note] = {n.relative_path: n for n in all_notes}
     # The graph is keyed by identity, so tag gathering needs a uuid-keyed map.
