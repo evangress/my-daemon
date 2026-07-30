@@ -1,6 +1,8 @@
 # SPDX-License-Identifier: Apache-2.0
 from datetime import UTC, datetime
 
+import pytest
+
 from my_daemon.models import Chunk, RetrievedChunk
 from my_daemon.retrieval.rerank import CrossEncoderReranker, build_pair_text
 
@@ -43,6 +45,16 @@ def test_raw_logits_are_sigmoided():
     out = r.rank("q", [_rc("a"), _rc("b")])
     assert all(0.0 < s < 1.0 for s in out)
     assert out[0] < 0.05 and out[1] > 0.95
+
+
+def test_extreme_logits_do_not_overflow():
+    """A cross-encoder emits large negative logits for confidently irrelevant
+    pairs; the naive sigmoid raises OverflowError below about -746."""
+    r = CrossEncoderReranker("stub", _model=_StubModel([-800.0, 800.0]))
+    out = r.rank("q", [_rc("a"), _rc("b")])
+    assert out[0] == pytest.approx(0.0, abs=1e-9)
+    assert out[1] == pytest.approx(1.0, abs=1e-9)
+    assert all(0.0 <= s <= 1.0 for s in out)
 
 
 def test_returns_one_score_per_candidate_in_order():

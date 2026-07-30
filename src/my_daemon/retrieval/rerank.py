@@ -37,7 +37,18 @@ def build_pair_text(chunk: Chunk) -> str:
 
 
 def _to_unit(score: float) -> float:
-    return 1.0 / (1.0 + math.exp(-score))
+    """Logistic squash that cannot overflow.
+
+    The naive `1 / (1 + exp(-score))` is asymmetric: it raises OverflowError for
+    score below about -746 while large positive scores merely underflow. A
+    cross-encoder emits exactly those large negative logits for confidently
+    irrelevant pairs, so the naive form would raise mid-query on ordinary input.
+    """
+
+    if score >= 0.0:
+        return 1.0 / (1.0 + math.exp(-score))
+    exp_score = math.exp(score)
+    return exp_score / (1.0 + exp_score)
 
 
 class CrossEncoderReranker:
@@ -52,14 +63,23 @@ class CrossEncoderReranker:
         self.cache_folder = cache_folder
         self._loaded = _model
 
+    def _load(self, *, local_files_only: bool) -> Any:
+        from sentence_transformers import CrossEncoder
+
+        kwargs: dict[str, Any] = {"local_files_only": local_files_only}
+        if self.cache_folder is not None:
+            self.cache_folder.mkdir(parents=True, exist_ok=True)
+            kwargs["cache_folder"] = str(self.cache_folder)
+        return CrossEncoder(self.model_name, **kwargs)
+
     def _model_(self) -> Any:
         if self._loaded is None:
-            from sentence_transformers import CrossEncoder
-
-            kwargs: dict[str, Any] = {}
-            if self.cache_folder is not None:
-                kwargs["cache_folder"] = str(self.cache_folder)
-            self._loaded = CrossEncoder(self.model_name, **kwargs)
+            try:
+                self._loaded = self._load(local_files_only=True)
+            except Exception:
+                # Cache miss (or corrupted local copy) — pull once, then stay
+                # offline next time. Mirrors Embedder._ensure_loaded.
+                self._loaded = self._load(local_files_only=False)
         return self._loaded
 
     def rank(self, query: str, candidates: Sequence[RetrievedChunk]) -> list[float]:
@@ -69,6 +89,12 @@ class CrossEncoderReranker:
         emit calibrated probabilities and some emit raw logits; sigmoiding
         unconditionally would squash a calibrated 0.007 to ~0.5 and throw away
         the model's own confidence.
+
+        The in-range check is all-or-nothing across the batch: one model call
+        is one scoring regime, so a single out-of-range score routes every
+        score in the batch through the sigmoid together. A benign float
+        overshoot just above 1.0 on an otherwise-calibrated batch would
+        therefore re-sigmoid the whole thing rather than being handled alone.
         """
 
         if not candidates:
@@ -81,5 +107,5 @@ class CrossEncoderReranker:
 
     def download(self) -> Path:
         """Force the weights into the cache so later runs stay offline."""
-        self._model_()
+        self._loaded = self._load(local_files_only=False)
         return self.cache_folder or Path.home() / ".cache" / "huggingface"
