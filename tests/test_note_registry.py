@@ -241,3 +241,31 @@ def test_coverage_ignores_deleted_notes(registry: NoteRegistry):
     registry.soft_delete(A)
 
     assert registry.coverage().total == 0
+
+
+# ---------------------------------------------------------------------------
+# Episodic dates (§IV.10) — nullable, no manufactured default
+# ---------------------------------------------------------------------------
+
+
+def test_occurred_at_round_trips(registry: NoteRegistry):
+    registry.upsert(
+        _record(
+            occurred_at=datetime(2026, 6, 1, 9, 30, tzinfo=UTC),
+            occurred_at_source="frontmatter",
+        )
+    )
+
+    got = registry.get(A)
+    assert got.occurred_at == datetime(2026, 6, 1, 9, 30, tzinfo=UTC)
+    assert got.occurred_at_source == "frontmatter"
+
+
+def test_occurred_at_defaults_to_none_for_undated_notes(registry: NoteRegistry):
+    """Every existing row is legitimately undated until backfill runs — no
+    manufactured default here would be correct."""
+    registry.upsert(_record())
+
+    got = registry.get(A)
+    assert got.occurred_at is None
+    assert got.occurred_at_source is None

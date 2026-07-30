@@ -93,6 +93,10 @@ class NoteRecord(BaseModel):
     first_seen_at: datetime | None = None
     last_seen_at: datetime | None = None
     deleted_at: datetime | None = None
+    # §IV.10 episodic time-binding. Nullable with no manufactured default —
+    # undated until a backfill pass runs.
+    occurred_at: datetime | None = None
+    occurred_at_source: str | None = None
 
 
 class RegistryCoverage(BaseModel):

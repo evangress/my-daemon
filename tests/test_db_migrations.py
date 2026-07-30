@@ -8,6 +8,7 @@ in the wild has ``user_version == 0`` but already contains all the tables.
 
 from __future__ import annotations
 
+import contextlib
 import sqlite3
 from pathlib import Path
 
@@ -337,3 +338,38 @@ def test_last_insert_id_names_the_problem_when_there_is_no_rowid(tmp_path: Path)
             dbmod.last_insert_id(cur)
     finally:
         conn.close()
+
+
+def test_migration_7_adds_the_date_columns(tmp_path: Path):
+    db = tmp_path / "state.db"
+    dbmod.migrate(db)
+    conn = sqlite3.connect(db)
+    cols = {r[1] for r in conn.execute("PRAGMA table_info(notes)")}
+    assert {"occurred_at", "occurred_at_source"} <= cols
+    assert conn.execute("PRAGMA user_version").fetchone()[0] >= 7
+
+
+def test_migration_7_is_idempotent(tmp_path: Path):
+    db = tmp_path / "state.db"
+    dbmod.migrate(db)
+    dbmod.migrate(db)  # must not raise "duplicate column name"
+
+
+def test_migration_7_upgrades_an_existing_v6_database(tmp_path: Path):
+    """Real users have a populated v6 database; the columns must land there too."""
+    db = tmp_path / "state.db"
+    dbmod.migrate(db)  # bring it fully up to date
+    conn = sqlite3.connect(db)
+    # Simulate a pre-migration-7 database that already holds a note row.
+    conn.execute("PRAGMA user_version = 6")
+    for col in ("occurred_at", "occurred_at_source"):
+        with contextlib.suppress(sqlite3.OperationalError):
+            conn.execute(f"ALTER TABLE notes DROP COLUMN {col}")
+    conn.commit()
+    conn.close()
+
+    dbmod.migrate(db)  # re-run: must add the columns back
+    conn = sqlite3.connect(db)
+    cols = {r[1] for r in conn.execute("PRAGMA table_info(notes)")}
+    assert {"occurred_at", "occurred_at_source"} <= cols
+    assert conn.execute("PRAGMA user_version").fetchone()[0] >= 7

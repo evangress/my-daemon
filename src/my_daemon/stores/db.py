@@ -320,6 +320,24 @@ def _m006_retrieval_policy(conn: sqlite3.Connection) -> None:
     exec_script(conn, _M006_SCHEMA)
 
 
+# ---------------------------------------------------------------------------
+# Migration 7 — episodic dates on the note registry (§IV.10). Additive and
+# nullable: every existing row is legitimately undated until
+# `daemon migrate backfill-dates` runs. A NOT NULL default here would have
+# manufactured a date for every note in the vault, which is the exact failure
+# this feature exists to avoid.
+# ---------------------------------------------------------------------------
+
+_M007_COLUMNS = {"occurred_at": "TEXT", "occurred_at_source": "TEXT"}
+
+
+def _m007_occurred_at(conn: sqlite3.Connection) -> None:
+    existing = {row[1] for row in conn.execute("PRAGMA table_info(notes)")}
+    for col, typ in _M007_COLUMNS.items():
+        if col not in existing:
+            conn.execute(f"ALTER TABLE notes ADD COLUMN {col} {typ}")
+
+
 MIGRATIONS: list[tuple[int, str, Migration]] = [
     (1, "baseline_feedback_and_agent_state", _m001_baseline),
     (2, "note_registry_and_ordinals", _m002_registry),
@@ -327,6 +345,7 @@ MIGRATIONS: list[tuple[int, str, Migration]] = [
     (4, "activation_ledger", _m004_activation_ledger),
     (5, "themes_and_tag_proposals", _m005_themes),
     (6, "retrieval_policy_stats", _m006_retrieval_policy),
+    (7, "occurred_at_on_notes", _m007_occurred_at),
 ]
 
 SCHEMA_VERSION = MIGRATIONS[-1][0]

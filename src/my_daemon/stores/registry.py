@@ -27,7 +27,7 @@ _MIN_SCHEMA_VERSION = 2
 _COLUMNS = (
     "uuid, rel_path, title, mtime, body_sha256, frontmatter_sha256, tags_json, "
     "word_count, chunk_count, uuid_source, in_frontmatter, status, "
-    "first_seen_at, last_seen_at, deleted_at"
+    "first_seen_at, last_seen_at, deleted_at, occurred_at, occurred_at_source"
 )
 
 
@@ -56,6 +56,8 @@ def _to_record(row: sqlite3.Row) -> NoteRecord:
         first_seen_at=_dt(row["first_seen_at"]),
         last_seen_at=_dt(row["last_seen_at"]),
         deleted_at=_dt(row["deleted_at"]),
+        occurred_at=_dt(row["occurred_at"]),
+        occurred_at_source=row["occurred_at_source"],
     )
 
 
@@ -84,8 +86,9 @@ class NoteRegistry:
                 INSERT INTO notes (
                     uuid, rel_path, title, mtime, body_sha256, frontmatter_sha256,
                     tags_json, word_count, chunk_count, uuid_source, in_frontmatter,
-                    status, first_seen_at, last_seen_at, deleted_at
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NULL)
+                    status, first_seen_at, last_seen_at, deleted_at,
+                    occurred_at, occurred_at_source
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NULL, ?, ?)
                 ON CONFLICT(uuid) DO UPDATE SET
                     rel_path = excluded.rel_path,
                     title = excluded.title,
@@ -99,7 +102,9 @@ class NoteRegistry:
                     in_frontmatter = excluded.in_frontmatter,
                     status = excluded.status,
                     last_seen_at = excluded.last_seen_at,
-                    deleted_at = NULL
+                    deleted_at = NULL,
+                    occurred_at = excluded.occurred_at,
+                    occurred_at_source = excluded.occurred_at_source
                 """,
                 (
                     record.uuid,
@@ -116,6 +121,8 @@ class NoteRegistry:
                     record.status,
                     now,
                     now,
+                    record.occurred_at.isoformat() if record.occurred_at else None,
+                    record.occurred_at_source,
                 ),
             )
 
