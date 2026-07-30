@@ -462,9 +462,7 @@ def _run_query(
             stores.feedback_store,
             stores.llm,
             sparse_embedder=stores.sparse_embedder,
-            # `getattr`, not `.reranker`: `FakeStores` in the CLI test suite
-            # predates this field and stands in for `Stores` without it.
-            reranker=getattr(stores, "reranker", None),
+            reranker=stores.reranker,
         )
         response = engine.ask(text, synthesize=not no_synthesize, date_range=date_range)
 

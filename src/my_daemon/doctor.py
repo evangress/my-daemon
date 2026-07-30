@@ -473,6 +473,22 @@ def check_reranking(settings: Settings) -> CheckResult:
                 "`daemon models download` to A/B it via `daemon policy`."
             ),
         )
+    if not settings.retrieval.interleave:
+        # `_pool` returns the raw-score ordering before the rerank block ever
+        # runs when `retrieval.interleave` is false — the cross-encoder is
+        # only ever consulted as a team in the draft, so with drafting off it
+        # is never called at all. Silent otherwise: `rerank: true` alone reads
+        # as "reranking is active."
+        return CheckResult(
+            "reranking",
+            WARN,
+            "enabled, but retrieval.interleave is false — inert",
+            hint=(
+                "reranking only takes effect through the team draft, so it never "
+                "runs while interleaving is off; set `retrieval.interleave: true` "
+                "as well, or turn `retrieval.rerank` off to stop paying its cost."
+            ),
+        )
     model = settings.retrieval.rerank_model
     folder = settings.embeddings.cache_folder
     model_dir = find_cached_model(folder, model)

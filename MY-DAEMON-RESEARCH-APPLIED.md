@@ -60,7 +60,7 @@ of me — this table is the whole map.
 | ✅ | **IV.4** | Optimal (Hungarian) theme matching | 1 | S | 2026-07-29 |
 | ✅ | **IV.15** | Measure the theme match threshold | 1 | S | 2026-07-28 |
 | ⬜ | **IV.16** | Sparse fingerprint distance matrix | 1 | S | — |
-| ✅ | **IV.17** | Conditional reconciliation in the synthesis prompt † | 1 | S | 2026-07-30 |
+| ◐ | **IV.17** | Conditional reconciliation in the synthesis prompt † | 1 | S | *partly* 2026-07-30 |
 | ⬜ | **IV.20** | Activation stats into ranking † | 1 | S | — |
 | ⬜ | **IV.5** | Learned per-edge forgetting rates | 2 | M | — |
 | ⬜ | **IV.6** | Personalized PageRank for expansion | 2 | M | — |
@@ -78,7 +78,7 @@ of me — this table is the whole map.
 | ⬜ | **IV.13** | A REM analogue: generative recombination | 3 | — | — |
 | ⬜ | **IV.14** | Two-timescale consolidation | 3 | L | — |
 
-**7 shipped · 1 partial · 15 open**, of 23. Effort: S = a sitting, M = a focused
+**6 shipped · 2 partial · 15 open**, of 23. Effort: S = a sitting, M = a focused
 session or two, L = a milestone.
 
 **† added 2026-07-30 from the competitor review** — a feature-level comparison
@@ -96,11 +96,16 @@ forking, no linking; §13 extends copyleft to network use. Its SDKs (Apache-2.0)
 and CLI (MIT) are safe, and talking to a Honcho server over HTTP is fine. Every
 Honcho-derived item below is a design idea independently implemented.
 
-`◐` is used once, for **IV.3**: its correctness fix shipped, but three optional
+`◐` is used twice. For **IV.3**: its correctness fix shipped, but three optional
 enhancements behind it did not. Its body entry is `- [x]` because the *defect*
 is closed, and its four sub-options carry their own checkboxes — that is the
 only place in this document where the table marker and the body checkbox differ,
-and it is deliberate.
+and it is deliberate. For **IV.17**: implementation and structural tests
+shipped, but the five behavioural fixtures that would confirm the model
+actually obeys the five new rules have never run in this environment (no
+`ANTHROPIC_API_KEY` resolves here) — so, unlike IV.3, both the table marker
+and the body checkbox read `◐`/`- [ ]`, because what's unverified here is the
+work's actual effect, not an optional extra behind it.
 
 ### If you are choosing what to build next
 
@@ -1008,8 +1013,10 @@ compatibility, and `scripts/license_check.py` now enforces it in CI.
     *Licence:* none. Purely a constant-factor win — no behaviour change, so it
     should be provable by asserting the new matrix equals the old one.
 
-- [x] **IV.17 — Conditional reconciliation in the synthesis prompt.** † *Shipped
-    2026-07-30.*
+- [ ] **IV.17 — Conditional reconciliation in the synthesis prompt.** † (implemented
+    and structurally tested 2026-07-30, but behavioural compliance is
+    **unverified** — the five `live_llm` fixtures below have never run, since
+    no API key resolves in this environment)
 
     *Fixes:* `llm/prompts.py` already states the right policies — "do not invent",
     "say so plainly", "surface the conflict instead of papering over it" — and its
@@ -1052,6 +1059,19 @@ compatibility, and `scripts/license_check.py` now enforces it in CI.
     default and out of CI) that check the model actually *obeys* the rules
     against the real Anthropic client, so a silent behaviour change on a model
     upgrade has somewhere to show up.
+
+    *What closes this item:* the structural half is done; the behavioural half
+    is not, and cannot be claimed shipped on text-is-present tests alone. Run
+
+    ```
+    ANTHROPIC_API_KEY=... .venv/bin/pytest tests/test_live_prompts.py -m live_llm -v
+    ```
+
+    with the key supplied **from the environment** — the suite's autouse
+    `isolated_keychain` fixture (`tests/conftest.py`) blanks the OS credential
+    store for every test, so a key stored via `daemon key set` is invisible
+    here regardless of who runs it. Only a passing run of that command earns
+    the `✅`/`- [x]` this item does not yet have.
 
 - [ ] **IV.20 — Activation stats into ranking.** †
 

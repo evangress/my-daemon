@@ -208,6 +208,10 @@ def test_dry_run_writes_nothing(tmp_path, settings_for):
     report = backfill_dates(s, dry_run=True)
 
     assert report.filename == 1
+    # The note is already registered (a prior real `_ingest` ran above), so a
+    # real run would write it — the dry-run count must say so too, not just
+    # report the derivation breakdown.
+    assert report.updated == 1
     assert _stored_occurred_at(s, "2026-04-26.md") is None
 
 

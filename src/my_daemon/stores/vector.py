@@ -290,6 +290,15 @@ class VectorStore:
                     field_name=field,
                     field_schema=PayloadSchemaType.KEYWORD,
                 )
+        # `occurred_at` backs the §IV.10 `DatetimeRange` pre-filter on both
+        # retrieval arms — server mode may need this index just to match, not
+        # only for speed, so this is not merely the latency argument above.
+        with contextlib.suppress(Exception):  # already indexed → fine
+            client.create_payload_index(
+                collection_name=self.collection,
+                field_name="occurred_at",
+                field_schema=PayloadSchemaType.DATETIME,
+            )
 
     def upsert(
         self,

@@ -133,7 +133,5 @@ def build_orchestrator(
         stores.graph_store,
         sparse_embedder=stores.sparse_embedder,
         listeners=listeners,
-        # `getattr` rather than `.reranker`: `FakeStores` in the CLI test
-        # suite predates this field and stands in for `Stores` without it.
-        reranker=getattr(stores, "reranker", None),
+        reranker=stores.reranker,
     )

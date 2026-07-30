@@ -386,6 +386,20 @@ def test_an_enabled_but_cold_reranker_warns_naming_the_download(settings_for):
     assert "daemon models download" in result.hint
 
 
+def test_reranking_warns_when_enabled_but_interleave_is_off(settings_for):
+    """`rerank: true` + `interleave: false` never calls the cross-encoder —
+    `_pool` returns the raw-score ordering before the rerank block runs — so
+    this must not read as "reranking is active."""
+    s = settings_for(rerank=True)
+    s.retrieval.interleave = False
+
+    result = doctor.check_reranking(s)
+
+    assert result.status == doctor.WARN
+    assert "interleave" in result.detail
+    assert "team draft" in result.hint
+
+
 def test_an_enabled_and_cached_reranker_passes(settings_for):
     s = settings_for(rerank=True)
     snapshot = (

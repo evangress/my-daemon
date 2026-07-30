@@ -108,7 +108,11 @@ class FakeStores:
         self.vector_store = FakeVectorStore()
         self.graph_store = graph_store
         self.feedback_store = FeedbackStore(db_path=settings.feedback.db_path)
+        self.registry = None
+        self.ledger = None
+        self.policy = None
         self.llm = FakeLLM()
+        self.reranker = None
 
 
 # ---------------------------------------------------------------------------

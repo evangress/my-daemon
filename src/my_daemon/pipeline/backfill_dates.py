@@ -124,12 +124,16 @@ def backfill_dates(settings: Settings, *, dry_run: bool = False) -> BackfillRepo
             else:
                 report.undated += 1
 
-            if dry_run:
-                continue
-
             note_uuid = effective_uuid(note)
             record = registry.get(note_uuid)
             if record is None:
+                continue
+
+            if dry_run:
+                # Same eligibility check a real run makes — only the writes
+                # (Qdrant payload, registry row) are skipped, so the count
+                # reported here is the count a real run would produce.
+                report.updated += 1
                 continue
 
             vector_store.set_occurred_at(

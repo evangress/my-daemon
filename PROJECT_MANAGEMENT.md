@@ -315,8 +315,9 @@ NiceGUI's long-term fate) are not yet decided.
   reranking on resets how much the existing §IV.7 policy history means to
   read. Ten new tests (`tests/test_orchestrator.py`,
   `tests/test_doctor.py`) plus the two behavioural properties above; full
-  suite 893 passed / 1 skipped / 5 deselected (was 883/1/5 before this task);
-  ruff and mypy clean.
+  suite 895 passed / 1 skipped / 5 deselected (was 883/1/5 before this task,
+  and a further 1 test added by the final-review fix wave); ruff and mypy
+  clean.
   **Latency, measured for real** (not invented), on the author's 130-note
   vault, CPU-only, `cross-encoder/ms-marco-MiniLM-L-6-v2`, default
   `rerank_max_candidates: 100` — **cold and warm separately, because they
