@@ -3,7 +3,7 @@
 
 from __future__ import annotations
 
-from my_daemon.models import RetrievedChunk
+from my_daemon.models import Chunk, RetrievedChunk
 
 SYSTEM_PROMPT = """You are the user's "daemon" — a memory companion with read-only access to their personal Obsidian vault.
 
@@ -18,18 +18,30 @@ You may also be shown "Earlier, you asked" — past questions of theirs that dre
 """
 
 
+def _date_marker(chunk: Chunk) -> str:
+    """How a chunk's date is shown to the model.
+
+    `~` means inferred (from mtime) rather than stated. The distinction is not
+    decoration: an inferred date is usable for ordering but must not be
+    presented to the user as certain, and the system prompt says so.
+    """
+
+    if chunk.occurred_at is None:
+        return "(undated)"
+    stamp = chunk.occurred_at.date().isoformat()
+    return f"[{stamp}~]" if chunk.occurred_at_source == "mtime" else f"[{stamp}]"
+
+
 def build_context_block(chunks: list[RetrievedChunk]) -> str:
     parts: list[str] = []
     for i, rc in enumerate(chunks, start=1):
         heading = " › ".join(rc.chunk.heading_path) if rc.chunk.heading_path else "(no heading)"
-        score = rc.combined_score
-        provenance = (
-            f"vector={rc.vector_score:.3f}"
-            if rc.vector_score is not None
-            else f"graph_distance={rc.graph_distance:.2f}"
-        )
+        # Retrieval scores are deliberately absent. They are facts about the
+        # machinery, no instruction consumes them, and showing them invites the
+        # model to treat our rank order as evidence about the world.
         parts.append(
-            f"[{i}] {rc.chunk.note_path} › {heading}  (score={score:.3f}, {provenance})\n{rc.chunk.text.strip()}"
+            f"[{i}] {_date_marker(rc.chunk)} {rc.chunk.note_path} › {heading}\n"
+            f"{rc.chunk.text.strip()}"
         )
     return "\n\n---\n\n".join(parts)
 
