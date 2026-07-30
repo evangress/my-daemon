@@ -28,3 +28,26 @@ These dependencies **are** incompatible with `Apache-2.0` and are accepted anywa
 | [`nvidia-nvjitlink`](https://pypi.org/project/nvidia-nvjitlink/) | 13.0.88 | Other/Proprietary License | NVIDIA proprietary CUDA runtime; transitive via torch, not redistributed with this project's source |
 | [`nvidia-nvshmem-cu13`](https://pypi.org/project/nvidia-nvshmem-cu13/) | 3.4.5 | LicenseRef-NVIDIA-Proprietary | NVIDIA proprietary CUDA runtime; transitive via torch, not redistributed with this project's source |
 | [`nvidia-nvtx`](https://pypi.org/project/nvidia-nvtx/) | 13.0.85 | Other/Proprietary License | NVIDIA proprietary CUDA runtime; transitive via torch, not redistributed with this project's source |
+
+## Model weights
+
+`scripts/license_check.py` inspects Python package distributions on PyPI; it has
+no notion of a model artifact and cannot see Hugging Face Hub card metadata.
+Every model weight this project downloads is therefore verified **by hand**,
+not by the automated CI gate. As of this entry the project ships three model
+artifacts, none of which the gate covers:
+
+| Model | Role | Licence | Source |
+|---|---|---|---|
+| `BAAI/bge-small-en-v1.5` | dense embedder | MIT | HF Hub card metadata, checked 2026-07-30 |
+| `Qdrant/bm42-all-minilm-l6-v2-attentions` (fastembed's alias for HF repo `Qdrant/all_miniLM_L6_v2_with_attentions`) | BM42 sparse embedder | Apache-2.0 | HF Hub card metadata, checked 2026-07-30 |
+| `cross-encoder/ms-marco-MiniLM-L-6-v2` | cross-encoder reranker (default, IV.18 Task 14) | Apache-2.0 (`license:apache-2.0` tag) | HF Hub card metadata, checked 2026-07-30 |
+| `BAAI/bge-reranker-base` | cross-encoder reranker (documented fallback) | MIT | HF Hub card metadata, checked 2026-07-30 |
+
+Both reranker candidates were checked against `huggingface_hub.model_info(...).card_data`
+on 2026-07-30: `ms-marco-MiniLM-L-6-v2` reports `license: apache-2.0`
+(confirmed live via `model_info`, tag `license:apache-2.0` present), and
+`bge-reranker-base` reports `license: mit`. Both are Apache-2.0 compatible;
+`ms-marco-MiniLM-L-6-v2` is used as the spec's default, with `bge-reranker-base`
+kept as the documented fallback. Extending `scripts/license_check.py` to cover
+model artifacts is a deliberate future item, not part of this task.
