@@ -75,6 +75,8 @@ def _register(registry: NoteRegistry, note_uuid: str, note: Note, chunk_count: i
             chunk_count=chunk_count,
             uuid_source=note.uuid_source or ("assigned" if note.uuid else "derived_path"),
             in_frontmatter=note.uuid is not None,
+            occurred_at=note.occurred_at,
+            occurred_at_source=note.occurred_at_source,
         )
     )
 

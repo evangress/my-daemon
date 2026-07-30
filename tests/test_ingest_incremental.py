@@ -219,3 +219,26 @@ def test_removing_a_wikilink_from_a_note_drops_the_edge(settings: Settings, vaul
     _ingest(settings, store)
 
     assert not store.graph.has_edge(f"note::{_u('A.md')}", f"note::{_u('B.md')}")
+
+
+def test_ingest_persists_occurred_at_into_the_registry(settings: Settings, vault: Path):
+    """The columns exist and Note carries the values; only `_register` connects
+    them. A test that builds a NoteRecord by hand passes right over this."""
+    from datetime import UTC, datetime
+
+    from my_daemon.stores.registry import NoteRegistry
+
+    (vault / "A.md").write_text(
+        '---\ndate: "2024-09-02"\n---\n# A\n\nSee [[B]].\n\n#memory\n', encoding="utf-8"
+    )
+    store = GraphStore(path=settings.graph.path)
+    _ingest(settings, store)
+
+    registry = NoteRegistry(db_path=settings.feedback.db_path)
+    dated = registry.get(_u("A.md"))
+    undated = registry.get(_u("B.md"))
+
+    assert dated.occurred_at == datetime(2024, 9, 2, tzinfo=UTC)
+    assert dated.occurred_at_source == "frontmatter"
+    assert undated.occurred_at is None
+    assert undated.occurred_at_source is None
