@@ -124,3 +124,14 @@ def test_assembled_prompt_carries_date_markers_and_omits_scores():
     )
     assert "[2026-06-14]" in msg and "[2026-03-02]" in msg and "(undated)" in msg
     assert "score=" not in msg
+
+
+def test_the_general_conflict_bullet_defers_to_the_specific_rules():
+    """Two instructions for one trigger is worse than one. The general bullet
+    must route the model to the specific update-vs-contradiction rule rather
+    than offer a second, vaguer answer."""
+    prompt = prompts.SYSTEM_PROMPT
+    # The old standalone phrasing must be gone.
+    assert "surface the conflict instead of papering over it" not in prompt
+    # And the general mention must point at the specific rules.
+    assert "rules below" in prompt or "update-vs-contradiction" in prompt.lower()

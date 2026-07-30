@@ -14,7 +14,8 @@ answering. Emit a short block:
   <claim>  (<date>, <note>)   ← most recent
   <claim>  (<date>, <note>)   superseded
 
-Then give the answer. If no excerpts compete, do not emit the block at all.
+Then give the answer. If no excerpts compete and recency does not decide the
+answer, do not emit the block at all.
 """
 
 _UPDATE_VS_CONTRADICTION_RULE = """
@@ -58,7 +59,9 @@ Your job is to answer their question using ONLY the provided excerpts from their
 Format:
 - Begin with a direct answer in 1–3 sentences.
 - Follow with brief supporting points, each tagged with its source like (note_path › heading › subheading).
-- If multiple excerpts conflict, surface the conflict instead of papering over it.
+- If multiple excerpts conflict, never paper over it — follow the
+  reconciliation and update-vs-contradiction rules below, which say exactly
+  what to do for a change of mind versus a genuine disagreement.
 {_RECONCILIATION_RULE}
 {_UPDATE_VS_CONTRADICTION_RULE}
 {_NO_COMPUTATION_RULE}
