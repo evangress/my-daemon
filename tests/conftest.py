@@ -113,7 +113,9 @@ def live_answer() -> Callable[[str, list[tuple[str, datetime | None, str]]], str
     `isolated_keychain` autouse fixture swaps in an empty in-memory keyring for
     every test, this one included, so in practice only the environment
     variable or a `.env` file can supply the key here. Skips with a clear
-    message when neither does.
+    message when neither does — one that does NOT send a reader down the
+    `daemon setup` / `daemon key set` path, since that writes to the OS
+    credential store this fixture cannot see.
     """
     resolved = resolve_api_key(
         env_value=os.environ.get(ENV_VAR),
@@ -121,9 +123,12 @@ def live_answer() -> Callable[[str, list[tuple[str, datetime | None, str]]], str
     )
     if resolved.value is None:
         pytest.skip(
-            f"No {ENV_VAR} resolved (checked the environment, OS credential "
-            "store, and ./.env) — live LLM fixtures need a real Anthropic API "
-            "key. Export ANTHROPIC_API_KEY or run `daemon setup`."
+            f"No {ENV_VAR} resolved from the environment. These live tests can only "
+            "read the key from an environment variable or .env — the suite's autouse "
+            "isolated_keychain fixture blanks the OS credential store for every test, "
+            "so a key stored via `daemon key set` is deliberately invisible here. Run "
+            "with:\n"
+            f"  {ENV_VAR}=$(...) .venv/bin/pytest tests/test_live_prompts.py -m live_llm"
         )
 
     llm = LLMClient(LLMConfig(), api_key=resolved.value)
