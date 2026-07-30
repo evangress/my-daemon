@@ -4,13 +4,15 @@
 from __future__ import annotations
 
 import re
-from datetime import UTC, datetime
+from collections.abc import Sequence
+from datetime import UTC, date, datetime
 from pathlib import Path
 
 import frontmatter
 import yaml
 
 from my_daemon.models import Note
+from my_daemon.vault.dates import DEFAULT_DATE_KEYS, derive_occurred_at
 from my_daemon.vault.identity import read_note_uuid
 
 WIKILINK_RE = re.compile(r"\[\[([^\]|]+)(?:\|[^\]]+)?\]\]")
@@ -33,7 +35,13 @@ def _strip_code_fences(text: str) -> str:
     return re.sub(r"```.*?```", "", text, flags=re.DOTALL)
 
 
-def parse_note(file_path: Path, vault_root: Path) -> Note:
+def parse_note(
+    file_path: Path,
+    vault_root: Path,
+    *,
+    date_keys: Sequence[str] = DEFAULT_DATE_KEYS,
+    mtime_trusted_before: date | None = None,
+) -> Note:
     """Read a single markdown file and produce a :class:`Note`.
 
     Wikilinks here are stored as the raw target text. Resolution to vault-relative
@@ -75,6 +83,9 @@ def parse_note(file_path: Path, vault_root: Path) -> Note:
     tags = sorted(inline_tags | fm_tags)
 
     mtime = datetime.fromtimestamp(file_path.stat().st_mtime, tz=UTC)
+    occurred_at, occurred_at_source = derive_occurred_at(
+        fm, rel_path, mtime, keys=date_keys, trusted_before=mtime_trusted_before
+    )
     word_count = len(body.split())
     note_uuid, uuid_source = read_note_uuid(fm)
 
@@ -92,6 +103,8 @@ def parse_note(file_path: Path, vault_root: Path) -> Note:
         dangling_wikilinks=list(wikilinks),
         tags=tags,
         mtime=mtime,
+        occurred_at=occurred_at,
+        occurred_at_source=occurred_at_source,
         word_count=word_count,
         uuid=note_uuid,
         uuid_source=uuid_source,

@@ -491,7 +491,12 @@ class DaemonCore:
         path = self._dedupe(self._safe_vault_path(rel))
         write_atomic(path, frontmatter.dumps(post) + "\n")
 
-        note = parse_note(path, self.s.vault.path)
+        note = parse_note(
+            path,
+            self.s.vault.path,
+            date_keys=self.s.vault.date_frontmatter_keys,
+            mtime_trusted_before=self.s.vault.mtime_trusted_before,
+        )
         with self._write_lock:
             n_chunks = ingest_note(
                 self.s,

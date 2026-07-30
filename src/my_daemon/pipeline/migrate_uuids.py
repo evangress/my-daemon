@@ -136,7 +136,12 @@ def assign_uuids(
         rel_path = path.relative_to(vault_root).as_posix()
         report.scanned += 1
 
-        note = parse_note(path, vault_root)
+        note = parse_note(
+            path,
+            vault_root,
+            date_keys=settings.vault.date_frontmatter_keys,
+            mtime_trusted_before=settings.vault.mtime_trusted_before,
+        )
         resolved = note.uuid
         source = note.uuid_source or "assigned"
 

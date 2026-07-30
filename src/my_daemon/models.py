@@ -51,6 +51,15 @@ class Note(BaseModel):
     dangling_wikilinks: list[str] = Field(default_factory=list)
     tags: list[str] = Field(default_factory=list)
     mtime: datetime
+    # When the described thing *happened*, derived from frontmatter or filename
+    # (see `vault/dates.py`). None means honestly undated — never a guess.
+    # `mtime` above is when the *file* changed and is deliberately a separate
+    # axis: on a copied vault it records the copy, so using it here would date a
+    # 2024 journal entry to the import.
+    occurred_at: datetime | None = None
+    #: "frontmatter" | "filename" | "mtime" | None — so a lower-confidence date
+    #: stays distinguishable downstream without a second backfill.
+    occurred_at_source: str | None = None
     word_count: int
     # Stable identity, read from frontmatter. None means the note has not been
     # stamped yet — ingest assigns a path-derived fallback so it can still

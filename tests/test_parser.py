@@ -1,6 +1,7 @@
 # SPDX-License-Identifier: Apache-2.0
 from __future__ import annotations
 
+from datetime import UTC, date, datetime
 from pathlib import Path
 
 from my_daemon.vault.parser import parse_note
@@ -73,3 +74,58 @@ def test_malformed_frontmatter_degrades_instead_of_raising(tmp_path: Path):
     assert "Haystack Framework - Overview" in parsed.wikilinks
     assert "Personal Knowledge Base" in parsed.wikilinks
     assert parsed.title == "Docling"
+
+
+def test_parse_note_derives_occurred_at_from_frontmatter(tmp_path):
+    p = tmp_path / "note.md"
+    p.write_text('---\ndate: "2024-09-02"\n---\n# Title\nbody\n', encoding="utf-8")
+    note = parse_note(p, tmp_path)
+    assert note.occurred_at == datetime(2024, 9, 2, tzinfo=UTC)
+    assert note.occurred_at_source == "frontmatter"
+
+
+def test_parse_note_derives_occurred_at_from_filename(tmp_path):
+    p = tmp_path / "2026-03-31 Journal Entry.md"
+    p.write_text("# Entry\nbody\n", encoding="utf-8")
+    note = parse_note(p, tmp_path)
+    assert note.occurred_at == datetime(2026, 3, 31, tzinfo=UTC)
+    assert note.occurred_at_source == "filename"
+
+
+def test_parse_note_leaves_undated_notes_undated(tmp_path):
+    p = tmp_path / "Welcome.md"
+    p.write_text("# Welcome\nbody\n", encoding="utf-8")
+    note = parse_note(p, tmp_path)
+    assert note.occurred_at is None and note.occurred_at_source is None
+    assert note.mtime is not None, "mtime is still recorded, just not as the episodic axis"
+
+
+def test_parse_note_honours_the_mtime_cutoff(tmp_path):
+    """The fixture deliberately avoids exact UTC midnight — a midnight mtime would
+    pass even if the implementation forgot to normalise mtime down to a day before
+    comparing/returning it. Non-midnight proves normalisation actually happens."""
+    import os
+
+    p = tmp_path / "Welcome.md"
+    p.write_text("# Welcome\nbody\n", encoding="utf-8")
+    old = datetime(2026, 2, 21, 13, 3, 47, tzinfo=UTC).timestamp()
+    os.utime(p, (old, old))
+    note = parse_note(p, tmp_path, mtime_trusted_before=date(2026, 6, 21))
+    assert note.occurred_at == datetime(2026, 2, 21, 0, 0, tzinfo=UTC)
+    assert note.occurred_at_source == "mtime"
+    assert note.mtime == datetime(2026, 2, 21, 13, 3, 47, tzinfo=UTC), (
+        "mtime keeps its full precision; only occurred_at is day-normalised"
+    )
+
+
+def test_mtime_and_occurred_at_are_independent(tmp_path):
+    """The whole point: when the file was touched is not when the thing happened."""
+    import os
+
+    p = tmp_path / "2024-09-02.md"
+    p.write_text("# Entry\nbody\n", encoding="utf-8")
+    touched = datetime(2026, 7, 1, 12, 0, tzinfo=UTC).timestamp()
+    os.utime(p, (touched, touched))
+    note = parse_note(p, tmp_path)
+    assert note.occurred_at == datetime(2024, 9, 2, tzinfo=UTC)
+    assert note.mtime == datetime(2026, 7, 1, 12, 0, tzinfo=UTC)
