@@ -60,7 +60,7 @@ of me — this table is the whole map.
 | ✅ | **IV.4** | Optimal (Hungarian) theme matching | 1 | S | 2026-07-29 |
 | ✅ | **IV.15** | Measure the theme match threshold | 1 | S | 2026-07-28 |
 | ⬜ | **IV.16** | Sparse fingerprint distance matrix | 1 | S | — |
-| ⬜ | **IV.17** | Conditional reconciliation in the synthesis prompt † | 1 | S | — |
+| ✅ | **IV.17** | Conditional reconciliation in the synthesis prompt † | 1 | S | 2026-07-30 |
 | ⬜ | **IV.20** | Activation stats into ranking † | 1 | S | — |
 | ⬜ | **IV.5** | Learned per-edge forgetting rates | 2 | M | — |
 | ⬜ | **IV.6** | Personalized PageRank for expansion | 2 | M | — |
@@ -1008,7 +1008,8 @@ compatibility, and `scripts/license_check.py` now enforces it in CI.
     *Licence:* none. Purely a constant-factor win — no behaviour change, so it
     should be provable by asserting the new matrix equals the old one.
 
-- [ ] **IV.17 — Conditional reconciliation in the synthesis prompt.** †
+- [x] **IV.17 — Conditional reconciliation in the synthesis prompt.** † *Shipped
+    2026-07-30.*
 
     *Fixes:* `llm/prompts.py` already states the right policies — "do not invent",
     "say so plainly", "surface the conflict instead of papering over it" — and its
@@ -1041,6 +1042,16 @@ compatibility, and `scripts/license_check.py` now enforces it in CI.
     *Depends on:* IV.10 amendment 2 — there is nothing to reconcile on until the
     model is shown dates. *Spec:*
     `docs/superpowers/specs/2026-07-30-conditional-reconciliation-design.md`.
+
+    *Delivered as two pieces.* The five rules themselves (conditional
+    reconciliation audit, update-vs-contradiction split, anti-arithmetic,
+    abstention contract, `(undated)`/`[date~]` handling) in `SYSTEM_PROMPT`,
+    pinned by structural tests that check the text is present. Then
+    `tests/test_live_prompts.py` + the `live_answer` fixture in
+    `tests/conftest.py` — five opt-in fixtures (`-m live_llm`, deselected by
+    default and out of CI) that check the model actually *obeys* the rules
+    against the real Anthropic client, so a silent behaviour change on a model
+    upgrade has somewhere to show up.
 
 - [ ] **IV.20 — Activation stats into ranking.** †
 

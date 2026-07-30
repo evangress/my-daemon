@@ -274,6 +274,31 @@ NiceGUI's long-term fate) are not yet decided.
 
 ## Done
 
+- **Opt-in live-LLM prompt-compliance fixtures, §IV.17 close-out (2026-07-30).**
+  §IV.17's five `SYSTEM_PROMPT` rules (conditional reconciliation audit,
+  update-vs-contradiction split, anti-arithmetic, abstention contract,
+  `(undated)`/`[date~]` handling) were previously pinned only by *structural*
+  tests — text-is-present checks that can't tell whether the model actually
+  obeys them. `tests/test_live_prompts.py` adds five behavioural fixtures
+  against the real Anthropic client (via `LLMClient`, not a raw `anthropic`
+  client), driven by a new `live_answer` fixture in `tests/conftest.py` that
+  builds real `RetrievedChunk`s from `(note_path, occurred_at, text)` tuples
+  and resolves the API key through `secrets.resolve_api_key` — skipping with a
+  clear message rather than failing when no key is available.
+  Deliberately **not** part of CI or the default run: they cost money and are
+  non-deterministic. `pyproject.toml` gained a registered `live_llm` marker and
+  `addopts = "-m 'not live_llm'"` so `pytest -q` deselects them by default;
+  invoke explicitly with `pytest tests/test_live_prompts.py -m live_llm -v`.
+  Their value isn't a green tick — it's that the cases exist and can be
+  re-run against a new model, since a model upgrade is exactly when prompt
+  compliance changes silently (as already happened once with Opus 4.7 and
+  `temperature`).
+  No Anthropic API key was available in this environment, so the by-hand run
+  produced 5 skips with the informative message rather than a pass/fail
+  verdict — see `.superpowers/sdd/2026-07-30-time-binding-reconciliation-reranking/task-12-report.md`
+  for the full accounting. 870 passed / 1 skipped / 5 deselected — the default
+  count is unchanged from before this task.
+
 - **Episodic time-binding, §IV.10 (2026-07-30).** Closes Part III.3: `Chunk`
   now carries an honest `occurred_at` (parsed from frontmatter, else filename,
   else file mtime as a last resort) plus `occurred_at_source`, and query-time

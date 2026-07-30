@@ -111,3 +111,7 @@ testpaths = ["tests"]
 # "." so tests can import `scripts.bootstrap` — the Windows installer lives
 # outside the package on purpose (it runs before the package exists on disk).
 pythonpath = ["src", "."]
+markers = [
+    "live_llm: hits a real LLM provider. Deselected by default; needs a real key.",
+]
+addopts = "-m 'not live_llm'"
