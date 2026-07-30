@@ -94,6 +94,21 @@ def _stored_occurred_at(settings: Settings, rel_path: str) -> datetime | None:
     return None
 
 
+def _payload_of(settings: Settings, rel_path: str) -> dict:
+    """The raw payload dict for a note's first chunk.
+
+    Deliberately distinct from ``_stored_occurred_at``: ``.get("occurred_at")``
+    collapses "key absent" and "key present with value None" to the same
+    result, and the date filter's ``IsEmpty`` semantics depend on telling
+    those two apart. A caller that needs that distinction must use ``in``
+    against this dict, never ``.get()``.
+    """
+    for payload in _all_payloads(settings):
+        if payload.get("note_path") == rel_path:
+            return payload
+    raise AssertionError(f"no point with note_path={rel_path!r}")
+
+
 def _strip_occurred_at(settings: Settings, rel_path: str) -> None:
     """Simulate a point ingested before the ``occurred_at`` payload key existed.
 
@@ -150,13 +165,21 @@ def test_backfill_is_idempotent(tmp_path, settings_for):
     s = settings_for(vault=tmp_path)
     _ingest(s)
     first = backfill_dates(s)
+    payload_after_first = _payload_of(s, "2026-04-26.md")
+
     second = backfill_dates(s)
+
     assert (first.frontmatter, first.filename, first.undated, first.updated) == (
         second.frontmatter,
         second.filename,
         second.undated,
         second.updated,
     )
+    # The counts alone derive from vault content, not storage, so they'd be
+    # idempotent by construction even if the second run duplicated a registry
+    # write or errored on a redundant `delete_payload`. The raw payload has to
+    # actually be unchanged too.
+    assert _payload_of(s, "2026-04-26.md") == payload_after_first
 
 
 def test_backfill_does_not_touch_vectors(tmp_path, settings_for):
@@ -217,3 +240,27 @@ def test_a_renamed_note_refreshes_a_filename_derived_date(tmp_path, settings_for
     _ingest(s)
 
     assert _stored_occurred_at(s, "2026-01-01.md") == datetime(2026, 1, 1, tzinfo=UTC)
+
+
+def test_losing_a_frontmatter_date_removes_the_key_rather_than_nulling_it(tmp_path, settings_for):
+    """dated -> undated must REMOVE the payload key, not write it as null.
+
+    The date filter treats an absent key as "undated" via `IsEmptyCondition`;
+    a literal null would not match that condition, so the note would silently
+    become invisible to both filtered and unfiltered date queries rather than
+    correctly falling out of them. Only the `fm_changed` branch can catch
+    this: the body is unchanged, so a body-hash comparison alone would skip
+    the note entirely and leave the stale date in place.
+    """
+    s = settings_for(vault=tmp_path)
+    p = tmp_path / "note.md"
+    p.write_text('---\ndate: "2024-09-02"\n---\nbody\n', encoding="utf-8")
+    _ingest(s)
+    assert "occurred_at" in _payload_of(s, "note.md")
+
+    p.write_text("body\n", encoding="utf-8")  # frontmatter dropped, body unchanged
+    _ingest(s)
+
+    payload = _payload_of(s, "note.md")
+    assert "occurred_at" not in payload
+    assert "occurred_at_source" not in payload

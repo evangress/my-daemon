@@ -341,6 +341,43 @@ def test_payload_omits_date_keys_when_undated(tmp_path) -> None:
         store.close()
 
 
+def test_set_occurred_at_with_none_deletes_the_keys(tmp_path) -> None:
+    """Pinned at the store level too — the ingest and backfill paths are not
+    the only callers. `None` must *delete* each key, not write it as null: a
+    literal null would still satisfy a plain `.get()` read but not Qdrant's
+    `IsEmptyCondition`, which is what `date_conditions`/`count_undated` use to
+    mean "undated" — so a null would silently defeat the whole filter design.
+    """
+    from datetime import UTC, datetime
+
+    store = VectorStore(url=None, collection="chunks", dim=4, hybrid=True, path=tmp_path / "q")
+    try:
+        store.ensure_collection()
+        dated = Chunk(
+            id="c1",
+            note_uuid="u1",
+            note_path="a.md",
+            text="x",
+            chunk_index=0,
+            occurred_at=datetime(2024, 9, 2, tzinfo=UTC),
+            occurred_at_source="frontmatter",
+            modified_at=datetime(2026, 1, 1, tzinfo=UTC),
+        )
+        store.upsert([dated], [[0.1] * store.dim], sparse_vectors=[([1], [0.4])])
+
+        before = _all_payloads(store)[0]
+        assert {"occurred_at", "occurred_at_source", "modified_at"} <= before.keys()
+
+        store.set_occurred_at("u1", None, None, None)
+
+        after = _all_payloads(store)[0]
+        assert "occurred_at" not in after
+        assert "occurred_at_source" not in after
+        assert "modified_at" not in after
+    finally:
+        store.close()
+
+
 def test_payload_round_trip_keeps_occurred_at_and_modified_at_distinct(tmp_path) -> None:
     from datetime import UTC, datetime
 
