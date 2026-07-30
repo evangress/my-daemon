@@ -7,7 +7,7 @@ from datetime import datetime
 from pathlib import Path
 from typing import Literal
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 # Every daemon-authored theme tag carries this prefix. Two reasons: the user
 # can see at a glance which tags they wrote and which the daemon proposed, and
@@ -319,3 +319,39 @@ class WeightEvolutionReport(BaseModel):
     events_skipped: int  # selections without enough info to replay (no seed path, etc.)
     top_edges: list[EdgeWeightDelta] = Field(default_factory=list)
     top_notes: list[NoteWeightDelta] = Field(default_factory=list)
+
+
+class DateRange(BaseModel):
+    """A half-open episodic interval: ``since <= occurred_at < until``.
+
+    Exclusive ``until`` keeps interval arithmetic clean. The CLI converts a bare
+    ``--until 2026-05-31`` into ``2026-06-01T00:00:00Z`` so the user's obvious
+    intent — include that day — is honoured **at the boundary**, which is the
+    only place a human-intent fudge belongs. Putting it deeper is how
+    off-by-one-day bugs become unlocatable.
+
+    Either bound may be ``None``. That is load-bearing rather than incidental:
+    an open-ended phrase ("from March onward") or a recurring one ("every
+    Wednesday") must resolve to an absent bound rather than an invented one.
+    """
+
+    model_config = ConfigDict(frozen=True)
+
+    since: datetime | None = None
+    until: datetime | None = None
+
+    @model_validator(mode="after")
+    def _ordered(self) -> DateRange:
+        if self.since is not None and self.until is not None and self.since > self.until:
+            raise ValueError(f"since ({self.since}) must not be after until ({self.until})")
+        return self
+
+    @property
+    def is_active(self) -> bool:
+        """False when neither bound is set — no filter should be constructed."""
+        return self.since is not None or self.until is not None
+
+    @property
+    def is_empty(self) -> bool:
+        """True when the half-open interval cannot contain anything."""
+        return self.since is not None and self.until is not None and self.since == self.until
