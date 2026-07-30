@@ -299,6 +299,24 @@ class MyDaemonProvider(_MemoryProviderBase):  # type: ignore[misc,valid-type]
                     "properties": {
                         "query": {"type": "string", "description": "What to recall."},
                         "top_k": {"type": "integer", "description": "Max candidates (default 8)."},
+                        "since": {
+                            "type": "string",
+                            "description": (
+                                "Only recall notes dated on/after this date, as an absolute "
+                                "ISO date (YYYY-MM-DD) — e.g. '2026-03-01'. Resolve any "
+                                "relative phrase ('last spring', 'this week') to an absolute "
+                                "date yourself first; this field is not parsed as natural "
+                                "language."
+                            ),
+                        },
+                        "until": {
+                            "type": "string",
+                            "description": (
+                                "Only recall notes dated on/before this date, inclusive, as "
+                                "an absolute ISO date (YYYY-MM-DD). Same rule as 'since': "
+                                "resolve relative phrases yourself before calling."
+                            ),
+                        },
                     },
                     "required": ["query"],
                 },
@@ -388,10 +406,15 @@ class MyDaemonProvider(_MemoryProviderBase):  # type: ignore[misc,valid-type]
             return "My Daemon is not initialized."
         args = arguments or {}
         if name == "mydaemon_recall":
+            # `since`/`until` only forwarded when the model actually supplied
+            # one — same test-double compatibility shim `DaemonCore.recall`
+            # itself uses, so a `_core` stub that predates §IV.10 keeps working.
+            date_kwargs = {k: args[k] for k in ("since", "until") if args.get(k) is not None}
             data = self._core.recall(
                 args["query"],
                 top_k=args.get("top_k"),
                 synthesize=False,
+                **date_kwargs,
             )
             return json.dumps(data, default=str)
         if name == "mydaemon_dream":

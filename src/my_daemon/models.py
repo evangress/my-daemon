@@ -3,11 +3,11 @@
 
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import Literal
 
-from pydantic import BaseModel, ConfigDict, Field, model_validator
+from pydantic import BaseModel, ConfigDict, Field, ValidationError, model_validator
 
 # Every daemon-authored theme tag carries this prefix. Two reasons: the user
 # can see at a glance which tags they wrote and which the daemon proposed, and
@@ -364,3 +364,34 @@ class DateRange(BaseModel):
     def is_empty(self) -> bool:
         """True when the half-open interval cannot contain anything."""
         return self.since is not None and self.until is not None and self.since == self.until
+
+
+def parse_date_bounds(since: str | None, until: str | None) -> DateRange:
+    """Bare ISO date strings from a human- or model-facing boundary into a
+    half-open UTC :class:`DateRange`.
+
+    A bare ``until="2026-05-31"`` becomes ``2026-06-01T00:00:00Z``: whoever is
+    asking means "include that day", while the range itself is exclusive on
+    ``until``. This is the **one** place that fudge happens — every entry
+    point (the CLI's ``--since``/``--until``, ``DaemonCore.recall``, the
+    Hermes tool schema) calls through here, so the conversion cannot drift or
+    duplicate into a second, subtly different off-by-one-day bug.
+
+    Raises ``ValueError`` — not a framework-specific exception — on a
+    malformed date string or an inverted range, so every caller (a Typer
+    command, a plain library call, a Hermes tool handler) can catch the same
+    thing and translate it into whatever its own surface expects.
+    """
+
+    def _at_midnight(raw: str) -> datetime:
+        try:
+            return datetime.fromisoformat(raw).replace(tzinfo=UTC)
+        except ValueError:
+            raise ValueError(f"expected an ISO date like 2026-03-01, got {raw!r}") from None
+
+    lo = _at_midnight(since) if since else None
+    hi = _at_midnight(until) + timedelta(days=1) if until else None
+    try:
+        return DateRange(since=lo, until=hi)
+    except ValidationError as exc:
+        raise ValueError(str(exc)) from None

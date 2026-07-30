@@ -92,13 +92,38 @@ necessary after switching `embeddings.hybrid` on or off.
 ### `daemon query`
 
 ```
-daemon query <text> [--no-llm] [-v]
+daemon query <text> [--no-llm] [-v] [--since DATE] [--until DATE]
 ```
 
 Ask the daemon a question. Prints the synthesized answer, then a ranked
 candidates table (at least `retrieval.candidate_pool`, default 3). `--no-llm`
 skips synthesis and shows ranked context only — useful while tuning retrieval.
 `-v` adds seeds/expanded counts, latency, and the feedback row id.
+
+`--since` / `--until` restrict retrieval to notes with a derived `occurred_at`
+in that window — both take a bare ISO date (`2026-03-01`), and either may be
+given alone. `--until` is **inclusive** at this boundary: `--until 2026-05-31`
+means "through the 31st", converted internally to the exclusive
+`2026-06-01T00:00:00Z` the retrieval layer actually filters on. No natural-
+language dates ("last spring") are parsed here — an unparsable value exits
+non-zero with a message showing the expected format, and `since` after `until`
+does the same.
+
+When a filter is active, a dim line reports how much of the vault it could see:
+
+```
+Temporal filter: 2026-03-01 → 2026-06-01 (UTC)
+Coverage: 806 of 1,590 chunks carry a date — 784 undated chunks not considered.
+```
+
+**Read this honestly, not as a bug report.** In a typical vault only about half
+of all notes carry a date the daemon can derive at all (frontmatter, filename,
+or a configured mtime cutoff — see
+[`vault.date_frontmatter_keys` / `vault.mtime_trusted_before`](configuration.md#vault)),
+so a temporal filter is searching roughly half the vault by construction, not
+failing to find the rest. A thin result under `--since`/`--until` most likely
+means the missing notes are undated, not out of range — run
+`daemon migrate backfill-dates` to see the split and close some of the gap.
 
 ### `daemon ask`
 
@@ -338,6 +363,35 @@ Honest limitation, reported rather than hidden: a query naming notes that have
 since been renamed or deleted yields a *partial* fingerprint, which looks less
 similar to everything than it should. Above a 20% drop rate the command says so.
 
+### `daemon migrate backfill-dates`
+
+```
+daemon migrate backfill-dates [--dry-run]
+```
+
+Populates `occurred_at` on chunks that were ingested before episodic dating
+existed. `daemon ingest` skips a note whose body hash is unchanged, so a
+metadata-only field added later never reaches those chunks just by
+re-ingesting — this is a payload correction, not a re-embed: chunk ids fold in
+the text, never the date, so no vector is touched.
+
+For each note it reports which source won — `frontmatter`
+(`vault.date_frontmatter_keys`), `filename`, `mtime` (only when
+`vault.mtime_trusted_before` is set), or `undated` — and how many notes fell
+into each bucket. Only notes with an existing registry row (i.e. already
+ingested at least once) get a vector-store write; a note that has never been
+ingested gets its date the ordinary way, on its first `daemon ingest`.
+
+If it detects **import clusters** — birth-time dates shared by several notes,
+the signature of a bulk import — it lists each cluster and suggests the
+earliest as a `vault.mtime_trusted_before` value. Dry-run by default; nothing
+is written until you drop `--dry-run`.
+
+**Honest sizing:** on the author's vault this fallback rescued 9 of 67
+undated notes — a real but partial recovery, not a fix for the underlying gap
+(see [Coverage](#daemon-query) above and
+[`vault.mtime_trusted_before`](configuration.md#vault)).
+
 ### `daemon migrate assign-uuids`
 
 ```
@@ -571,5 +625,8 @@ env-var equivalent of `--config`, useful in a crontab line.
   failing `daemon doctor` check, an unreachable vector store caught by an
   inline preflight, and a `daemon restore` bundle that fails validation.
 - `2` — a preflight failed (e.g. `daemon chat --native` with pywebview
-  missing).
+  missing), **or** a bad argument was rejected before anything ran — e.g.
+  `query`/`ask --since`/`--until` given an unparsable date or an inverted
+  range (`since` after `until`). Same Click convention as any other invalid
+  option.
 - Other non-zero — unexpected exception; see the stack trace.

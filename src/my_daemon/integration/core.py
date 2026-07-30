@@ -30,7 +30,7 @@ import frontmatter
 from my_daemon.config import Settings
 from my_daemon.embeddings import Embedder, SparseEmbedder
 from my_daemon.llm import LLMClient
-from my_daemon.models import THEME_TAG_PREFIX, FeedbackEvent, RetrievalResult
+from my_daemon.models import THEME_TAG_PREFIX, FeedbackEvent, RetrievalResult, parse_date_bounds
 from my_daemon.pipeline.ingest import ingest_note
 from my_daemon.pipeline.query import QueryEngine, build_retrieval_summary
 from my_daemon.retrieval.weights import apply_selection
@@ -125,6 +125,8 @@ class DaemonCore:
         top_k: int | None = None,
         synthesize: bool = False,
         surface: str | None = None,
+        since: str | None = None,
+        until: str | None = None,
     ) -> dict:
         """Retrieve (and optionally synthesize) for ``query``.
 
@@ -136,10 +138,23 @@ class DaemonCore:
         ``hermes_recall`` — a deliberate lookup — so direct callers keep today's
         behaviour; Hermes's per-turn prefetch passes the ambient surface instead
         so it never counts as a question the user asked.
+
+        ``since``/``until`` are bare ISO dates (§IV.10) — the same shape the
+        CLI's ``--since``/``--until`` accept — converted through
+        ``parse_date_bounds`` so the exclusive-``until``-plus-one-day fudge
+        lives in exactly one place. Both default to ``None``: no filter,
+        unchanged behaviour for every existing caller. A malformed date or an
+        inverted range raises ``ValueError``.
         """
 
         limit = top_k or self.s.hermes.recall_top_k
-        resp = self.engine.ask(query, synthesize=synthesize, surface=surface)
+        date_range = parse_date_bounds(since, until)
+        # `date_range` forwarded only when it actually filters anything — same
+        # shim as `seed_search`/`expand_from_seeds` (Task 7): a pre-existing
+        # `engine.ask` test double that doesn't know this keyword still works,
+        # and an unfiltered call is byte-identical either way.
+        ask_kwargs: dict = {"date_range": date_range} if date_range.is_active else {}
+        resp = self.engine.ask(query, synthesize=synthesize, surface=surface, **ask_kwargs)
         out: dict = {
             "feedback_event_id": resp.feedback_event_id,
             "latency_ms": resp.latency_ms,
@@ -218,10 +233,29 @@ class DaemonCore:
     # which is how it went a whole arc without fingerprint recall: QueryEngine
     # learned about memories and the GUI's private copy did not.
 
-    def retrieve_only(self, query: str, *, surface: str, session_id: str | None = None):
-        """Retrieval with no synthesis. Records activations like any surface."""
+    def retrieve_only(
+        self,
+        query: str,
+        *,
+        surface: str,
+        session_id: str | None = None,
+        since: str | None = None,
+        until: str | None = None,
+    ):
+        """Retrieval with no synthesis. Records activations like any surface.
 
-        return self.orchestrator.retrieve(query, surface=surface, session_id=session_id)
+        ``since``/``until`` follow ``recall``'s contract exactly: bare ISO
+        dates, converted through the shared ``parse_date_bounds``, defaulting
+        to no filter.
+        """
+
+        date_range = parse_date_bounds(since, until)
+        return self.orchestrator.retrieve(
+            query,
+            surface=surface,
+            session_id=session_id,
+            date_range=date_range if date_range.is_active else None,
+        )
 
     def log_answer(
         self,

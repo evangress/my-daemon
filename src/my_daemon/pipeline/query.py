@@ -11,7 +11,7 @@ from datetime import UTC, datetime
 from my_daemon.config import Settings
 from my_daemon.embeddings import Embedder, SparseEmbedder
 from my_daemon.llm import LLMClient
-from my_daemon.models import FeedbackEvent, RetrievalResult, is_seed_distance
+from my_daemon.models import DateRange, FeedbackEvent, RetrievalResult, is_seed_distance
 from my_daemon.pipeline.activation import ActivationRecorder
 from my_daemon.pipeline.recall import RecalledMemory, recall_related
 from my_daemon.retrieval import RetrievalOrchestrator
@@ -112,17 +112,28 @@ class QueryEngine:
         self.llm = llm_client
 
     def ask(
-        self, query: str, synthesize: bool = True, *, surface: str | None = None
+        self,
+        query: str,
+        synthesize: bool = True,
+        *,
+        surface: str | None = None,
+        date_range: DateRange | None = None,
     ) -> QueryResponse:
         """``surface`` overrides the engine's default for this one call.
 
         One engine serves both of Hermes's paths — the deliberate
         ``mydaemon_recall`` tool and the per-turn ambient prefetch — and they
         must not be recorded as the same kind of event.
+
+        ``date_range`` defaults to ``None`` — no filter — so every existing
+        caller is untouched; §IV.10 surfaces (the CLI's ``--since``/``--until``,
+        ``DaemonCore.recall``) pass one through to ``retrieve()``.
         """
 
         t0 = time.perf_counter()
-        result = self.orchestrator.retrieve(query, surface=surface or self.surface)
+        result = self.orchestrator.retrieve(
+            query, surface=surface or self.surface, date_range=date_range
+        )
         memories = self.recall_for(result)
         answer = (
             self.llm.synthesize(

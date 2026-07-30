@@ -60,12 +60,29 @@ If you want it somewhere else, give those keys absolute paths.
 vault:
   path: ~/Documents/Obsidian/MyVault
   exclude_dirs: [".obsidian", ".trash", "templates", "Agent"]
+  date_frontmatter_keys: ["occurred_at", "date", "created", "created_at"]
+  # mtime_trusted_before: "2026-06-21"
 ```
 
 | Key | Default | Notes |
 |---|---|---|
 | `path` | `~/Documents/Obsidian/MyVault` | Vault root. Tilde-expanded at load. |
 | `exclude_dirs` | `.obsidian, .trash, templates, Agent` | Case-insensitive directory names to skip during walk. `Agent` is the daemon's own folder — keep it excluded or your reflection memory will start ingesting itself. |
+| `date_frontmatter_keys` | `occurred_at, date, created, created_at` | Frontmatter keys consulted for a note's episodic date (§IV.10), in this order, matched case-insensitively. First hit wins. When none is present, the date falls back to a `YYYY-MM-DD` prefix in the filename, then (only if `mtime_trusted_before` is set) the file's mtime, then goes undated. |
+| `mtime_trusted_before` | `None` (off) | An otherwise-undated note whose mtime is strictly earlier than this ISO date takes its date from mtime, tagged `occurred_at_source: "mtime"`. Off by default because trusting mtime at all is an assumption about *your* migration history, not this codebase — it belongs somewhere you can see and challenge it, not silently in a heuristic. Set it to the earliest **bulk-import cluster** `daemon migrate backfill-dates` detects (a birth-time date shared by many notes); mtimes strictly before that point reflect real authoring, at-or-after it reflect the copy. |
+
+**Honest coverage, not a sales pitch.** Even with both derivations, expect roughly
+**half** of a typical vault's notes to end up with no derivable date at all —
+no dated frontmatter, no `YYYY-MM-DD` filename, and either no
+`mtime_trusted_before` configured or an mtime that doesn't predate it. The
+`mtime_trusted_before` fallback then recovers only a fraction of what's left:
+measured on the author's vault, **9 of 67** undated notes (about half the
+undated remainder was still not recoverable). This matters directly for
+`daemon query --since/--until` (see [CLI: Coverage](cli.md#daemon-query)) — a
+temporal filter searches whatever fraction of the vault carries a date, and a
+thin result under it usually means "undated", not "out of range". Run
+`daemon migrate backfill-dates` to see exactly where your vault falls on this
+split.
 
 ### `chunking`
 

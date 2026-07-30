@@ -44,6 +44,7 @@ from my_daemon.doctor import (
 from my_daemon.embeddings import Embedder, SparseEmbedder
 from my_daemon.integration.wiring import build_stores
 from my_daemon.llm import LLMClient
+from my_daemon.models import DateRange, parse_date_bounds
 from my_daemon.pipeline import QueryEngine, ingest_vault
 from my_daemon.pipeline.agent_extract import run_extract
 from my_daemon.pipeline.agent_link import run_link
@@ -405,14 +406,52 @@ def ingest(
         console.print(Panel("\n".join(stats.errors), title="Errors", border_style="red"))
 
 
-def _run_query(text: str, *, no_synthesize: bool = False, verbose: bool = False) -> None:
+def _parse_date_bounds(since: str | None, until: str | None) -> DateRange:
+    """ISO dates from the CLI into a half-open UTC :class:`DateRange`.
+
+    A bare ``--until 2026-05-31`` becomes ``2026-06-01T00:00:00Z``, because the
+    user means "include that day" and the core interval is exclusive. This
+    conversion happens here, at the CLI boundary, by delegating to the one
+    shared implementation (``my_daemon.models.parse_date_bounds``) that every
+    entry point uses — pushing the fudge inward, or duplicating it, is how
+    off-by-one-day bugs stop being locatable.
+
+    Raises ``typer.BadParameter`` — not a traceback — on a malformed date or
+    an inverted range, so a bad ``--since``/``--until`` exits non-zero with a
+    message the user can act on.
+    """
+
+    try:
+        return parse_date_bounds(since, until)
+    except ValueError as exc:
+        raise typer.BadParameter(str(exc)) from None
+
+
+def _run_query(
+    text: str,
+    *,
+    no_synthesize: bool = False,
+    verbose: bool = False,
+    since: str | None = None,
+    until: str | None = None,
+) -> None:
     """The body of `daemon query`, as a plain function.
 
     Typer commands are not ordinary callables: their unfilled parameters hold
     ``OptionInfo`` sentinels, which are truthy. `ask` used to call `query()`
     directly and every flag silently inverted — synthesis off, verbose on. Both
     commands go through here now, so a real default is the only kind there is.
+
+    Date bounds are parsed before ``_load()`` runs: a malformed ``--since``/
+    ``--until`` should fail on its own terms, not get shadowed by an unrelated
+    "no config.yaml found" if one happens not to be configured.
     """
+
+    date_range = _parse_date_bounds(since, until)
+    # Only forwarded when it actually restricts anything — an inert range
+    # would still reach the vector store as a non-None kwarg, which is exactly
+    # the cost §IV.10 designed unfiltered queries to never pay.
+    effective_range = date_range if date_range.is_active else None
 
     s = _load()
     with _store_errors(s):
@@ -426,10 +465,22 @@ def _run_query(text: str, *, no_synthesize: bool = False, verbose: bool = False)
             stores.llm,
             sparse_embedder=stores.sparse_embedder,
         )
-        response = engine.ask(text, synthesize=not no_synthesize)
+        response = engine.ask(text, synthesize=not no_synthesize, date_range=effective_range)
 
     if response.answer:
         console.print(Panel(response.answer, title="Daemon", border_style="cyan"))
+
+    result = response.retrieval
+    if result.date_range is not None and result.date_range.is_active:
+        total = stores.vector_store.count()
+        dated = total - result.undated_excluded
+        since_label = f"{result.date_range.since:%Y-%m-%d}" if result.date_range.since else "…"
+        until_label = f"{result.date_range.until:%Y-%m-%d}" if result.date_range.until else "…"
+        console.print(
+            f"[dim]Temporal filter: {since_label} → {until_label} (UTC)\n"
+            f"Coverage: {dated:,} of {total:,} chunks carry a date — "
+            f"{result.undated_excluded:,} undated chunks not considered.[/dim]"
+        )
 
     table = Table(title=f"Candidates (≥{s.retrieval.candidate_pool})")
     table.add_column("#", justify="right")
@@ -466,6 +517,10 @@ def _run_query(text: str, *, no_synthesize: bool = False, verbose: bool = False)
         )
 
 
+_SINCE_HELP = "Only consider notes dated on/after this ISO date (e.g. 2026-03-01)."
+_UNTIL_HELP = "Only consider notes dated on/before this ISO date, inclusive (e.g. 2026-05-31)."
+
+
 @app.command()
 def query(
     text: str = typer.Argument(..., help="The question to ask your daemon."),
@@ -473,9 +528,11 @@ def query(
         False, "--no-llm", help="Skip LLM synthesis; show ranked context only."
     ),
     verbose: bool = typer.Option(False, "-v", "--verbose"),
+    since: str | None = typer.Option(None, "--since", help=_SINCE_HELP),
+    until: str | None = typer.Option(None, "--until", help=_UNTIL_HELP),
 ) -> None:
     """Ask the daemon a question."""
-    _run_query(text, no_synthesize=no_synthesize, verbose=verbose)
+    _run_query(text, no_synthesize=no_synthesize, verbose=verbose, since=since, until=until)
 
 
 @app.command()
@@ -485,9 +542,11 @@ def ask(
         False, "--no-llm", help="Skip LLM synthesis; show ranked context only."
     ),
     verbose: bool = typer.Option(False, "-v", "--verbose"),
+    since: str | None = typer.Option(None, "--since", help=_SINCE_HELP),
+    until: str | None = typer.Option(None, "--until", help=_UNTIL_HELP),
 ) -> None:
     """Alias for query."""
-    _run_query(text, no_synthesize=no_synthesize, verbose=verbose)
+    _run_query(text, no_synthesize=no_synthesize, verbose=verbose, since=since, until=until)
 
 
 @app.command()

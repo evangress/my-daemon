@@ -59,17 +59,23 @@ class FakeVectorStore:
     def __init__(self, hits: list[dict] | None = None) -> None:
         self.hits = hits or []
         self.searches: list[int] = []
+        # §IV.10: how many vault-wide chunks a temporal-filter test wants
+        # `count_undated()` to report. 0 unless a test overrides it.
+        self.undated = 0
 
-    def search(self, vector, top_k=8):  # noqa: ANN001
+    def search(self, vector, top_k=8, date_range=None):  # noqa: ANN001
         self.searches.append(top_k)
         return self.hits
 
-    def hybrid_search(self, vector, sparse_vector, top_k=8):  # noqa: ANN001
+    def hybrid_search(self, vector, sparse_vector, top_k=8, date_range=None):  # noqa: ANN001
         self.searches.append(top_k)
         return self.hits
 
     def count(self) -> int:
         return len(self.hits)
+
+    def count_undated(self) -> int:
+        return self.undated
 
     def _client_(self) -> FakeQdrantClient:
         return FakeQdrantClient()
@@ -136,6 +142,14 @@ def stores(settings: Settings, vault_graph: GraphStore, monkeypatch: pytest.Monk
     fake = FakeStores(settings, vault_graph)
     monkeypatch.setattr("my_daemon.cli.build_stores", lambda s, **kw: fake)
     return fake
+
+
+@pytest.fixture
+def cli_runner() -> CliRunner:
+    """Same runner as the module-level `runner` — named for tests that want a
+    fixture rather than an import, e.g. ones exercising CLI-boundary parsing
+    that never reaches a config at all."""
+    return runner
 
 
 # ---------------------------------------------------------------------------
@@ -318,6 +332,76 @@ def test_ask_accepts_the_same_flags_as_query(stores: FakeStores):
     assert result.exit_code == 0, result.output
     assert stores.llm.queries == []
     assert "seeds=0 expanded=0" in _squash(result.output)
+
+
+def test_query_reports_temporal_coverage_when_filtered(stores: FakeStores):
+    """§IV.10: a date-filtered query must tell the user how much of the vault
+    it could actually see — otherwise a thin result reads as a bug."""
+    stores.vector_store.hits = []
+    stores.vector_store.undated = 3
+
+    result = runner.invoke(
+        app, ["query", "what is a daemon", "--since", "2026-01-01", "--until", "2026-01-31"]
+    )
+
+    assert result.exit_code == 0, result.output
+    out = _squash(result.output)
+    assert "Temporal filter: 2026-01-01 → 2026-02-01 (UTC)" in out
+    assert "3 undated chunks not considered" in out
+
+
+def test_query_has_no_coverage_line_without_a_filter(stores: FakeStores):
+    result = runner.invoke(app, ["query", "what is a daemon"])
+
+    assert result.exit_code == 0, result.output
+    assert "Temporal filter" not in result.output
+
+
+# ---------------------------------------------------------------------------
+# --since / --until parsing — §IV.10
+# ---------------------------------------------------------------------------
+
+
+def test_bare_until_becomes_exclusive_next_midnight():
+    """The human-intent fudge lives at the boundary and nowhere deeper."""
+    from my_daemon.cli import _parse_date_bounds
+
+    r = _parse_date_bounds("2026-03-01", "2026-05-31")
+    assert r.since == datetime(2026, 3, 1, tzinfo=UTC)
+    assert r.until == datetime(2026, 6, 1, tzinfo=UTC)
+
+
+def test_no_bounds_gives_an_inert_range():
+    from my_daemon.cli import _parse_date_bounds
+
+    assert _parse_date_bounds(None, None).is_active is False
+
+
+def test_since_only_and_until_only_both_work():
+    """Either bound alone is valid — an open-ended request must not be forced
+    into a closed range with an invented bound."""
+    from my_daemon.cli import _parse_date_bounds
+
+    assert _parse_date_bounds("2026-03-01", None).until is None
+    assert _parse_date_bounds(None, "2026-05-31").since is None
+
+
+def test_a_non_date_argument_is_rejected_with_a_readable_message():
+    import typer
+
+    from my_daemon.cli import _parse_date_bounds
+
+    with pytest.raises(typer.BadParameter) as exc:
+        _parse_date_bounds("last spring", None)
+    assert "2026-03-01" in str(exc.value), "the message should show the expected format"
+
+
+def test_inverted_bounds_exit_with_a_clear_message(cli_runner):
+    result = cli_runner.invoke(
+        app, ["query", "x", "--since", "2026-06-01", "--until", "2026-01-01"]
+    )
+    assert result.exit_code != 0
+    assert "must not be after" in result.output
 
 
 # ---------------------------------------------------------------------------
