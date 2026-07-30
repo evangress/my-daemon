@@ -11,7 +11,7 @@ from datetime import UTC, datetime
 
 from my_daemon.config import Settings
 from my_daemon.embeddings import Embedder, SparseEmbedder
-from my_daemon.models import THEME_TAG_PREFIX, RetrievalResult, RetrievedChunk
+from my_daemon.models import THEME_TAG_PREFIX, DateRange, RetrievalResult, RetrievedChunk
 from my_daemon.retrieval.expand import expand_from_seeds
 from my_daemon.retrieval.interleave import team_draft
 from my_daemon.retrieval.seed import seed_search
@@ -56,6 +56,7 @@ class RetrievalOrchestrator:
         *,
         surface: str = "unknown",
         session_id: str | None = None,
+        date_range: DateRange | None = None,
     ) -> RetrievalResult:
         started_at = datetime.now(UTC)
         t0 = time.perf_counter()
@@ -65,6 +66,7 @@ class RetrievalOrchestrator:
             self.vector_store,
             top_k=self.s.retrieval.seed_top_k,
             sparse_embedder=self.sparse_embedder,
+            date_range=date_range,
         )
         expanded = expand_from_seeds(
             seeds,
@@ -73,6 +75,7 @@ class RetrievalOrchestrator:
             depth=self.s.graph.expansion_depth,
             decay=self.s.graph.distance_decay,
             exclude_tag_prefixes=(THEME_TAG_PREFIX,),
+            date_range=date_range,
         )
 
         ranked = self._pool(seeds, expanded)
@@ -89,7 +92,17 @@ class RetrievalOrchestrator:
             kept.append(rc)
             used += cost
 
-        result = RetrievalResult(query=query, seeds=seeds, expanded=expanded, ranked=kept)
+        range_active = date_range is not None and date_range.is_active
+        result = RetrievalResult(
+            query=query,
+            seeds=seeds,
+            expanded=expanded,
+            ranked=kept,
+            date_range=date_range,
+            # Only when a filter is active: an unfiltered query must pay
+            # nothing for it.
+            undated_excluded=(self.vector_store.count_undated() if range_active else 0),
+        )
         self._notify(
             result,
             surface=surface,

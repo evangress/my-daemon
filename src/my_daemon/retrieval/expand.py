@@ -3,9 +3,9 @@
 
 from __future__ import annotations
 
-from my_daemon.models import RetrievedChunk
+from my_daemon.models import DateRange, RetrievedChunk
 from my_daemon.stores import GraphStore, VectorStore
-from my_daemon.stores.vector import chunk_from_payload
+from my_daemon.stores.vector import chunk_from_payload, date_conditions
 
 
 def expand_from_seeds(
@@ -15,11 +15,19 @@ def expand_from_seeds(
     depth: int = 2,
     decay: float = 0.5,
     exclude_tag_prefixes: tuple[str, ...] = (),
+    *,
+    date_range: DateRange | None = None,
 ) -> list[RetrievedChunk]:
     """For each seed, BFS the graph and pull chunks belonging to neighbor notes.
 
     Score for an expanded chunk is the seed's vector score decayed by graph distance.
     The same chunk may be reachable from multiple seeds; we keep the best score.
+
+    ``date_range``, when active, is folded into the same ``scroll_filter`` that
+    already restricts each scroll to one neighbor note — this is the other of
+    the two retrieval arms that must honor the filter (see ``seed_search``);
+    filtering only seeds would let an out-of-range note back in through the
+    graph.
     """
 
     from qdrant_client.http.models import FieldCondition, Filter, MatchValue
@@ -28,6 +36,10 @@ def expand_from_seeds(
     seen_seed_uuids: set[str] = {s.chunk.note_uuid for s in seeds}
 
     client = vector_store._client_()
+
+    # Computed once: empty when no range is active, matching the no-filter
+    # path in seed_search / VectorStore.search.
+    extra_conditions = date_conditions(date_range)
 
     for seed in seeds:
         # weighted=True: Dijkstra over 1/weight so feedback-reinforced edges
@@ -47,7 +59,10 @@ def expand_from_seeds(
             scroll_hits, _ = client.scroll(
                 collection_name=vector_store.collection,
                 scroll_filter=Filter(
-                    must=[FieldCondition(key="note_uuid", match=MatchValue(value=neighbor_uuid))]
+                    must=[
+                        FieldCondition(key="note_uuid", match=MatchValue(value=neighbor_uuid)),
+                        *extra_conditions,
+                    ]
                 ),
                 with_payload=True,
                 limit=64,

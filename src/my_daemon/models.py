@@ -177,6 +177,15 @@ class RetrievalResult(BaseModel):
     # Set by the activation recorder, so whoever synthesizes an answer can
     # back-link its feedback row to this retrieval.
     query_uid: str | None = None
+    # §IV.10 episodic time-binding (Task 7). The range applied to this query,
+    # if any — carried on the result so a surface can render "filtered to
+    # <range>" without threading the argument back out of the orchestrator.
+    date_range: DateRange | None = None
+    #: Vault-wide count of chunks with no date, when a temporal filter was
+    #: active. Vault-wide rather than per-query because knowing which undated
+    #: chunks *would* have matched requires running the unfiltered query too —
+    #: double the cost for substantially the same number.
+    undated_excluded: int = 0
 
 
 FeedbackSignal = Literal[

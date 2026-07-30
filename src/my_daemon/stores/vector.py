@@ -9,10 +9,11 @@ from datetime import datetime
 from pathlib import Path
 from typing import TYPE_CHECKING
 
-from my_daemon.models import Chunk
+from my_daemon.models import Chunk, DateRange
 
 if TYPE_CHECKING:
     from qdrant_client import QdrantClient
+    from qdrant_client.http.models import Condition, Filter
 
     from my_daemon.config import QdrantConfig
 
@@ -65,6 +66,47 @@ def chunk_from_payload(p: dict) -> Chunk:
         occurred_at_source=p.get("occurred_at_source"),
         modified_at=_dt("modified_at"),
     )
+
+
+def date_conditions(date_range: DateRange | None) -> list[Condition]:
+    """The ``occurred_at`` field condition(s) for a range, or ``[]`` when inert.
+
+    Reads ``occurred_at`` and nothing else. It must never fall back to
+    ``modified_at`` or OR the two together: a query for "March 2024" would
+    then match things *written* then as well as things that *happened* then,
+    which silently voids the distinction the two fields exist to draw.
+
+    Undated points carry no ``occurred_at`` key at all (see ``upsert``), so a
+    range condition excludes them without an explicit clause — deciding to
+    exclude the undated, expressed structurally rather than as a branch.
+
+    Split out from :func:`date_filter` (rather than callers reaching into a
+    ``Filter.must``) so ``expand_from_seeds`` can merge this into its own
+    ``scroll_filter`` alongside the ``note_uuid`` condition without fighting
+    the broad ``Filter.must: list | Condition | None`` type.
+    """
+
+    if date_range is None or not date_range.is_active:
+        return []
+    from qdrant_client.http.models import DatetimeRange, FieldCondition
+
+    return [
+        FieldCondition(
+            key="occurred_at",
+            range=DatetimeRange(gte=date_range.since, lt=date_range.until),
+        )
+    ]
+
+
+def date_filter(date_range: DateRange | None) -> Filter | None:
+    """A Qdrant filter over ``occurred_at``, or ``None`` when no range is active."""
+
+    conditions = date_conditions(date_range)
+    if not conditions:
+        return None
+    from qdrant_client.http.models import Filter
+
+    return Filter(must=conditions)
 
 
 class VectorStore:
@@ -301,7 +343,9 @@ class VectorStore:
             )
         self._client_().upsert(collection_name=self.collection, points=points)
 
-    def search(self, vector: list[float], top_k: int = 8) -> list[dict]:
+    def search(
+        self, vector: list[float], top_k: int = 8, *, date_range: DateRange | None = None
+    ) -> list[dict]:
         """Dense-only search (kept for the `hybrid=false` fallback path)."""
         client = self._client_()
         # In hybrid mode the dense vector is named; in legacy mode it's anonymous.
@@ -310,6 +354,8 @@ class VectorStore:
             "query": vector,
             "limit": top_k,
             "with_payload": True,
+            # Qdrant treats query_filter=None as "no filter" — no branch needed.
+            "query_filter": date_filter(date_range),
         }
         if self.hybrid:
             query_kwargs["using"] = DENSE_NAME
@@ -322,6 +368,8 @@ class VectorStore:
         sparse_vector: tuple[list[int], list[float]],
         top_k: int = 8,
         prefetch_limit: int = 32,
+        *,
+        date_range: DateRange | None = None,
     ) -> list[dict]:
         """Server-side dense+sparse RRF via Qdrant's prefetch + FusionQuery."""
         from qdrant_client.http.models import (
@@ -343,8 +391,24 @@ class VectorStore:
             query=FusionQuery(fusion=Fusion.RRF),
             limit=top_k,
             with_payload=True,
+            query_filter=date_filter(date_range),
         )
         return [{"score": p.score, **(p.payload or {})} for p in response.points]
+
+    def count_undated(self) -> int:
+        """Chunks with no ``occurred_at``. Used only to report filter coverage.
+
+        Callers must only invoke this when a temporal filter is actually
+        active — an unfiltered query should pay nothing for it.
+        """
+        from qdrant_client.http.models import Filter, IsEmptyCondition, PayloadField
+
+        result = self._client_().count(
+            collection_name=self.collection,
+            count_filter=Filter(must=[IsEmptyCondition(is_empty=PayloadField(key="occurred_at"))]),
+            exact=True,
+        )
+        return int(result.count)
 
     def set_note_path(self, note_uuid: str, rel_path: str) -> None:
         """Update the display path on every chunk of a note, without re-embedding.
