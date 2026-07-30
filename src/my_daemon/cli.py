@@ -448,10 +448,6 @@ def _run_query(
     """
 
     date_range = _parse_date_bounds(since, until)
-    # Only forwarded when it actually restricts anything — an inert range
-    # would still reach the vector store as a non-None kwarg, which is exactly
-    # the cost §IV.10 designed unfiltered queries to never pay.
-    effective_range = date_range if date_range.is_active else None
 
     s = _load()
     with _store_errors(s):
@@ -465,7 +461,7 @@ def _run_query(
             stores.llm,
             sparse_embedder=stores.sparse_embedder,
         )
-        response = engine.ask(text, synthesize=not no_synthesize, date_range=effective_range)
+        response = engine.ask(text, synthesize=not no_synthesize, date_range=date_range)
 
     if response.answer:
         console.print(Panel(response.answer, title="Daemon", border_style="cyan"))

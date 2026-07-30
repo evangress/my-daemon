@@ -23,20 +23,18 @@ def seed_search(
     When ``sparse_embedder`` is provided, runs a Qdrant server-side RRF fusion
     over the dense and sparse rankings. Otherwise falls back to dense-only.
 
-    ``date_range`` is forwarded to the store only when given, rather than
-    always passed through as an explicit ``None`` — that keeps this call
-    working against any pre-existing ``VectorStore`` test double that doesn't
-    know about the keyword, and it is behaviourally identical either way since
-    the store itself treats an absent range as "no filter".
+    ``date_range`` is always forwarded, including when it is ``None`` — every
+    ``VectorStore`` (real or test double) declares the keyword, so there is no
+    "old-shaped store" case to shim around, and a conditional branch here
+    would be untested production code shaped around a test's convenience.
     """
 
     vec = embedder.encode_one(query)
-    date_kwargs: dict = {"date_range": date_range} if date_range is not None else {}
     if sparse_embedder is not None:
         sparse_vec = sparse_embedder.encode_one(query)
-        hits = vector_store.hybrid_search(vec, sparse_vec, top_k=top_k, **date_kwargs)
+        hits = vector_store.hybrid_search(vec, sparse_vec, top_k=top_k, date_range=date_range)
     else:
-        hits = vector_store.search(vec, top_k=top_k, **date_kwargs)
+        hits = vector_store.search(vec, top_k=top_k, date_range=date_range)
     seeds: list[RetrievedChunk] = []
     for h in hits:
         chunk = chunk_from_payload(h)

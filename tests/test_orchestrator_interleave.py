@@ -42,7 +42,7 @@ class _FakeVectorStore:
 
     collection = "chunks"
 
-    def search(self, vector, top_k=8):  # noqa: ANN001
+    def search(self, vector, top_k=8, date_range=None):  # noqa: ANN001
         return [
             {**_payload(f"seed-{i}", SEED_UUID.format(i)), "score": 0.9 - i * 0.1} for i in range(3)
         ]

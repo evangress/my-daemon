@@ -406,15 +406,12 @@ class MyDaemonProvider(_MemoryProviderBase):  # type: ignore[misc,valid-type]
             return "My Daemon is not initialized."
         args = arguments or {}
         if name == "mydaemon_recall":
-            # `since`/`until` only forwarded when the model actually supplied
-            # one — same test-double compatibility shim `DaemonCore.recall`
-            # itself uses, so a `_core` stub that predates §IV.10 keeps working.
-            date_kwargs = {k: args[k] for k in ("since", "until") if args.get(k) is not None}
             data = self._core.recall(
                 args["query"],
                 top_k=args.get("top_k"),
                 synthesize=False,
-                **date_kwargs,
+                since=args.get("since"),
+                until=args.get("until"),
             )
             return json.dumps(data, default=str)
         if name == "mydaemon_dream":

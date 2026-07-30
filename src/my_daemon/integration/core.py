@@ -149,12 +149,7 @@ class DaemonCore:
 
         limit = top_k or self.s.hermes.recall_top_k
         date_range = parse_date_bounds(since, until)
-        # `date_range` forwarded only when it actually filters anything — same
-        # shim as `seed_search`/`expand_from_seeds` (Task 7): a pre-existing
-        # `engine.ask` test double that doesn't know this keyword still works,
-        # and an unfiltered call is byte-identical either way.
-        ask_kwargs: dict = {"date_range": date_range} if date_range.is_active else {}
-        resp = self.engine.ask(query, synthesize=synthesize, surface=surface, **ask_kwargs)
+        resp = self.engine.ask(query, synthesize=synthesize, surface=surface, date_range=date_range)
         out: dict = {
             "feedback_event_id": resp.feedback_event_id,
             "latency_ms": resp.latency_ms,
@@ -251,10 +246,7 @@ class DaemonCore:
 
         date_range = parse_date_bounds(since, until)
         return self.orchestrator.retrieve(
-            query,
-            surface=surface,
-            session_id=session_id,
-            date_range=date_range if date_range.is_active else None,
+            query, surface=surface, session_id=session_id, date_range=date_range
         )
 
     def log_answer(

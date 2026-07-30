@@ -62,6 +62,11 @@ class FakeVectorStore:
         # §IV.10: how many vault-wide chunks a temporal-filter test wants
         # `count_undated()` to report. 0 unless a test overrides it.
         self.undated = 0
+        # `count()` returns this when set, otherwise falls back to `len(hits)`
+        # (existing tests' assumption). Kept distinct from `hits` on purpose —
+        # a coverage test that reused `len(hits)` as the vault-wide total
+        # could not tell a correct "dated of total" figure from a broken one.
+        self.total: int | None = None
 
     def search(self, vector, top_k=8, date_range=None):  # noqa: ANN001
         self.searches.append(top_k)
@@ -72,7 +77,7 @@ class FakeVectorStore:
         return self.hits
 
     def count(self) -> int:
-        return len(self.hits)
+        return self.total if self.total is not None else len(self.hits)
 
     def count_undated(self) -> int:
         return self.undated
@@ -336,8 +341,16 @@ def test_ask_accepts_the_same_flags_as_query(stores: FakeStores):
 
 def test_query_reports_temporal_coverage_when_filtered(stores: FakeStores):
     """§IV.10: a date-filtered query must tell the user how much of the vault
-    it could actually see — otherwise a thin result reads as a bug."""
+    it could actually see — otherwise a thin result reads as a bug.
+
+    `total` and `undated` are set to values distinct from `len(hits)` and from
+    each other on purpose: a `dated = total - undated_excluded` computed wrong
+    (e.g. against the hit count, or with the operands swapped) would render an
+    unmissable, assertable-wrong number — 10 and 3 chosen so 7 can't be
+    confused with either input.
+    """
     stores.vector_store.hits = []
+    stores.vector_store.total = 10
     stores.vector_store.undated = 3
 
     result = runner.invoke(
@@ -347,6 +360,7 @@ def test_query_reports_temporal_coverage_when_filtered(stores: FakeStores):
     assert result.exit_code == 0, result.output
     out = _squash(result.output)
     assert "Temporal filter: 2026-01-01 → 2026-02-01 (UTC)" in out
+    assert "Coverage: 7 of 10 chunks carry a date" in out
     assert "3 undated chunks not considered" in out
 
 

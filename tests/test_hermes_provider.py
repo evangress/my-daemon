@@ -27,6 +27,9 @@ class StubCore:
         # (query, surface) for each path, so tests can pin ambient vs intentional.
         self.block_surfaces: list[tuple[str, str | None]] = []
         self.recall_surfaces: list[tuple[str, str | None]] = []
+        # (since, until) for each `recall` call, so a test can prove the
+        # mydaemon_recall tool's date bounds actually reach the core.
+        self.recall_date_bounds: list[tuple[str | None, str | None]] = []
 
         class _VS:
             def ensure_collection(self) -> None:
@@ -45,9 +48,12 @@ class StubCore:
             ],
         )
 
-    def recall(self, query, *, top_k=None, synthesize=False, surface=None) -> dict:
+    def recall(
+        self, query, *, top_k=None, synthesize=False, surface=None, since=None, until=None
+    ) -> dict:
         self.recalled.append(query)
         self.recall_surfaces.append((query, surface))
+        self.recall_date_bounds.append((since, until))
         return {"feedback_event_id": 7, "candidates": []}
 
     def latest_dream(self) -> dict | None:
@@ -185,6 +191,27 @@ def test_handle_tool_call_routes_to_core(tmp_path: Path) -> None:
     assert "letter body" in letter
 
     assert provider.handle_tool_call("nope", {}).startswith("Unknown tool")
+
+
+def test_mydaemon_recall_tool_passes_since_and_until_through(tmp_path: Path) -> None:
+    """§IV.10: the tool schema's `since`/`until` must actually reach
+    `DaemonCore.recall` — proving the wiring rather than assuming a dict-key
+    typo in the dispatch would still forward them."""
+    provider, core = _provider(tmp_path)
+
+    provider.handle_tool_call(
+        "mydaemon_recall", {"query": "daemon", "since": "2026-03-01", "until": "2026-05-31"}
+    )
+
+    assert core.recall_date_bounds == [("2026-03-01", "2026-05-31")]
+
+
+def test_mydaemon_recall_tool_omits_bounds_when_not_supplied(tmp_path: Path) -> None:
+    provider, core = _provider(tmp_path)
+
+    provider.handle_tool_call("mydaemon_recall", {"query": "daemon"})
+
+    assert core.recall_date_bounds == [(None, None)]
 
 
 # ---------------------------------------------------------------------------

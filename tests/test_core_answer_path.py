@@ -46,7 +46,7 @@ def core(tmp_path: Path, vault_root: Path):
     class _Vector:
         collection = "chunks"
 
-        def search(self, vector, top_k=8):  # noqa: ANN001
+        def search(self, vector, top_k=8, date_range=None):  # noqa: ANN001
             return []
 
         def ensure_collection(self):

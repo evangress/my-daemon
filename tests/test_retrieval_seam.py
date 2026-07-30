@@ -86,7 +86,7 @@ class _Exploding:
 class _FakeVectorStore:
     collection = "chunks"
 
-    def search(self, vector, top_k=8):  # noqa: ANN001
+    def search(self, vector, top_k=8, date_range=None):  # noqa: ANN001
         return []
 
     def hybrid_search(self, *a, **kw):  # noqa: ANN001

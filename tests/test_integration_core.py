@@ -160,7 +160,7 @@ def test_recall_shape_and_feedback_id(tmp_path: Path, vault_root: Path) -> None:
             latency_ms=5,
         )
     )
-    core.engine.ask = lambda q, synthesize=False, surface=None: QueryResponse(  # type: ignore[method-assign]
+    core.engine.ask = lambda q, synthesize=False, surface=None, date_range=None: QueryResponse(  # type: ignore[method-assign]
         answer="",
         retrieval=_fake_retrieval(),
         feedback_event_id=eid,
@@ -184,11 +184,38 @@ def test_recall_shape_and_feedback_id(tmp_path: Path, vault_root: Path) -> None:
     assert top["note_path"] == "Pullman Daemons.md"
 
 
+def test_recall_forwards_date_bounds_into_retrieval(tmp_path: Path, vault_root: Path) -> None:
+    """§IV.10: `since`/`until` on `recall` must reach `engine.ask` as a real
+    `DateRange`, including the exclusive-`until`-plus-one-day conversion — the
+    shim that used to forward this conditionally was itself untested, so this
+    proves the wiring rather than assuming it."""
+    vault = _tmp_vault(tmp_path, vault_root)
+    settings = _settings(tmp_path, vault)
+    core = _core(settings, vault)
+
+    captured: dict = {}
+
+    def _fake_ask(q, synthesize=False, surface=None, date_range=None):  # noqa: ANN001
+        captured["date_range"] = date_range
+        return QueryResponse(
+            answer="", retrieval=_fake_retrieval(), feedback_event_id=1, latency_ms=5
+        )
+
+    core.engine.ask = _fake_ask  # type: ignore[method-assign]
+
+    core.recall("what is a daemon", since="2026-03-01", until="2026-05-31")
+
+    date_range = captured["date_range"]
+    assert date_range is not None
+    assert date_range.since == datetime(2026, 3, 1, tzinfo=UTC)
+    assert date_range.until == datetime(2026, 6, 1, tzinfo=UTC)  # exclusive: +1 day
+
+
 def test_recall_block_is_cited_and_budget_capped(tmp_path: Path, vault_root: Path) -> None:
     vault = _tmp_vault(tmp_path, vault_root)
     settings = _settings(tmp_path, vault)
     core = _core(settings, vault)
-    core.engine.ask = lambda q, synthesize=False, surface=None: QueryResponse(  # type: ignore[method-assign]
+    core.engine.ask = lambda q, synthesize=False, surface=None, date_range=None: QueryResponse(  # type: ignore[method-assign]
         answer="",
         retrieval=_fake_retrieval(two=True),
         feedback_event_id=1,

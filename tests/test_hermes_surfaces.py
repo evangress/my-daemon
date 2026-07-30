@@ -53,7 +53,7 @@ class FakeVectorStore:
 
     collection = "chunks"
 
-    def search(self, vector, top_k: int = 8) -> list[dict]:  # noqa: ANN001
+    def search(self, vector, top_k: int = 8, date_range=None) -> list[dict]:  # noqa: ANN001
         return [
             {
                 "chunk_id": "c1",
