@@ -16,8 +16,7 @@ from dataclasses import dataclass
 from my_daemon.config import Settings
 from my_daemon.embeddings import Embedder, SparseEmbedder
 from my_daemon.llm import LLMClient
-from my_daemon.pipeline.activation import ActivationRecorder
-from my_daemon.pipeline.policy import PolicyRecorder
+from my_daemon.pipeline.listeners import build_listeners
 from my_daemon.retrieval import RetrievalOrchestrator
 from my_daemon.retrieval.rerank import CrossEncoderReranker
 from my_daemon.retrieval.trace import RetrievalListener
@@ -121,10 +120,8 @@ def build_orchestrator(
     space.
     """
 
-    listeners: list[RetrievalListener] = (
-        [ActivationRecorder(stores.ledger), PolicyRecorder(stores.policy)]
-        if record_activations
-        else []
+    listeners: list[RetrievalListener] = build_listeners(
+        stores.ledger, stores.policy, record=record_activations
     )
     return RetrievalOrchestrator(
         stores.settings,

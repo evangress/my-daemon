@@ -427,8 +427,16 @@ def test_inverted_bounds_exit_with_a_clear_message(cli_runner):
 # ---------------------------------------------------------------------------
 
 
-def _log_two_candidate_query(settings: Settings) -> int:
-    """A feedback row shaped exactly like `build_retrieval_summary` writes it."""
+def _log_two_candidate_query(
+    settings: Settings, *, teams: tuple[str | None, str | None] = (None, None)
+) -> int:
+    """A feedback row shaped exactly like `build_retrieval_summary` writes it.
+
+    ``teams`` defaults to ``(None, None)`` because that is the *historical*
+    shape — rows logged before §IV.7's draft, and any row from a score-ordered
+    pool, carry no team at all. Tests that care about policy attribution pass
+    real team names explicitly.
+    """
     store = FeedbackStore(db_path=settings.feedback.db_path)
     return store.log(
         FeedbackEvent(
@@ -445,6 +453,7 @@ def _log_two_candidate_query(settings: Settings) -> int:
                         "seed_chunk_id": "designing-0",
                         "seed_note_uuid": DESIGNING,
                         "seed_note_path": "Designing AI Memory.md",
+                        "team": teams[0],
                     },
                     {
                         "chunk_id": "pullman-0",
@@ -455,6 +464,7 @@ def _log_two_candidate_query(settings: Settings) -> int:
                         "seed_chunk_id": "designing-0",
                         "seed_note_uuid": DESIGNING,
                         "seed_note_path": "Designing AI Memory.md",
+                        "team": teams[1],
                     },
                 ],
                 "seed_count": 1,
@@ -537,6 +547,94 @@ def test_select_rejects_an_out_of_range_rank(settings: Settings, vault_graph: Gr
     assert result.exit_code == 1
     assert "out of range" in _squash(result.output)
     assert _wikilink_weights(settings.graph.path) == [1.0]
+
+
+# ---------------------------------------------------------------------------
+# The retrieval-policy ledger, end to end through the commands people run
+# ---------------------------------------------------------------------------
+
+
+def test_a_query_records_a_policy_impression(
+    settings: Settings, vault_graph: GraphStore, monkeypatch: pytest.MonkeyPatch
+):
+    """The test that would have caught the §IV.7 wiring gap.
+
+    Impressions were only ever recorded by `build_orchestrator`, which nothing
+    under `src/` called, so `daemon query` — the command a person actually runs
+    — recorded none and `daemon policy` read an empty table.
+    """
+    from my_daemon.stores.policy import RetrievalPolicyStore
+
+    fake = FakeStores(settings, vault_graph)
+    fake.vector_store = FakeVectorStore(
+        [
+            {
+                "chunk_id": "designing-0",
+                "note_uuid": DESIGNING,
+                "note_path": "Designing AI Memory.md",
+                "text": "a daemon is a companion",
+                "score": 0.9,
+            }
+        ]
+    )
+    monkeypatch.setattr("my_daemon.cli.build_stores", lambda s, **kw: fake)
+
+    result = runner.invoke(app, ["query", "what is a daemon"])
+
+    assert result.exit_code == 0, result.output
+    stats = {s.policy: s for s in RetrievalPolicyStore(db_path=settings.feedback.db_path).stats()}
+    assert stats["seed"].impressions >= 1, f"nothing recorded: {stats}"
+
+
+def test_select_records_a_win_for_the_team_that_drafted_the_pick(
+    settings: Settings, vault_graph: GraphStore
+):
+    """`DaemonCore.endorse` has always recorded the win; `daemon select` never
+    did. A CLI user's picks were invisible to `daemon policy` even once
+    impressions worked."""
+    from my_daemon.retrieval.interleave import EXPANSION_TEAM, SEED_TEAM
+    from my_daemon.stores.policy import RetrievalPolicyStore
+
+    feedback_id = _log_two_candidate_query(settings, teams=(SEED_TEAM, EXPANSION_TEAM))
+
+    result = runner.invoke(app, ["select", str(feedback_id), "2"])
+
+    assert result.exit_code == 0, result.output
+    assert RetrievalPolicyStore(db_path=settings.feedback.db_path).get(EXPANSION_TEAM).wins == 1
+
+
+def test_selecting_the_seed_itself_still_records_its_win(
+    settings: Settings, vault_graph: GraphStore
+):
+    """The point of §IV.7: a seed pick reinforces no edge, but it is still the
+    most confident thing the user can say, and the draft made it an unbiased
+    comparison. Discarding it is what the policy ledger exists to stop."""
+    from my_daemon.retrieval.interleave import EXPANSION_TEAM, SEED_TEAM
+    from my_daemon.stores.policy import RetrievalPolicyStore
+
+    feedback_id = _log_two_candidate_query(settings, teams=(SEED_TEAM, EXPANSION_TEAM))
+
+    result = runner.invoke(app, ["select", str(feedback_id), "1"])
+
+    assert result.exit_code == 0, result.output
+    assert "Edges reinforced: 0" in _squash(result.output)
+    assert RetrievalPolicyStore(db_path=settings.feedback.db_path).get(SEED_TEAM).wins == 1
+
+
+def test_select_records_no_win_when_the_pick_carries_no_team(
+    settings: Settings, vault_graph: GraphStore
+):
+    """A missing team is never guessed — a pick from an unfair (score-ordered
+    or pre-§IV.7) ordering is confounded, and counting it would poison exactly
+    the measurement interleaving exists to make honest."""
+    from my_daemon.stores.policy import RetrievalPolicyStore
+
+    feedback_id = _log_two_candidate_query(settings)
+
+    result = runner.invoke(app, ["select", str(feedback_id), "2"])
+
+    assert result.exit_code == 0, result.output
+    assert RetrievalPolicyStore(db_path=settings.feedback.db_path).stats() == []
 
 
 def test_invalid_api_key_becomes_one_actionable_line(stores: FakeStores):

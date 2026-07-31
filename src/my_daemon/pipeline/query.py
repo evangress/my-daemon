@@ -12,12 +12,13 @@ from my_daemon.config import Settings
 from my_daemon.embeddings import Embedder, SparseEmbedder
 from my_daemon.llm import LLMClient
 from my_daemon.models import DateRange, FeedbackEvent, RetrievalResult, is_seed_distance
-from my_daemon.pipeline.activation import ActivationRecorder
+from my_daemon.pipeline.listeners import build_listeners
 from my_daemon.pipeline.recall import RecalledMemory, recall_related
 from my_daemon.retrieval import RetrievalOrchestrator
 from my_daemon.retrieval.rerank import CrossEncoderReranker
 from my_daemon.stores import FeedbackStore, GraphStore, VectorStore
 from my_daemon.stores.activations import ActivationLedger
+from my_daemon.stores.policy import RetrievalPolicyStore
 from my_daemon.stores.registry import NoteRegistry
 
 log = logging.getLogger(__name__)
@@ -102,13 +103,18 @@ class QueryEngine:
         self.surface = surface
         self.ledger = ActivationLedger(db_path=settings.feedback.db_path)
         self.registry = NoteRegistry(db_path=settings.feedback.db_path)
+        self.policy = RetrievalPolicyStore(db_path=settings.feedback.db_path)
         self.orchestrator = RetrievalOrchestrator(
             settings,
             embedder,
             vector_store,
             graph_store,
             sparse_embedder=sparse_embedder,
-            listeners=[ActivationRecorder(self.ledger)],
+            # Never a hand-written list. This engine carried only the
+            # activation recorder for two days after §IV.7 shipped, which is
+            # how `daemon policy` came to read an empty table on a system that
+            # had been answering queries the whole time.
+            listeners=build_listeners(self.ledger, self.policy),
             reranker=reranker,
         )
         self.feedback = feedback_store

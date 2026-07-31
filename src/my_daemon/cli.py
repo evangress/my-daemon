@@ -609,6 +609,18 @@ def select(
         selected_note_path=picked.get("note_path"),
     )
 
+    # The half of the signal the graph cannot hold — the same half
+    # `DaemonCore.endorse` has always recorded and this command never did, so a
+    # CLI user's picks were invisible to `daemon policy`. When the seed *is* the
+    # selection, `apply_selection` no-ops and the graph learns nothing; the pick
+    # is still an unbiased comparison of the rankings, because team-draft gave
+    # them symmetric exposure. A missing team is not guessed: a pick from a
+    # score-ordered or pre-§IV.7 pool is confounded, and counting it would
+    # poison the measurement interleaving exists to make honest.
+    team = picked.get("team")
+    if team:
+        RetrievalPolicyStore(db_path=s.feedback.db_path).record_win(team)
+
     console.print(
         f"[green]Recorded selection #{rank} → {selected_note}.[/green]\n"
         f"Path: {' → '.join(n.removeprefix('note::').removeprefix('tag::') for n in result.path) or '(self)'}\n"

@@ -109,6 +109,14 @@ work's actual effect, not an optional extra behind it.
 
 ### If you are choosing what to build next
 
+> **Superseded 2026-07-31 — read PROJECT_MANAGEMENT.md's AI-suggestions entry
+> for that date instead.** This section was written 2026-07-28, and both of its
+> top picks have since shipped: "best value-per-hour" (§IV.17) and "largest
+> capability gap" (§IV.18), both 2026-07-30. It also predates the discovery that
+> `PolicyRecorder` was never attached in production, which changes the order the
+> remaining ranking items should be built in. The bullets below are kept because
+> their *reasoning* about each item is still sound; only the ordering is stale.
+
 - **Highest value, hardest:** **IV.9**, the salience layer. Nothing in the system
   asks whether a note *mattered* — only which code path found it. Part III.1
   argues this is the single most important gap for the assistive use case, and it

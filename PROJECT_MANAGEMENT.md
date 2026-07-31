@@ -40,12 +40,18 @@ judgement calls. Read it before adding any new learning machinery.
 
 **Every proposal in it carries a checkbox**, with a status index at the top —
 `- [x]` is running in the repo today, `- [ ]` is available to build, each with
-effort and licence. Currently **4 shipped · 1 partial · 18 open of 23**. Item
-IDs (`§IV.7`) are permanent and are never renumbered, so they mean the same
-thing here, in that document, and in commit messages. If you want to know what
-to build next, that index is the answer; the largest open item is **§IV.21**,
+effort and licence. Currently **6 shipped · 2 partial · 15 open of 23**
+*(corrected 2026-07-31 — this line still read 4/1/18 after §IV.10 and §IV.18
+shipped on 2026-07-30)*. Item IDs (`§IV.7`) are permanent and are never
+renumbered, so they mean the same thing here, in that document, and in commit
+messages. The index tells you what is left; the largest open item is **§IV.21**,
 claim-level indexing, and the largest *conceptual* gap is still **§IV.9**, the
 salience layer.
+
+**For the order to build them in, read the AI-suggestions entry for 2026-07-31
+below, not that document's own "If you are choosing what to build next"
+section** — the latter was written before §IV.17 and §IV.18 shipped and both of
+its top picks are now done.
 
 **Seven items (§IV.17–§IV.23) were added 2026-07-30 from a competitor review**
 against Hindsight and Honcho — they carry a `†` in the status index. See the
@@ -273,6 +279,58 @@ questions in PLAN-HERMES §14 (identity-note seed, single-vs-many clients,
 NiceGUI's long-term fate) are not yet decided.
 
 ## Done
+
+- **The policy ledger is actually wired — step 0 of the 2026-07-31 sequencing
+  (2026-07-31).** §IV.7 shipped on 2026-07-28 and had **never once run in
+  production**. Two independent breaks, both closed here, and the second was
+  found while fixing the first:
+  **(1) No impressions, on any surface.** `PolicyRecorder` was only ever
+  attached by `integration/wiring.py`'s `build_orchestrator`, which `grep`
+  confirms had **zero callers under `src/`**. Every real query went through
+  `pipeline/query.py`'s `QueryEngine`, whose orchestrator was hand-built with
+  `listeners=[ActivationRecorder(...)]` and nothing else — and since
+  `DaemonCore` delegates to `QueryEngine`, the CLI, the GUI and Hermes all
+  inherited the gap from that one place.
+  **(2) No wins on the CLI.** `DaemonCore.endorse` has recorded
+  `policy.record_win(team)` since it was written; **`daemon select` never did**.
+  So even with impressions fixed, a CLI user's picks would still have been
+  invisible. Worse, the two halves failing separately was self-concealing:
+  `PolicyStat.win_rate` returns 0.0 when impressions are zero, so a Hermes user
+  recording wins against no impressions would have read a table of confident
+  0.0% rows rather than an obvious error.
+  **The fix is structural, not a reminder.** New `pipeline/listeners.py` with
+  one `build_listeners(ledger, policy, record=True)` that both construction
+  paths call, so there is no second place to forget. It lives in `pipeline/`
+  rather than in `wiring.py` for an import reason worth recording:
+  `integration/__init__` imports `core`, which imports `pipeline.query`, so
+  `query.py` importing `integration.wiring` would close a cycle — `wiring.py`
+  already depends on `pipeline`, and this keeps the arrow pointing the way it
+  already pointed. The two recorders stay separate objects (they answer
+  different questions and must fail independently) but are switched together,
+  because a `daemon search` probe that counts as an impression is exactly as
+  dishonest as one that counts as an activation.
+  **The missing-team discipline is preserved on the new path**: `daemon select`
+  records a win only when the persisted candidate carries a `team`, so a pick
+  from a score-ordered or pre-§IV.7 pool is skipped rather than assigned to a
+  default — pinned by its own test.
+  **Where the tests live is the lesson.** `tests/test_wiring.py` was green
+  throughout because it called `build_orchestrator` directly; a factory tested
+  in isolation proves nothing about whether production reaches it. The new
+  tests assert on the path production takes — that `QueryEngine`'s orchestrator
+  carries a `PolicyRecorder` pointed at the shared state DB, and, end to end
+  through `CliRunner`, that `daemon query` records an impression and `daemon
+  select` records the win.
+  **Verified live, not only by test.** On the author's vault: `daemon query
+  "what is a daemon" --no-llm -v` → `feedback_id=7`, then `daemon policy`
+  printed real rows for the first time (`expansion 15`, `rerank 15`, `seed 7`
+  impressions) where it had always printed "No picks recorded yet"; then
+  `daemon select 7 2` → `seed` at 1 pick, 14.3%. The pick reinforced **0 edges**
+  — a seed pick, precisely the case §IV.7 exists to capture and the one that
+  used to vanish without trace.
+  895 → 901 tests; ruff and mypy clean. **Note:** that live verification wrote
+  one real feedback row and one synthetic `seed` win into `data/state.db`; see
+  the AI-suggestions entry for 2026-07-31 for why that one row is worth
+  deleting before the win rates are read seriously.
 
 - **Cross-encoder reranking as a third drafting team, §IV.18 (2026-07-30).**
   Closes the largest capability gap the competitor review found:
@@ -870,6 +928,17 @@ needs stores goes through here now" — is never actually called from `src/`.
 `DaemonCore`/`build_core` each still hand-build their own
 `RetrievalOrchestrator`, exactly the drift `wiring.py` was written to end.
 
+> **Corrected 2026-07-31 — the blast radius is smaller than this entry says.**
+> Re-verified against the code: there are exactly **two** `RetrievalOrchestrator(`
+> construction sites in `src/`, `wiring.py:129` and `pipeline/query.py:105`.
+> `DaemonCore` does *not* hand-build one — it constructs a `QueryEngine`
+> (`integration/core.py:105`) and exposes `self.engine.orchestrator` through a
+> property (`:220-222`), whose docstring already says "one instance, one set of
+> listeners." So there is a **single** production construction site to converge,
+> not two, and every surface — CLI, GUI, Hermes — inherits the gap from that one
+> place. The finding below is unchanged and still correct; only the estimate of
+> what has to be untangled shrinks.
+
 The concrete cost: `build_orchestrator` is the only place that attaches
 `PolicyRecorder` (§IV.7) as a listener. `QueryEngine`'s orchestrator only gets
 `ActivationRecorder`. **Confirmed live, not just by reading the code:** two
@@ -894,4 +963,141 @@ should just delegate to `build_orchestrator` internally, or whether
 small, focused task: converge the construction paths so `wiring.py`'s "goes
 through here now" claim is actually true, then re-verify with a real `daemon
 select` → `daemon policy` round trip that impressions and wins both land.
+
+### 2026-07-31 — Build sequencing for the next arc
+
+**This entry supersedes
+[MY-DAEMON-RESEARCH-APPLIED.md](MY-DAEMON-RESEARCH-APPLIED.md)'s own "If you are
+choosing what to build next" section**, which was written on 2026-07-28 and is
+now stale in a specific way: both of its top picks have shipped. Its "best
+value-per-hour" was §IV.17 (conditional reconciliation, shipped 2026-07-30, with
+the live fixtures still unrun) and its "largest capability gap" was §IV.18
+(cross-encoder reranking, shipped 2026-07-30). The status *index* is still the
+authority on **what** is left; this is the argument for **what order**.
+
+One fact re-verified today changes the ordering, and it is not reflected
+anywhere in that document: **the measurement instrument is dead.** Per the
+2026-07-30 entry above, `grep` confirms `build_orchestrator` has zero callers in
+`src/`, and `pipeline/query.py:110` attaches `listeners=[ActivationRecorder(…)]`
+and nothing else. `PolicyRecorder` has never run in production. Everything
+below except step 0 is a **ranking change**, and `daemon policy` is what says
+whether a ranking change helped. It currently reads zero rows.
+
+**0. Converge the orchestrator construction paths.** — **[x] done 2026-07-31,
+see Done.** *Prerequisite, not a feature. Hours.* Make `QueryEngine` obtain its
+orchestrator from
+`build_orchestrator` so `wiring.py`'s claim is true and `PolicyRecorder` is
+attached on the path a person actually runs. Verify by round trip — real `daemon
+query` → `daemon select` → `daemon policy` showing a table row, not "No picks
+recorded yet". Add the test that was missing: one asserting the *CLI query path*
+carries both listeners, since `tests/test_wiring.py` only ever exercised the
+factory nobody called. First because it is cheap, because §IV.18's new rerank
+team is currently drafting invisibly, and because building §IV.20 on top of a
+dead measurement path would repeat precisely the failure being fixed.
+
+**1. §IV.23 — retrieval-quality evaluation harness.** *Effort M.* Questions with
+known-correct source notes, scored on whether retrieval surfaced them, run
+against a snapshot so results are comparable across commits. The rejection of
+LoCoMo/LongMemEval in that item's entry stands and the reasoning is sound.
+Sequenced second because 895 tests establish that the pipeline *works*, not that
+it *retrieves well*, and because step 0 only restores the **online** signal —
+which is slow, needs well over twenty picks before it is anything but noise (see
+the 2026-07-28 entry), and cannot answer "did this commit help?" This is the
+offline companion that can. §IV.20, §IV.2, §IV.6 and §IV.9 are all bets that
+want a scoreboard, and there is not one.
+
+**2. §IV.20 — activation stats into ranking.** *Effort S.*
+`note_activation_stats` is populated and `daemon hot-notes` reads it; nothing
+feeds it back into ranking. A bounded multiplicative term over data already
+logged. Keep Hindsight's ±5% order of magnitude, keep the closed-loop caution in
+that item's entry as the binding design constraint, and — now possible for the
+first time — **measure** the effect through §IV.18's multileaved draft rather
+than assert it.
+
+**3. §IV.9 — the salience layer, behavioural and structural halves only.**
+*Effort L, deliberately scoped down.* Revisit counts and endorsement history
+from the ledger; betweenness from the structural report. Leave the LLM-scored
+semantic component and Bayesian surprise out of the first pass, and keep the
+semantic one opt-in when it comes, per that item's own recommendation. This is
+the item that changes what the daemon is *for* rather than how well it works:
+retrieval by recency and match is the wrong affordance for the assistive case,
+where the need is not yesterday's note but the one that mattered.
+
+**A dependency worth naming, because the research document does not.** §IV.20
+and §IV.9's behavioural component read the **same table for the same purpose** —
+they are one code path at two coefficients, not a small feature and a large one.
+If §IV.20 is built with a config-driven weight rather than a hardcoded constant,
+§IV.9's behavioural half arrives with it, and step 3 becomes "add the structural
+term" instead of "build a subsystem". Sequence them adjacently and do not let
+§IV.20 harden into a shape §IV.9 has to undo.
+
+**Deliberately not next, so the reasoning is on record:**
+
+- **§IV.21 (claim-level indexing)** — the largest open item and the only
+  architectural one. Its entry says to expect brainstorming rather than
+  implementation, it creates a second source of truth this project has twice
+  refused, and it depends on §IV.22. Worth a design session; not a build slot.
+- **§IV.19 (durable supersession)** — genuinely valuable, and the field is
+  weak here, which makes it a real differentiator. But §IV.21 is what gives it
+  an object to mark. Better after, not before.
+- **§IV.2 (MMR) and §IV.16 (sparse distance matrix)** — both S, both
+  dependency-free, both good filler between the larger items. §IV.2 is worth
+  less than when first proposed, since §IV.7's interleaving already changed pool
+  composition; what remains is stopping three chunks of one note filling the
+  floor.
+- **§IV.22 (chunk-level delta re-ingestion)** — its own entry is right that the
+  saving is embedding cost only until an LLM enters the ingest path. Sequence it
+  immediately before §IV.21, not here.
+
+**Two open bugs to fold in opportunistically**, both already logged under Known
+Bugs: incremental-vs-full ingest divergence when a linked note is deleted (which
+also makes `daemon graph todos` under-count, so it is not purely cosmetic), and
+`agent_link_runs`/`agent_extract_runs` still being path-keyed after the UUID
+cutover, so a rename re-runs the extractor.
+
+**The honest cost of this ordering:** steps 0 and 1 produce **no user-visible
+feature** — roughly two sessions of pure instrumentation before anything new
+appears. A defensible reordering is step 0 alone (hours) followed straight by
+§IV.20; the price is that §IV.20's coefficient then gets tuned by impression
+rather than by measurement, which is the thing this project has otherwise been
+careful not to do.
+
+### 2026-07-31 — After wiring step 0
+
+**One synthetic row is now in the policy ledger, and it should probably come
+out.** Verifying the fix end to end meant running a real `daemon select 7 2`
+against the live vault, which recorded a genuine-looking `seed` win that
+represents no actual preference — I picked rank 2 to exercise the code path, not
+because that candidate was the better answer. It is one row against a ledger
+that needs well over twenty picks before it says anything, so the distortion is
+small; but this is the *honest-measurement* ledger, and the whole argument for
+`stores/policy.py` refusing to feed win rates back into ranking is that the
+numbers mean what they claim. Deleting it is one statement —
+`DELETE FROM retrieval_policy_stats WHERE policy = 'seed'` would also drop its 7
+impressions, so the surgical form is `UPDATE retrieval_policy_stats SET wins =
+0, last_win_at = NULL WHERE policy = 'seed'`. I did not run it, because
+destroying rows in the state DB is the user's call, not mine.
+
+**The rerank team is live in the author's config.** Not obvious from the §IV.18
+entry, which shipped `retrieval.rerank` defaulting to false: the local
+`config.yaml` has it **on**, so the observed `rerank_ms=4040` is being paid on
+every interactive query, and `daemon policy` reports 3 drafting teams. Worth a
+deliberate decision rather than a default inherited by accident — the §IV.18
+measurements say multi-second even warm.
+
+**A measurement subtlety the first real table exposed.** The impressions came
+out `expansion 15`, `rerank 15`, `seed 7` from a single query with 8 seeds and
+333 expanded candidates. Seeds are structurally capped by `top_k` while
+expansion and rerank draft from a far larger pool, so impressions are **not**
+symmetric between teams even though the draft gives them symmetric *exposure per
+slot*. That is fine for a win *rate* — the denominator is per-team by
+construction — but it means the raw `shown` column is not a fairness check, and
+anyone reading the table for the first time will be tempted to treat it as one.
+Worth a line of help text in `daemon policy` at some point.
+
+**What step 0 changed about step 1's design.** §IV.23's harness was framed as
+the offline companion to `daemon policy`'s online signal. That framing survives,
+but the online signal is now *newborn* rather than *accumulated* — there is no
+history to mine, so the harness cannot be validated against "what the win rates
+already told us". It has to stand on its own fixtures from day one.
 

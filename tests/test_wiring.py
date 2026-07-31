@@ -116,3 +116,64 @@ def test_the_policy_store_shares_the_one_state_database(settings: Settings):
     stores = build_stores(settings, load_graph=False, embedder=_FakeEmbedder())
 
     assert stores.policy.db_path == stores.ledger.db_path
+
+
+# ---------------------------------------------------------------------------
+# ...and the path production actually takes carries it too
+# ---------------------------------------------------------------------------
+
+
+def test_the_query_engine_attaches_the_policy_recorder(settings: Settings):
+    """The bug every test above this line missed.
+
+    `build_orchestrator` has carried a `PolicyRecorder` since §IV.7 shipped and
+    the two tests above proved it — but **nothing under `src/` ever called
+    `build_orchestrator`**. Every real query went through `QueryEngine`, whose
+    orchestrator was hand-built with `listeners=[ActivationRecorder(...)]` and
+    nothing else, so `daemon policy` read an empty table no matter how many
+    queries had run.
+
+    The lesson is in where this test lives, not what it asserts: a factory
+    tested directly proves nothing about whether production reaches it.
+    """
+
+    from my_daemon.pipeline.policy import PolicyRecorder
+    from my_daemon.pipeline.query import QueryEngine
+
+    stores = build_stores(settings, load_graph=False, embedder=_FakeEmbedder())
+
+    engine = QueryEngine(
+        settings,
+        stores.embedder,
+        stores.vector_store,
+        stores.graph_store,
+        stores.feedback_store,
+        stores.llm,
+    )
+
+    assert any(isinstance(listener, PolicyRecorder) for listener in engine.orchestrator.listeners)
+
+
+def test_the_query_engines_policy_store_shares_the_one_state_database(settings: Settings):
+    """A second state DB would be invisible: impressions would land in a file
+    `daemon policy` never reads, which looks exactly like recording nothing."""
+
+    from my_daemon.pipeline.policy import PolicyRecorder
+    from my_daemon.pipeline.query import QueryEngine
+
+    stores = build_stores(settings, load_graph=False, embedder=_FakeEmbedder())
+    engine = QueryEngine(
+        settings,
+        stores.embedder,
+        stores.vector_store,
+        stores.graph_store,
+        stores.feedback_store,
+        stores.llm,
+    )
+
+    recorder = next(
+        listener
+        for listener in engine.orchestrator.listeners
+        if isinstance(listener, PolicyRecorder)
+    )
+    assert recorder.store.db_path == settings.feedback.db_path

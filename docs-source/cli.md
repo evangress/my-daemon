@@ -143,6 +143,32 @@ means the missing notes are undated, not out of range — run
 
 Alias for `daemon query`.
 
+### `daemon select`
+
+```
+daemon select <feedback_id> <rank>
+```
+
+Record that you picked candidate `#rank` from a past query — the `feedback_id`
+is what `daemon query -v` prints. This is the signal the adaptive loop learns
+from, and it does two separate things:
+
+- **Reinforces the graph path** from the seed note that produced that candidate
+  to the candidate's own note, so those edges feel "shorter" to future
+  expansions.
+- **Credits the retrieval policy** that drafted the pick (`seed`, `expansion` or
+  `rerank`), which is what `daemon policy` reports.
+
+Those two are worth keeping distinct, because picking the *seed itself*
+reinforces no edge at all — there is no path to walk — yet it is still the most
+confident thing you can say about a retrieval. The policy credit is how that
+pick stops being thrown away.
+
+A candidate retrieved before team-draft interleaving existed carries no policy
+label, and those picks are skipped rather than guessed at: attributing a pick
+from an unfairly-ordered pool would poison exactly the measurement the draft
+exists to make honest.
+
 ### `daemon search`
 
 ```
@@ -152,6 +178,10 @@ daemon search <text> [-k N]
 Vector-only debug path: no graph expansion, no LLM. Useful for sanity-checking
 the embedding model and seeing what the dense+sparse fusion is returning
 before the expander touches it.
+
+`search` is a probe, not a question you asked — it deliberately records neither
+an activation nor a policy impression, so debugging never pollutes what the
+daemon learns about you.
 
 ## Health
 
@@ -219,6 +249,31 @@ id, shows which notes fired for it, via which source (`vector_seed` /
 
 Which notes your attention actually lands on, ranked by how many queries have
 activated them.
+
+### `daemon policy`
+
+Win rates for the competing retrieval rankings — how often each was *shown*
+(one impression per candidate it drafted into your pool) against how often a
+`daemon select` pick *landed* on it.
+
+Because the pool is built by team draft, the rankings get symmetric exposure by
+position, so a pick is an unbiased comparison between them with no propensity
+model in sight. **Nothing feeds these numbers back into ranking**: a policy
+tuned on its own win rate is a closed loop with nothing outside it. The table is
+for you to read, not for the daemon to act on.
+
+Two cautions the output repeats:
+
+- **Sampling error is not position bias.** Interleaving removes the second, not
+  the first. Under roughly twenty picks these numbers are noise.
+- **The `shown` column is not a fairness check.** Seeds are capped by `top_k`
+  while expansion and reranking draft from a much larger pool, so impressions
+  are unequal between teams by construction. The *rate* is still comparable —
+  each team's denominator is its own.
+
+Turning `retrieval.rerank` on or off changes how many teams are drafting, and
+win rates gathered under a different team count are not directly comparable to
+today's. The command prints the current count for that reason.
 
 
 ### `daemon status`
