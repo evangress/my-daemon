@@ -995,7 +995,15 @@ factory nobody called. First because it is cheap, because §IV.18's new rerank
 team is currently drafting invisibly, and because building §IV.20 on top of a
 dead measurement path would repeat precisely the failure being fixed.
 
-**1. §IV.23 — retrieval-quality evaluation harness.** *Effort M.* Questions with
+**1. §IV.23 — retrieval-quality evaluation harness.** — **design approved and
+committed 2026-07-31**, see
+[the spec](docs/superpowers/specs/2026-07-31-retrieval-eval-harness-design.md)
+(`67a112d`); implementation not started, and it is gated on Evan hand-authoring
+`<config-dir>/eval/questions.yaml` since the `oblique` and `multi-hop` questions
+need vault knowledge. Four decisions locked there: vault-local tuning rather
+than CI regression detection, hand-authored tiered fixtures, configuration
+sweeps within one run rather than a committed baseline, and scoring at the
+context block with wide recall alongside. *Effort M.* Questions with
 known-correct source notes, scored on whether retrieval surfaced them, run
 against a snapshot so results are comparable across commits. The rejection of
 LoCoMo/LongMemEval in that item's entry stands and the reasoning is sound.
